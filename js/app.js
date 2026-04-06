@@ -337,6 +337,7 @@
     if (action === 'remove-account') return removeAccount(el);
     if (action === 'save-setup')     return saveSetup();
     if (action === 'load-setup')     return loadSetup();
+    if (action === 'load-excel')     return window.RetireExcelLoader.openFilePicker();
     if (action === 'preload-setup')  return preloadSetup();
     if (action === 'preload-calc')   return preloadCalc();
     if (action === 'run-projection') return runProjection();
@@ -364,6 +365,66 @@
       const f = safeEl('bni-fields');
       if (f) f.style.display = e.target.checked ? '' : 'none';
     }
+  });
+
+  // ─────────────────────────────
+  // EXCEL LOAD
+  // ─────────────────────────────
+  document.addEventListener('excel-loaded', (e) => {
+    const { accounts, params } = e.detail;
+
+    // ── Setup page accounts ──────────────────
+    state.portfolioAccounts = [];
+    state.nextId = 1;
+    const tbody = safeEl('acct-tbody');
+    if (tbody) tbody.innerHTML = '';
+    const ownerNames = [
+      String(params.p1name || 'Person 1'),
+      String(params.p2name || 'Person 2'),
+    ];
+    // Update name fields
+    if (safeEl('sp-p1name')) safeEl('sp-p1name').value = ownerNames[0];
+    if (safeEl('sp-p2name')) safeEl('sp-p2name').value = ownerNames[1];
+
+    accounts.forEach(a => {
+      const acc = { id: state.nextId++, ...a };
+      state.portfolioAccounts.push(acc);
+      R.renderAccountRow(acc, ownerNames);
+      R.updateRowBadge(acc);
+      R.applyWrapperFieldState(acc);
+    });
+    refreshSetupSummary();
+
+    // ── Calculator sidebar params ────────────
+    const MONEY = D.MONEY_FIELDS;
+    Object.entries(params).forEach(([k, v]) => {
+      if (k === 'p1name' || k === 'p2name') return; // handled above
+      const el = safeEl(k);
+      if (!el) return;
+      if (el.type === 'checkbox') {
+        el.checked = String(v).toLowerCase() === 'true';
+        const f = safeEl('bni-fields');
+        if (el.id === 'bniEnabled' && f) f.style.display = el.checked ? '' : 'none';
+        return;
+      }
+      if (el.type === 'radio') return; // handled separately below
+      el.value = MONEY.has(k) ? formatCurrency(Number(v) || 0) : v;
+    });
+
+    // thresholdMode radio
+    if (params.thresholdMode) {
+      const radio = document.querySelector(`input[name="thresholdMode"][value="${params.thresholdMode}"]`);
+      if (radio) radio.checked = true;
+    }
+
+    // p1age / p2age from DOBs
+    const currentYear = new Date().getFullYear();
+    if (params.woodyDOB && safeEl('sp-p1age'))
+      safeEl('sp-p1age').value = currentYear - Number(params.woodyDOB);
+    if (params.heidiDOB && safeEl('sp-p2age'))
+      safeEl('sp-p2age').value = currentYear - Number(params.heidiDOB);
+
+    showToast(`Loaded ${accounts.length} accounts from Excel ✓`);
   });
 
   // ─────────────────────────────
