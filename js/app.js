@@ -174,6 +174,10 @@
   }
 
   function preloadCalc() {
+    // Ensure name fields are set so getNames() works correctly in calc-render
+    if (safeEl('sp-p1name') && D.PRELOAD.p1name) safeEl('sp-p1name').value = D.PRELOAD.p1name;
+    if (safeEl('sp-p2name') && D.PRELOAD.p2name) safeEl('sp-p2name').value = D.PRELOAD.p2name;
+
     Object.entries(D.PRELOAD).forEach(([k, val]) => {
       const el = safeEl(k);
       if (!el) return;
