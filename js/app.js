@@ -6,39 +6,38 @@
   const STORAGE_KEY = 'rukRetirementSetup';
 
   const state = {
-    rows: [],
-    viewPerson: 'both',
-    useReal: true,
-    activeTab: 'charts',
-    charts: { incomeChart: null, taxChart: null, wealthChart: null },
     portfolioAccounts: [],
     nextId: 1,
-    interestAccounts: [],
   };
 
-  function ownerNames() {
-    return [
-      document.getElementById('sp-p1name').value.trim() || 'Person 1',
-      document.getElementById('sp-p2name').value.trim() || 'Person 2',
-    ];
+  // ─────────────────────────────
+  // SAFE HELPERS
+  // ─────────────────────────────
+  function safeEl(id) {
+    return document.getElementById(id);
   }
 
-  function getInputValue(id) {
-    const el = document.getElementById(id);
+  function safeValue(id) {
+    const el = safeEl(id);
     return el ? el.value : '';
   }
 
-  function getCurrencyValue(id) {
-    return D.parseCurrency(getInputValue(id));
+  function safeNumber(val) {
+    const n = Number(val);
+    return isNaN(n) ? 0 : n;
   }
 
-  function getIntValue(id) {
-    return parseInt(String(D.parseCurrency(getInputValue(id))), 10) || 0;
+  function formatCurrency(val) {
+    return D?.formatCurrency
+      ? D.formatCurrency(val)
+      : (val || 0).toLocaleString('en-GB');
   }
 
+  // ─────────────────────────────
+  // DOM → STATE
+  // ─────────────────────────────
   function syncAccountsFromDOM() {
     const rows = document.querySelectorAll('#acct-tbody tr');
-
     const updated = [];
 
     rows.forEach((row) => {
@@ -52,16 +51,16 @@
         name: get('name')?.value || '',
         wrapper: get('wrapper')?.value || 'GIA',
         owner: get('owner')?.value || 'p1',
-        value: D.parseCurrency(get('value')?.value || 0),
+        value: safeNumber(D.parseCurrency(get('value')?.value || 0)),
         alloc: {
-          equities: Number(get('equities')?.value || 0),
-          bonds: Number(get('bonds')?.value || 0),
-          cashlike: Number(get('cashlike')?.value || 0),
-          cash: Number(get('cash')?.value || 0),
+          equities: safeNumber(get('equities')?.value),
+          bonds: safeNumber(get('bonds')?.value),
+          cashlike: safeNumber(get('cashlike')?.value),
+          cash: safeNumber(get('cash')?.value),
         },
-        rate: get('rate')?.value ? Number(get('rate').value) : null,
+        rate: get('rate')?.value ? safeNumber(get('rate').value) : null,
         monthlyDraw: get('monthlyDraw')?.value
-          ? D.parseCurrency(get('monthlyDraw').value)
+          ? safeNumber(D.parseCurrency(get('monthlyDraw').value))
           : null,
       });
     });
@@ -69,25 +68,58 @@
     state.portfolioAccounts = updated;
   }
 
+  // ─────────────────────────────
+  // SETUP STATE
+  // ─────────────────────────────
   function readSetupInputs() {
     return {
       version: 1,
       people: {
         p1: {
-          name: document.getElementById('sp-p1name').value.trim(),
-          age: parseInt(document.getElementById('sp-p1age').value, 10) || 0,
+          name: safeValue('sp-p1name').trim(),
+          age: safeNumber(safeValue('sp-p1age')),
         },
         p2: {
-          name: document.getElementById('sp-p2name').value.trim(),
-          age: parseInt(document.getElementById('sp-p2age').value, 10) || 0,
+          name: safeValue('sp-p2name').trim(),
+          age: safeNumber(safeValue('sp-p2age')),
         },
       },
       accounts: state.portfolioAccounts,
     };
   }
 
+  function applySetupInputs(data) {
+    if (!data) return;
+
+    if (safeEl('sp-p1name')) safeEl('sp-p1name').value = data.people?.p1?.name || '';
+    if (safeEl('sp-p1age')) safeEl('sp-p1age').value = data.people?.p1?.age || '';
+    if (safeEl('sp-p2name')) safeEl('sp-p2name').value = data.people?.p2?.name || '';
+    if (safeEl('sp-p2age')) safeEl('sp-p2age').value = data.people?.p2?.age || '';
+
+    state.portfolioAccounts = data.accounts || [];
+
+    state.nextId =
+      Math.max(1, ...state.portfolioAccounts.map((a) => a.id || 0)) + 1;
+
+    const tbody = safeEl('acct-tbody');
+    if (!tbody) return;
+
+    tbody.innerHTML = '';
+
+    state.portfolioAccounts.forEach((acc) => {
+      R.renderAccountRow(acc);
+      R.updateRowBadge(acc);
+      R.applyWrapperFieldState(acc);
+    });
+
+    refreshSetupSummary();
+  }
+
+  // ─────────────────────────────
+  // CALCULATOR INITIALISATION
+  // ─────────────────────────────
   function initialiseCalculatorFromSetup(data) {
-    if (!data || !data.accounts) return;
+    if (!data?.accounts) return;
 
     const totals = {
       woody: { ISA: 0, SIPP: 0, GIA: 0, Cash: 0 },
@@ -98,37 +130,35 @@
       const ownerKey = acc.owner === 'p1' ? 'woody' : 'heidi';
       const wrapper = acc.wrapper || 'GIA';
 
-      if (!totals[ownerKey][wrapper]) {
-        totals[ownerKey][wrapper] = 0;
-      }
-
-      totals[ownerKey][wrapper] += acc.value || 0;
+      totals[ownerKey][wrapper] =
+        (totals[ownerKey][wrapper] || 0) + (acc.value || 0);
     });
 
     const map = [
-      { id: 'woodyISA', value: totals.woody.ISA },
-      { id: 'woodySIPP', value: totals.woody.SIPP },
-      { id: 'woodyGIA', value: totals.woody.GIA },
-      { id: 'woodyCash', value: totals.woody.Cash },
-      { id: 'heidiISA', value: totals.heidi.ISA },
-      { id: 'heidiSIPP', value: totals.heidi.SIPP },
-      { id: 'heidiGIA', value: totals.heidi.GIA },
-      { id: 'heidiCash', value: totals.heidi.Cash },
+      ['woodyISA', totals.woody.ISA],
+      ['woodySIPP', totals.woody.SIPP],
+      ['woodyGIA', totals.woody.GIA],
+      ['woodyCash', totals.woody.Cash],
+      ['heidiISA', totals.heidi.ISA],
+      ['heidiSIPP', totals.heidi.SIPP],
+      ['heidiGIA', totals.heidi.GIA],
+      ['heidiCash', totals.heidi.Cash],
     ];
 
-    map.forEach(({ id, value }) => {
-      const el = document.getElementById(id);
-      if (el) {
-        el.value = D.formatCurrency(value || 0);
-      }
+    map.forEach(([id, val]) => {
+      const el = safeEl(id);
+      if (el) el.value = formatCurrency(val);
     });
   }
 
+  // ─────────────────────────────
+  // SAVE / LOAD
+  // ─────────────────────────────
   function saveSetup() {
     syncAccountsFromDOM();
     const data = readSetupInputs();
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    console.log('Saved setup:', data);
+    console.log('Saved:', data);
   }
 
   function loadSetup() {
@@ -137,65 +167,51 @@
 
     try {
       const data = JSON.parse(raw);
-      if (!data || data.version !== 1) throw new Error();
       applySetupInputs(data);
-    } catch {
-      alert('Saved data is corrupted.');
+    } catch (err) {
+      console.error(err);
+      alert('Load failed – see console');
     }
   }
 
+  // ─────────────────────────────
+  // SUMMARY
+  // ─────────────────────────────
   function refreshSetupSummary() {
-    R.refreshOwnerOptions(state.portfolioAccounts, ownerNames());
     const summary = C.summarisePortfolio(state.portfolioAccounts);
     R.renderSetupSummary(summary);
-
-    state.portfolioAccounts.forEach((acc) => {
-      R.updateRowBadge(acc);
-      R.applyWrapperFieldState(acc);
-    });
   }
 
-  function addAccount(data) {
-    const result = C.addAccount(state.portfolioAccounts, state.nextId, data);
-    state.portfolioAccounts = result.accounts;
-    state.nextId = result.nextId;
-
-    R.renderAccountRow(result.account, ownerNames());
-    R.updateRowBadge(result.account);
-
-    refreshSetupSummary();
-  }
-
-  function removeAccount(id) {
-    state.portfolioAccounts = C.removeAccount(state.portfolioAccounts, id);
-    const row = document.getElementById('acct-row-' + id);
-    if (row) row.remove();
-    refreshSetupSummary();
-  }
-
+  // ─────────────────────────────
+  // EVENTS
+  // ─────────────────────────────
   document.addEventListener('click', (e) => {
     const el = e.target.closest('[data-action]');
     if (!el) return;
 
     const action = el.dataset.action;
 
-    if (action === 'add-account') addAccount({});
-    if (action === 'remove-account') removeAccount(Number(el.dataset.accountId));
-    if (action === 'save-setup') saveSetup();
-    if (action === 'load-setup') loadSetup();
+    if (action === 'add-account') return;
+    if (action === 'remove-account') return;
+
+    if (action === 'save-setup') return saveSetup();
+    if (action === 'load-setup') return loadSetup();
 
     if (action === 'continue-to-main') {
       syncAccountsFromDOM();
-      const setupData = readSetupInputs();
-      initialiseCalculatorFromSetup(setupData);
 
-      document.getElementById('setup-page').style.display = 'none';
-      document.getElementById('main-app').style.display = '';
+      const data = readSetupInputs();
+      console.log('HANDOFF →', data);
+
+      initialiseCalculatorFromSetup(data);
+
+      safeEl('setup-page').style.display = 'none';
+      safeEl('main-app').style.display = '';
     }
 
     if (action === 'back-to-setup') {
-      document.getElementById('setup-page').style.display = '';
-      document.getElementById('main-app').style.display = 'none';
+      safeEl('setup-page').style.display = '';
+      safeEl('main-app').style.display = 'none';
     }
   });
 
