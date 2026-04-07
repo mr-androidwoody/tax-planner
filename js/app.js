@@ -10,6 +10,8 @@
   const state = {
     portfolioAccounts: [],
     nextId: 1,
+    activeTab: 'setup',
+    p2enabled: true,
   };
 
   // ─────────────────────────────
@@ -80,6 +82,7 @@
   function readSetupInputs() {
     return {
       version: 1,
+      p2enabled: state.p2enabled,
       people: {
         p1: { name: safeValue('sp-p1name').trim(), dob: safeNumber(safeValue('sp-p1dob')) },
         p2: { name: safeValue('sp-p2name').trim(), dob: safeNumber(safeValue('sp-p2dob')) },
@@ -98,6 +101,12 @@
     if (safeEl('sp-p2dob'))     safeEl('sp-p2dob').value     = data.people?.p2?.dob  || '';
     if (safeEl('sp-startYear')) safeEl('sp-startYear').value = data.startYear || '';
     if (safeEl('sp-endYear'))   safeEl('sp-endYear').value   = data.endYear   || '';
+
+    // Restore p2 toggle state
+    state.p2enabled = data.p2enabled !== false; // default true if not saved
+    const p2cb = safeEl('p2enabled');
+    if (p2cb) p2cb.checked = state.p2enabled;
+    applyP2State();
 
     state.portfolioAccounts = data.accounts || [];
     state.nextId = Math.max(1, ...state.portfolioAccounts.map(a => a.id || 0)) + 1;
@@ -212,9 +221,64 @@
   }
 
   // ─────────────────────────────
-  // HANDOFF: setup → calculator
+  // P2 TOGGLE
   // ─────────────────────────────
-  function continueToMain() {
+
+  // All field IDs that belong to Person 2 in the Assumptions tab.
+  const P2_FIELD_IDS = [
+    'heidiDOB',
+    'heidiSalary', 'heidiSalaryStopAge',
+    'heidiSPAge', 'heidiSP',
+    'heidiCash',
+    'heidiSIPP',
+    'heidiISA',
+    'heidiGIA',
+    'heidiOrder1', 'heidiOrder2', 'heidiOrder3',
+    'bniHeidiGIA',
+  ];
+
+  function applyP2State() {
+    const enabled = state.p2enabled;
+
+    // ── Assumptions tab: individual named inputs ──
+    P2_FIELD_IDS.forEach(id => {
+      const el = safeEl(id);
+      if (!el) return;
+      el.disabled = !enabled;
+      el.style.opacity = enabled ? '' : '0.45';
+    });
+
+    // ── Assumptions tab: .p2-field containers (labels, subsection headers, order-rows) ──
+    document.querySelectorAll('.p2-field').forEach(el => {
+      el.classList.toggle('p2-disabled', !enabled);
+    });
+
+    // ── Setup tab: Person 2 name/dob inputs ──
+    const p2setup = safeEl('p2-setup-fields');
+    if (p2setup) {
+      p2setup.classList.toggle('p2-disabled', !enabled);
+      p2setup.querySelectorAll('input').forEach(inp => {
+        inp.disabled = !enabled;
+      });
+    }
+
+    // ── Accounts table: rows owned by p2 ──
+    document.querySelectorAll('#acct-tbody tr').forEach(row => {
+      const ownerSel = row.querySelector('[data-field="owner"]');
+      if (!ownerSel) return;
+      if (ownerSel.value === 'p2') {
+        row.classList.toggle('p2-disabled', !enabled);
+        row.querySelectorAll('input, select').forEach(inp => {
+          inp.disabled = !enabled;
+        });
+      }
+    });
+  }
+
+  // ─────────────────────────────
+  // HANDOFF: setup → assumptions
+  // ─────────────────────────────
+  function syncSetupToAssumptions() {
     syncAccountsFromDOM();
     const data   = readSetupInputs();
     const p1name = data.people.p1.name || 'Person 1';
@@ -250,7 +314,7 @@
     set('woodyGIA', sumBy('p1', 'GIA', true));
     set('heidiGIA', sumBy('p2', 'GIA', true));
 
-    // People and projection — populate read-only sidebar fields from setup
+    // People and projection — populate read-only assumptions fields from setup
     set('woodyDOB',  safeValue('sp-p1dob'));
     set('heidiDOB',  safeValue('sp-p2dob'));
     set('startYear', safeValue('sp-startYear'));
@@ -264,7 +328,7 @@
       banner = document.createElement('div');
       banner.id = 'handoff-banner';
       banner.style.cssText = 'background:#dcfce7;border:1px solid #86efac;border-radius:6px;padding:8px 10px;font-size:12px;color:#166534;margin:0 0 0.75rem';
-      const sidebarBody = document.querySelector('#main-app .sidebar-body');
+      const sidebarBody = document.querySelector('.sidebar-body');
       if (sidebarBody) sidebarBody.prepend(banner);
     }
     banner.innerHTML = `✓ Portfolio loaded: ${nAccts} accounts, ${D.formatMoney(total)} total`;
@@ -273,8 +337,8 @@
 
     updateSidebarNames();
 
-    safeEl('setup-page').style.display = 'none';
-    safeEl('main-app').style.display   = '';
+    // Re-apply p2 state so any newly-synced fields are correctly dimmed/enabled
+    applyP2State();
   }
 
   // ─────────────────────────────
@@ -334,23 +398,24 @@
       p2DOB:            gvi('heidiDOB'),
       p1name:           safeEl('sp-p1name')?.value?.trim() || 'Person 1',
       p2name:           safeEl('sp-p2name')?.value?.trim() || 'Person 2',
+      p2enabled:        state.p2enabled,
       spending:         gv('spending'),
       stepDownPct:      gvi('stepDownPct'),
       p1Salary:         gv('woodySalary'),
       p1SalaryStop:     gvi('woodySalaryStopAge'),
-      p2Salary:         gv('heidiSalary'),
-      p2SalaryStop:     gvi('heidiSalaryStopAge'),
+      p2Salary:         state.p2enabled ? gv('heidiSalary')         : 0,
+      p2SalaryStop:     state.p2enabled ? gvi('heidiSalaryStopAge') : 0,
       p1SPAge:          gvi('woodySPAge'),
       p1SPAmt:          gv('woodySP'),
-      p2SPAge:          gvi('heidiSPAge'),
-      p2SPAmt:          gv('heidiSP'),
+      p2SPAge:          state.p2enabled ? gvi('heidiSPAge') : 0,
+      p2SPAmt:          state.p2enabled ? gv('heidiSP')    : 0,
       growth:           growthRaw / 100,
       inflation:        inflationRaw / 100,
       thresholdMode:    document.querySelector('input[name="thresholdMode"]:checked')?.value || 'frozen',
       thresholdFromYear: parseInt(safeEl('thresholdFromYearVal')?.value) || 2028,
       bniEnabled,
       bniP1GIA:         bniEnabled ? gv('bniWoodyGIA') : 0,
-      bniP2GIA:         bniEnabled ? gv('bniHeidiGIA') : 0,
+      bniP2GIA:         (bniEnabled && state.p2enabled) ? gv('bniHeidiGIA') : 0,
       dividendYield:    (parseFloat(safeEl('dividendYield')?.value) || 1.5) / 100,
       withdrawalMode:   document.querySelector('input[name="withdrawalMode"]:checked')?.value || '50/50',
       p1Bal: {
@@ -360,10 +425,10 @@
         ISA:  gv('woodyISA'),
       },
       p2Bal: {
-        Cash: gv('heidiCash'),
-        GIA:  gv('heidiGIA'),
-        SIPP: gv('heidiSIPP'),
-        ISA:  gv('heidiISA'),
+        Cash: state.p2enabled ? gv('heidiCash') : 0,
+        GIA:  state.p2enabled ? gv('heidiGIA')  : 0,
+        SIPP: state.p2enabled ? gv('heidiSIPP') : 0,
+        ISA:  state.p2enabled ? gv('heidiISA')  : 0,
       },
       p1Order: getOrder('woody', 3),
       p2Order: getOrder('heidi', 3),
@@ -380,6 +445,9 @@
     CR.renderAlerts(result.depletions);
     CR.renderMetrics();
     CR.renderCharts();
+    // Auto-advance to Results tab
+    RetireTabs.switchTab('results');
+    state.activeTab = 'results';
   }
 
   // ─────────────────────────────
@@ -412,10 +480,11 @@
     if (action === 'toggle-section') return toggleSection(el);
     if (action === 'toggle-all')     return toggleAllSections();
 
-    if (action === 'continue-to-main') return continueToMain();
-    if (action === 'back-to-setup') {
-      safeEl('setup-page').style.display = '';
-      safeEl('main-app').style.display   = 'none';
+    if (action === 'switch-tab') {
+      const tab = el.dataset.tab;
+      if (state.activeTab === 'setup') syncSetupToAssumptions();
+      state.activeTab = tab;
+      return RetireTabs.switchTab(tab);
     }
 
     if (action === 'view-both')  return CR.setView('both',  el);
@@ -427,11 +496,17 @@
     if (action === 'tab-tables') return CR.setTab('tables', el);
   });
 
-  // BNI checkbox (not a button, so not caught by click dispatcher)
+  // BNI checkbox
   document.addEventListener('change', (e) => {
     if (e.target.id === 'bniEnabled') {
       const f = safeEl('bni-fields');
       if (f) f.style.display = e.target.checked ? '' : 'none';
+    }
+
+    // P2 toggle checkbox
+    if (e.target.id === 'p2enabled') {
+      state.p2enabled = e.target.checked;
+      applyP2State();
     }
   });
 
@@ -493,6 +568,7 @@
 
     showToast(`Loaded ${accounts.length} accounts from Excel ✓`);
     updateSidebarNames();
+    applyP2State();
   });
 
   // ─────────────────────────────
@@ -500,4 +576,5 @@
   // ─────────────────────────────
   refreshSetupSummary();
   R.initialiseCurrencyInputs();
+  RetireTabs.init();
 })();
