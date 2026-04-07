@@ -81,19 +81,23 @@
     return {
       version: 1,
       people: {
-        p1: { name: safeValue('sp-p1name').trim(), age: safeNumber(safeValue('sp-p1age')) },
-        p2: { name: safeValue('sp-p2name').trim(), age: safeNumber(safeValue('sp-p2age')) },
+        p1: { name: safeValue('sp-p1name').trim(), dob: safeNumber(safeValue('sp-p1dob')) },
+        p2: { name: safeValue('sp-p2name').trim(), dob: safeNumber(safeValue('sp-p2dob')) },
       },
+      startYear: safeNumber(safeValue('sp-startYear')),
+      endYear:   safeNumber(safeValue('sp-endYear')),
       accounts: state.portfolioAccounts,
     };
   }
 
   function applySetupInputs(data) {
     if (!data) return;
-    if (safeEl('sp-p1name')) safeEl('sp-p1name').value = data.people?.p1?.name || '';
-    if (safeEl('sp-p1age'))  safeEl('sp-p1age').value  = data.people?.p1?.age  || '';
-    if (safeEl('sp-p2name')) safeEl('sp-p2name').value = data.people?.p2?.name || '';
-    if (safeEl('sp-p2age'))  safeEl('sp-p2age').value  = data.people?.p2?.age  || '';
+    if (safeEl('sp-p1name'))    safeEl('sp-p1name').value    = data.people?.p1?.name  || '';
+    if (safeEl('sp-p1dob'))     safeEl('sp-p1dob').value     = data.people?.p1?.dob   || '';
+    if (safeEl('sp-p2name'))    safeEl('sp-p2name').value    = data.people?.p2?.name  || '';
+    if (safeEl('sp-p2dob'))     safeEl('sp-p2dob').value     = data.people?.p2?.dob   || '';
+    if (safeEl('sp-startYear')) safeEl('sp-startYear').value = data.startYear || '';
+    if (safeEl('sp-endYear'))   safeEl('sp-endYear').value   = data.endYear   || '';
 
     state.portfolioAccounts = data.accounts || [];
     state.nextId = Math.max(1, ...state.portfolioAccounts.map(a => a.id || 0)) + 1;
@@ -143,6 +147,52 @@
     } catch (err) {
       console.error(err);
       showToast('Load failed – see console', true);
+    }
+  }
+
+  // ─────────────────────────────
+  // PRELOAD
+  // ─────────────────────────────
+  function preloadSetup() {
+    // Names and ages
+    if (safeEl('sp-p1name')) safeEl('sp-p1name').value = D.PRELOAD.p1name || '';
+    if (safeEl('sp-p2name')) safeEl('sp-p2name').value = D.PRELOAD.p2name || '';
+    if (safeEl('sp-p1age'))  safeEl('sp-p1age').value  = D.PRELOAD.p1age  || '';
+    if (safeEl('sp-p2age'))  safeEl('sp-p2age').value  = D.PRELOAD.p2age  || '';
+
+    state.portfolioAccounts = [];
+    state.nextId = 1;
+    const tbody = safeEl('acct-tbody');
+    if (tbody) tbody.innerHTML = '';
+    const ownerNames = getOwnerNames();
+    D.PRELOAD_ACCOUNTS.forEach(a => {
+      const acc = { id: state.nextId++, ...a, alloc: { ...a.alloc } };
+      state.portfolioAccounts.push(acc);
+      R.renderAccountRow(acc, ownerNames);
+      R.updateRowBadge(acc);
+      R.applyWrapperFieldState(acc);
+    });
+    refreshSetupSummary();
+    showToast('Preloaded ✓');
+  }
+
+  function preloadCalc() {
+    // Ensure name fields are set so getNames() works correctly in calc-render
+    if (safeEl('sp-p1name') && D.PRELOAD.p1name) safeEl('sp-p1name').value = D.PRELOAD.p1name;
+    if (safeEl('sp-p2name') && D.PRELOAD.p2name) safeEl('sp-p2name').value = D.PRELOAD.p2name;
+
+    Object.entries(D.PRELOAD).forEach(([k, val]) => {
+      const el = safeEl(k);
+      if (!el) return;
+      el.value = D.MONEY_FIELDS.has(k) && val !== '' ? formatCurrency(val) : val;
+    });
+    const tm = safeEl('thresholdFrozen');
+    if (tm) tm.checked = true;
+    const bniCb = safeEl('bniEnabled');
+    if (bniCb) {
+      bniCb.checked = true;
+      const f = safeEl('bni-fields');
+      if (f) f.style.display = '';
     }
   }
 
@@ -245,6 +295,12 @@
     // to avoid double-counting — they are passed directly to the engine loop.
     set('woodyGIA', sumBy('p1', 'GIA', true));
     set('heidiGIA', sumBy('p2', 'GIA', true));
+
+    // People and projection — populate read-only sidebar fields from setup
+    set('woodyDOB',  safeValue('sp-p1dob'));
+    set('heidiDOB',  safeValue('sp-p2dob'));
+    set('startYear', safeValue('sp-startYear'));
+    set('endYear',   safeValue('sp-endYear'));
 
     // Banner
     const total  = state.portfolioAccounts.reduce((s, a) => s + (a.value || 0), 0);
@@ -398,6 +454,8 @@
     if (action === 'save-setup')     return saveSetup();
     if (action === 'load-setup')     return loadSetup();
     if (action === 'load-excel')     return window.RetireExcelLoader.openFilePicker();
+    if (action === 'preload-setup')  return preloadSetup();
+    if (action === 'preload-calc')   return preloadCalc();
     if (action === 'run-projection') return runProjection();
     if (action === 'toggle-section') return toggleSection(el);
     if (action === 'toggle-all')     return toggleAllSections();
@@ -475,12 +533,11 @@
       if (radio) radio.checked = true;
     }
 
-    // p1age / p2age from DOBs
-    const currentYear = new Date().getFullYear();
-    if (params.woodyDOB && safeEl('sp-p1age'))
-      safeEl('sp-p1age').value = currentYear - Number(params.woodyDOB);
-    if (params.heidiDOB && safeEl('sp-p2age'))
-      safeEl('sp-p2age').value = currentYear - Number(params.heidiDOB);
+    // DOBs — write directly to setup page fields
+    if (params.woodyDOB && safeEl('sp-p1dob'))
+      safeEl('sp-p1dob').value = params.woodyDOB;
+    if (params.heidiDOB && safeEl('sp-p2dob'))
+      safeEl('sp-p2dob').value = params.heidiDOB;
 
     showToast(`Loaded ${accounts.length} accounts from Excel ✓`);
     updateSidebarNames();
