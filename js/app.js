@@ -645,4 +645,19 @@
   refreshSetupSummary();
   R.initialiseCurrencyInputs();
   RetireTabs.init();
+
+  // ─── Stepper buttons ─────────────────────────────────────────────────────
+  document.addEventListener('click', function (e) {
+    const btn = e.target.closest('.stepper-btn');
+    if (!btn) return;
+    const targetId = btn.dataset.stepFor;
+    const dir      = Number(btn.dataset.stepDirection);
+    const input    = document.getElementById(targetId);
+    if (!input) return;
+    const step = Number(input.step) || 1;
+    const val  = Number(input.value) || 0;
+    input.value = val + (dir * step);
+    input.dispatchEvent(new Event('input',  { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
 })();
