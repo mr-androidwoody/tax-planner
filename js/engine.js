@@ -32,7 +32,16 @@
 
     const ISA_ALLOWANCE = D.ISA_ALLOWANCE;
 
-    const intAccts = (accounts || []).map(a => ({ ...a }));
+    const intAccts = (accounts || [])
+      .filter(a => a.rate != null || a.monthlyDraw != null)
+      .map(a => ({
+        name:        a.name,
+        owner:       a.owner,
+        wrapper:     a.wrapper,
+        balance:     a.value || 0,
+        rate:        a.rate        || 0,
+        monthlyDraw: a.monthlyDraw || 0,
+      }));
 
     let p1GIACost = p1Bal.GIA;
     let p2GIACost = p2Bal.GIA;

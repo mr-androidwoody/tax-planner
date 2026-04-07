@@ -10,7 +10,6 @@
   const state = {
     portfolioAccounts: [],
     nextId: 1,
-    interestAccounts: [],
   };
 
   // ─────────────────────────────
@@ -263,9 +262,15 @@
     const p1name = data.people.p1.name || 'Person 1';
     const p2name = data.people.p2.name || 'Person 2';
 
-    const sumBy = (owner, wrapper) =>
+    const isYieldAccount = a => a.rate != null || a.monthlyDraw != null;
+
+    const sumBy = (owner, wrapper, excludeYield = false) =>
       state.portfolioAccounts
-        .filter(a => a.owner === owner && a.wrapper === wrapper)
+        .filter(a =>
+          a.owner === owner &&
+          a.wrapper === wrapper &&
+          (!excludeYield || !isYieldAccount(a))
+        )
         .reduce((s, a) => s + (a.value || 0), 0);
 
     const set = (id, val) => {
@@ -282,14 +287,10 @@
     set('woodyCash', sumBy('p1', 'Cash'));
     set('heidiCash', sumBy('p2', 'Cash'));
 
-    // ALL GIA goes into woodyGIA/heidiGIA (matching monolith behaviour).
-    // Interest-bearing accounts (rate set) are tracked separately for the
-    // sidebar banner only — the engine treats them as plain GIA growth for now.
-    set('woodyGIA', sumBy('p1', 'GIA'));
-    set('heidiGIA', sumBy('p2', 'GIA'));
-
-    // Interest accounts: empty for now — engine matches monolith ([] = no separate interest draw)
-    state.interestAccounts = [];
+    // Yield accounts (rate/monthlyDraw set) are excluded from wrapper balances
+    // to avoid double-counting — they are passed directly to the engine loop.
+    set('woodyGIA', sumBy('p1', 'GIA', true));
+    set('heidiGIA', sumBy('p2', 'GIA', true));
 
     // Banner
     const total  = state.portfolioAccounts.reduce((s, a) => s + (a.value || 0), 0);
@@ -304,7 +305,7 @@
     }
     banner.innerHTML = `✓ Portfolio loaded: ${nAccts} accounts, ${D.formatMoney(total)} total`;
 
-    R.updateInterestAccountsBanner(state.interestAccounts, [p1name, p2name]);
+    R.updateInterestAccountsBanner(state.portfolioAccounts.filter(isYieldAccount), [p1name, p2name]);
 
     updateSidebarNames();
 
@@ -409,7 +410,7 @@
   // RUN PROJECTION
   // ─────────────────────────────
   function runProjection() {
-    const result = E.runProjection(gatherInputs(), state.interestAccounts);
+    const result = E.runProjection(gatherInputs(), state.portfolioAccounts);
     if (!result) return;
     CR.setResults(result.rows);
     CR.renderAlerts(result.depletions);
