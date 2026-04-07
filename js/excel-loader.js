@@ -5,29 +5,29 @@
   // Parameters sheet col A (human label) → DOM element ID
   // ─────────────────────────────────────────────
   const PARAM_MAP = {
-    'Person 1 – birth year':                    'woodyDOB',
-    'Person 2 – birth year':                    'heidiDOB',
+    'Person 1 – birth year':                    'p1DOB',
+    'Person 2 – birth year':                    'p2DOB',
     'Person 1 name':                            'p1name',
     'Person 2 name':                            'p2name',
     'Start year':                               'startYear',
     'End year':                                 'endYear',
     'Annual household spending (£)':            'spending',
     'Step-down at age 75 (%)':                  'stepDownPct',
-    'Person 1 – gross annual salary (£)':       'woodySalary',
-    'Person 1 – salary stop age':               'woodySalaryStopAge',
-    'Gross annual salary (£)':                  'heidiSalary',
-    'Stop age':                                 'heidiSalaryStopAge',
-    'Person 1 – start age':                     'woodySPAge',
-    'Person 1 – annual amount (£)':             'woodySP',
-    'Person 2 – start age':                     'heidiSPAge',
-    'Person 2 – annual amount (£)':             'heidiSP',
+    'Person 1 – gross annual salary (£)':       'p1Salary',
+    'Person 1 – salary stop age':               'p1SalaryStopAge',
+    'Gross annual salary (£)':                  'p2Salary',
+    'Stop age':                                 'p2SalaryStopAge',
+    'Person 1 – start age':                     'p1SPAge',
+    'Person 1 – annual amount (£)':             'p1SP',
+    'Person 2 – start age':                     'p2SPAge',
+    'Person 2 – annual amount (£)':             'p2SP',
     'Portfolio growth (%/yr)':                  'growth',
     'Inflation (%/yr)':                         'inflation',
     'Threshold uprating mode':                  'thresholdMode',
     'Uprate from year':                         'thresholdFromYearVal',
     'Enable bed-and-ISA':                       'bniEnabled',
-    'Person 1 GIA→ISA per year (£)':            'bniWoodyGIA',
-    'Person 2 GIA→ISA per year (£)':            'bniHeidiGIA',
+    'Person 1 GIA→ISA per year (£)':            'bniP1GIA',
+    'Person 2 GIA→ISA per year (£)':            'bniP2GIA',
   };
 
   const REQUIRED_LABELS = [
@@ -199,7 +199,7 @@
         errors.push(`Accounts row ${r} (${a.name}): Allocation totals ${allocTotal.toFixed(1)}%, must be 100%`);
     });
 
-    const requiredIds = ['woodyDOB', 'heidiDOB', 'startYear', 'endYear', 'spending'];
+    const requiredIds = ['p1DOB', 'p2DOB', 'startYear', 'endYear', 'spending'];
     requiredIds.forEach(id => {
       if (params[id] === undefined || params[id] === '')
         errors.push(`Parameters: Missing required field "${id}"`);

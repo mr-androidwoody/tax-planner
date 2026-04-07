@@ -226,15 +226,15 @@
 
   // All field IDs that belong to Person 2 in the Assumptions tab.
   const P2_FIELD_IDS = [
-    'heidiDOB',
-    'heidiSalary', 'heidiSalaryStopAge',
-    'heidiSPAge', 'heidiSP',
-    'heidiCash',
-    'heidiSIPP',
-    'heidiISA',
-    'heidiGIA',
-    'heidiOrder1', 'heidiOrder2', 'heidiOrder3',
-    'bniHeidiGIA',
+    'p2DOB',
+    'p2Salary', 'p2SalaryStopAge',
+    'p2SPAge', 'p2SP',
+    'p2Cash',
+    'p2SIPP',
+    'p2ISA',
+    'p2GIA',
+    'p2Order1', 'p2Order2', 'p2Order3',
+    'bniP2GIA',
   ];
 
   function applyP2State() {
@@ -302,21 +302,21 @@
         ? '' : D.MONEY_FIELDS.has(id) ? formatCurrency(val) : val;
     };
 
-    set('woodySIPP', sumBy('p1', 'SIPP'));
-    set('heidiSIPP', sumBy('p2', 'SIPP'));
-    set('woodyISA',  sumBy('p1', 'ISA'));
-    set('heidiISA',  sumBy('p2', 'ISA'));
-    set('woodyCash', sumBy('p1', 'Cash'));
-    set('heidiCash', sumBy('p2', 'Cash'));
+    set('p1SIPP', sumBy('p1', 'SIPP'));
+    set('p2SIPP', sumBy('p2', 'SIPP'));
+    set('p1ISA',  sumBy('p1', 'ISA'));
+    set('p2ISA',  sumBy('p2', 'ISA'));
+    set('p1Cash', sumBy('p1', 'Cash'));
+    set('p2Cash', sumBy('p2', 'Cash'));
 
     // Yield accounts (rate/monthlyDraw set) are excluded from wrapper balances
     // to avoid double-counting — they are passed directly to the engine loop.
-    set('woodyGIA', sumBy('p1', 'GIA', true));
-    set('heidiGIA', sumBy('p2', 'GIA', true));
+    set('p1GIA', sumBy('p1', 'GIA', true));
+    set('p2GIA', sumBy('p2', 'GIA', true));
 
     // People and projection — populate read-only assumptions fields from setup
-    set('woodyDOB',  safeValue('sp-p1dob'));
-    set('heidiDOB',  safeValue('sp-p2dob'));
+    set('p1DOB',  safeValue('sp-p1dob'));
+    set('p2DOB',  safeValue('sp-p2dob'));
     set('startYear', safeValue('sp-startYear'));
     set('endYear',   safeValue('sp-endYear'));
 
@@ -394,44 +394,44 @@
     return {
       startYear:        gvi('startYear'),
       endYear:          gvi('endYear'),
-      p1DOB:            gvi('woodyDOB'),
-      p2DOB:            gvi('heidiDOB'),
+      p1DOB:            gvi('p1DOB'),
+      p2DOB:            gvi('p2DOB'),
       p1name:           safeEl('sp-p1name')?.value?.trim() || 'Person 1',
       p2name:           safeEl('sp-p2name')?.value?.trim() || 'Person 2',
       p2enabled:        state.p2enabled,
       spending:         gv('spending'),
       stepDownPct:      gvi('stepDownPct'),
-      p1Salary:         gv('woodySalary'),
-      p1SalaryStop:     gvi('woodySalaryStopAge'),
-      p2Salary:         state.p2enabled ? gv('heidiSalary')         : 0,
-      p2SalaryStop:     state.p2enabled ? gvi('heidiSalaryStopAge') : 0,
-      p1SPAge:          gvi('woodySPAge'),
-      p1SPAmt:          gv('woodySP'),
-      p2SPAge:          state.p2enabled ? gvi('heidiSPAge') : 0,
-      p2SPAmt:          state.p2enabled ? gv('heidiSP')    : 0,
+      p1Salary:         gv('p1Salary'),
+      p1SalaryStop:     gvi('p1SalaryStopAge'),
+      p2Salary:         state.p2enabled ? gv('p2Salary')         : 0,
+      p2SalaryStop:     state.p2enabled ? gvi('p2SalaryStopAge') : 0,
+      p1SPAge:          gvi('p1SPAge'),
+      p1SPAmt:          gv('p1SP'),
+      p2SPAge:          state.p2enabled ? gvi('p2SPAge') : 0,
+      p2SPAmt:          state.p2enabled ? gv('p2SP')    : 0,
       growth:           growthRaw / 100,
       inflation:        inflationRaw / 100,
       thresholdMode:    document.querySelector('input[name="thresholdMode"]:checked')?.value || 'frozen',
       thresholdFromYear: parseInt(safeEl('thresholdFromYearVal')?.value) || 2028,
       bniEnabled,
-      bniP1GIA:         bniEnabled ? gv('bniWoodyGIA') : 0,
-      bniP2GIA:         (bniEnabled && state.p2enabled) ? gv('bniHeidiGIA') : 0,
+      bniP1GIA:         bniEnabled ? gv('bniP1GIA') : 0,
+      bniP2GIA:         (bniEnabled && state.p2enabled) ? gv('bniP2GIA') : 0,
       dividendYield:    (parseFloat(safeEl('dividendYield')?.value) || 1.5) / 100,
       withdrawalMode:   document.querySelector('input[name="withdrawalMode"]:checked')?.value || '50/50',
       p1Bal: {
-        Cash: gv('woodyCash'),
-        GIA:  gv('woodyGIA'),
-        SIPP: gv('woodySIPP'),
-        ISA:  gv('woodyISA'),
+        Cash: gv('p1Cash'),
+        GIA:  gv('p1GIA'),
+        SIPP: gv('p1SIPP'),
+        ISA:  gv('p1ISA'),
       },
       p2Bal: {
-        Cash: state.p2enabled ? gv('heidiCash') : 0,
-        GIA:  state.p2enabled ? gv('heidiGIA')  : 0,
-        SIPP: state.p2enabled ? gv('heidiSIPP') : 0,
-        ISA:  state.p2enabled ? gv('heidiISA')  : 0,
+        Cash: state.p2enabled ? gv('p2Cash') : 0,
+        GIA:  state.p2enabled ? gv('p2GIA')  : 0,
+        SIPP: state.p2enabled ? gv('p2SIPP') : 0,
+        ISA:  state.p2enabled ? gv('p2ISA')  : 0,
       },
-      p1Order: getOrder('woody', 3),
-      p2Order: getOrder('heidi', 3),
+      p1Order: getOrder('p1', 3),
+      p2Order: getOrder('p2', 3),
     };
   }
 
@@ -488,8 +488,8 @@
     }
 
     if (action === 'view-both')  return CR.setView('both', el);
-    if (action === 'view-woody') return CR.setView('p1',   el);
-    if (action === 'view-heidi') return CR.setView('p2',   el);
+    if (action === 'view-p1') return CR.setView('p1',   el);
+    if (action === 'view-p2') return CR.setView('p2',   el);
     if (action === 'real-on')    return CR.setReal(true,  el);
     if (action === 'real-off')   return CR.setReal(false, el);
     if (action === 'tab-charts') return CR.setTab('charts', el);
@@ -561,10 +561,10 @@
     }
 
     // DOBs — write directly to setup page fields
-    if (params.woodyDOB && safeEl('sp-p1dob'))
-      safeEl('sp-p1dob').value = params.woodyDOB;
-    if (params.heidiDOB && safeEl('sp-p2dob'))
-      safeEl('sp-p2dob').value = params.heidiDOB;
+    if (params.p1DOB && safeEl('sp-p1dob'))
+      safeEl('sp-p1dob').value = params.p1DOB;
+    if (params.p2DOB && safeEl('sp-p2dob'))
+      safeEl('sp-p2dob').value = params.p2DOB;
 
     showToast(`Loaded ${accounts.length} accounts from Excel ✓`);
     updateSidebarNames();
