@@ -88,25 +88,25 @@
     if (!_rows.length) return;
 
     const totalTax = _rows.reduce((s, r) => {
-      const t = _viewPerson === 'woody' ? r.woodyIncomeTax + r.woodyCGT + r.woodyNI
-              : _viewPerson === 'heidi' ? r.heidiIncomeTax + r.heidiCGT + r.heidiNI
-              : r.woodyIncomeTax + r.woodyCGT + r.woodyNI + r.heidiIncomeTax + r.heidiCGT + r.heidiNI;
+      const t = _viewPerson === 'p1' ? r.p1IncomeTax + r.p1CGT + r.p1NI
+              : _viewPerson === 'p2' ? r.p2IncomeTax + r.p2CGT + r.p2NI
+              : r.p1IncomeTax + r.p1CGT + r.p1NI + r.p2IncomeTax + r.p2CGT + r.p2NI;
       return s + adj(t, r);
     }, 0);
 
     const avgRate = _rows.reduce((s, r) => {
-      const tax = _viewPerson === 'woody' ? r.woodyIncomeTax + r.woodyCGT + r.woodyNI
-                : _viewPerson === 'heidi' ? r.heidiIncomeTax + r.heidiCGT + r.heidiNI
-                : r.woodyIncomeTax + r.woodyCGT + r.woodyNI + r.heidiIncomeTax + r.heidiCGT + r.heidiNI;
-      const woodyGross = r.woodySP + (r.woodySalInc || 0) + r.woodyDrawn.SIPP + r.woodyDrawn.ISA + r.woodyDrawn.GIA + r.woodyIntDraw + r.woodyDrawn.Cash;
-      const heidiGross = r.heidiSP + r.heidiSalInc + r.heidiDrawn.SIPP + r.heidiDrawn.ISA + r.heidiDrawn.GIA + r.heidiIntDraw + r.heidiDrawn.Cash;
-      const gross = _viewPerson === 'woody' ? woodyGross : _viewPerson === 'heidi' ? heidiGross : woodyGross + heidiGross;
+      const tax = _viewPerson === 'p1' ? r.p1IncomeTax + r.p1CGT + r.p1NI
+                : _viewPerson === 'p2' ? r.p2IncomeTax + r.p2CGT + r.p2NI
+                : r.p1IncomeTax + r.p1CGT + r.p1NI + r.p2IncomeTax + r.p2CGT + r.p2NI;
+      const p1Gross = r.p1SP + (r.p1SalInc || 0) + r.p1Drawn.SIPP + r.p1Drawn.ISA + r.p1Drawn.GIA + r.p1IntDraw + r.p1Drawn.Cash;
+      const p2Gross = r.p2SP + r.p2SalInc + r.p2Drawn.SIPP + r.p2Drawn.ISA + r.p2Drawn.GIA + r.p2IntDraw + r.p2Drawn.Cash;
+      const gross = _viewPerson === 'p1' ? p1Gross : _viewPerson === 'p2' ? p2Gross : p1Gross + p2Gross;
       return s + (gross > 0 ? tax / gross : 0);
     }, 0) / _rows.length;
 
     let peakYear = _rows[0].year, peakTax = 0;
     _rows.forEach(r => {
-      const t = _viewPerson === 'woody' ? r.woodyTax : _viewPerson === 'heidi' ? r.heidiTax : r.woodyTax + r.heidiTax;
+      const t = _viewPerson === 'p1' ? r.p1Tax : _viewPerson === 'p2' ? r.p2Tax : r.p1Tax + r.p2Tax;
       if (t > peakTax) { peakTax = t; peakYear = r.year; }
     });
 
@@ -130,8 +130,8 @@
     host.innerHTML = '';
     const datasets = chart.data.datasets || [];
     const { p1, p2 } = getNames();
-    const woody = datasets.map((ds, i) => ({ ds, i })).filter(x => x.ds.label.includes(`– ${p1}`));
-    const heidi = datasets.map((ds, i) => ({ ds, i })).filter(x => x.ds.label.includes(`– ${p2}`));
+    const p1sets = datasets.map((ds, i) => ({ ds, i })).filter(x => x.ds.label.includes(`– ${p1}`));
+    const p2sets = datasets.map((ds, i) => ({ ds, i })).filter(x => x.ds.label.includes(`– ${p2}`));
 
     function makeRow(items) {
       const row = document.createElement('div');
@@ -156,8 +156,8 @@
       });
       return row;
     }
-    if (woody.length) host.appendChild(makeRow(woody));
-    if (heidi.length) host.appendChild(makeRow(heidi));
+    if (p1sets.length) host.appendChild(makeRow(p1sets));
+    if (p2sets.length) host.appendChild(makeRow(p2sets));
   }
 
   // ─────────────────────────────────────────────
@@ -169,11 +169,11 @@
     const { p1, p2 } = getNames();
 
     const COLOURS = {
-      woodySP: '#4472C4', heidiSP: '#70AD47',
-      woodySIPP: '#ED7D31', heidiSIPP: '#FFC000',
-      woodyISA: '#5B9BD5', heidiISA: '#2E86C1',
-      woodyGIA: '#A9D18E', heidiGIA: '#78C86A',
-      intDraw: '#9B59B6', woodyCash: '#B0B0B0',
+      p1SP: '#4472C4', p2SP: '#70AD47',
+      p1SIPP: '#ED7D31', p2SIPP: '#FFC000',
+      p1ISA: '#5B9BD5', p2ISA: '#2E86C1',
+      p1GIA: '#A9D18E', p2GIA: '#78C86A',
+      intDraw: '#9B59B6', p1Cash: '#B0B0B0',
       salary: '#FF7F7F',
     };
 
@@ -182,23 +182,23 @@
     }
 
     let sets = [];
-    if (_viewPerson === 'both' || _viewPerson === 'woody') {
-      sets.push(ds(`State Pension – ${p1}`,    r => r.woodySP,          COLOURS.woodySP));
-      sets.push(ds(`Salary – ${p1}`,           r => r.woodySalInc || 0, COLOURS.salary));
-      sets.push(ds(`SIPP – ${p1}`,             r => r.woodyDrawn.SIPP,  COLOURS.woodySIPP));
-      sets.push(ds(`ISA – ${p1}`,              r => r.woodyDrawn.ISA,   COLOURS.woodyISA));
-      sets.push(ds(`GIA – ${p1}`,              r => r.woodyDrawn.GIA,   COLOURS.woodyGIA));
-      sets.push(ds(`Interest draw – ${p1}`,    r => r.woodyIntDraw,     COLOURS.intDraw));
-      sets.push(ds(`Cash draw – ${p1}`,        r => r.woodyDrawn.Cash,  COLOURS.woodyCash));
+    if (_viewPerson === 'both' || _viewPerson === 'p1') {
+      sets.push(ds(`State Pension – ${p1}`,    r => r.p1SP,          COLOURS.p1SP));
+      sets.push(ds(`Salary – ${p1}`,           r => r.p1SalInc || 0, COLOURS.salary));
+      sets.push(ds(`SIPP – ${p1}`,             r => r.p1Drawn.SIPP,  COLOURS.p1SIPP));
+      sets.push(ds(`ISA – ${p1}`,              r => r.p1Drawn.ISA,   COLOURS.p1ISA));
+      sets.push(ds(`GIA – ${p1}`,              r => r.p1Drawn.GIA,   COLOURS.p1GIA));
+      sets.push(ds(`Interest draw – ${p1}`,    r => r.p1IntDraw,     COLOURS.intDraw));
+      sets.push(ds(`Cash draw – ${p1}`,        r => r.p1Drawn.Cash,  COLOURS.p1Cash));
     }
-    if (_viewPerson === 'both' || _viewPerson === 'heidi') {
-      sets.push(ds(`State Pension – ${p2}`,    r => r.heidiSP,          COLOURS.heidiSP));
-      sets.push(ds(`Salary – ${p2}`,           r => r.heidiSalInc,      COLOURS.salary));
-      sets.push(ds(`SIPP – ${p2}`,             r => r.heidiDrawn.SIPP,  COLOURS.heidiSIPP));
-      sets.push(ds(`ISA – ${p2}`,              r => r.heidiDrawn.ISA,   COLOURS.heidiISA));
-      sets.push(ds(`GIA – ${p2}`,              r => r.heidiDrawn.GIA,   COLOURS.heidiGIA));
-      sets.push(ds(`Interest draw – ${p2}`,    r => r.heidiIntDraw,     COLOURS.intDraw));
-      sets.push(ds(`Cash draw – ${p2}`,        r => r.heidiDrawn.Cash,  COLOURS.woodyCash));
+    if (_viewPerson === 'both' || _viewPerson === 'p2') {
+      sets.push(ds(`State Pension – ${p2}`,    r => r.p2SP,          COLOURS.p2SP));
+      sets.push(ds(`Salary – ${p2}`,           r => r.p2SalInc,      COLOURS.salary));
+      sets.push(ds(`SIPP – ${p2}`,             r => r.p2Drawn.SIPP,  COLOURS.p2SIPP));
+      sets.push(ds(`ISA – ${p2}`,              r => r.p2Drawn.ISA,   COLOURS.p2ISA));
+      sets.push(ds(`GIA – ${p2}`,              r => r.p2Drawn.GIA,   COLOURS.p2GIA));
+      sets.push(ds(`Interest draw – ${p2}`,    r => r.p2IntDraw,     COLOURS.intDraw));
+      sets.push(ds(`Cash draw – ${p2}`,        r => r.p2Drawn.Cash,  COLOURS.p1Cash));
     }
 
     const incCtx = document.getElementById('incomeChart')?.getContext('2d');
@@ -225,18 +225,18 @@
     }
 
     const taxData  = _rows.map(r => {
-      const t = _viewPerson === 'woody' ? r.woodyIncomeTax + r.woodyCGT
-              : _viewPerson === 'heidi' ? r.heidiIncomeTax + r.heidiCGT
-              : r.woodyIncomeTax + r.woodyCGT + r.heidiIncomeTax + r.heidiCGT;
+      const t = _viewPerson === 'p1' ? r.p1IncomeTax + r.p1CGT
+              : _viewPerson === 'p2' ? r.p2IncomeTax + r.p2CGT
+              : r.p1IncomeTax + r.p1CGT + r.p2IncomeTax + r.p2CGT;
       return Math.round(adj(t, r));
     });
     const rateData = _rows.map(r => {
-      const tax = _viewPerson === 'woody' ? r.woodyIncomeTax + r.woodyCGT
-                : _viewPerson === 'heidi' ? r.heidiIncomeTax + r.heidiCGT
-                : r.woodyIncomeTax + r.woodyCGT + r.heidiIncomeTax + r.heidiCGT;
-      const woodyGross = r.woodySP + (r.woodySalInc || 0) + r.woodyDrawn.SIPP + r.woodyDrawn.ISA + r.woodyDrawn.GIA + r.woodyIntDraw + r.woodyDrawn.Cash;
-      const heidiGross = r.heidiSP + r.heidiSalInc + r.heidiDrawn.SIPP + r.heidiDrawn.ISA + r.heidiDrawn.GIA + r.heidiIntDraw + r.heidiDrawn.Cash;
-      const gross = _viewPerson === 'woody' ? woodyGross : _viewPerson === 'heidi' ? heidiGross : woodyGross + heidiGross;
+      const tax = _viewPerson === 'p1' ? r.p1IncomeTax + r.p1CGT
+                : _viewPerson === 'p2' ? r.p2IncomeTax + r.p2CGT
+                : r.p1IncomeTax + r.p1CGT + r.p2IncomeTax + r.p2CGT;
+      const p1Gross = r.p1SP + (r.p1SalInc || 0) + r.p1Drawn.SIPP + r.p1Drawn.ISA + r.p1Drawn.GIA + r.p1IntDraw + r.p1Drawn.Cash;
+      const p2Gross = r.p2SP + r.p2SalInc + r.p2Drawn.SIPP + r.p2Drawn.ISA + r.p2Drawn.GIA + r.p2IntDraw + r.p2Drawn.Cash;
+      const gross = _viewPerson === 'p1' ? p1Gross : _viewPerson === 'p2' ? p2Gross : p1Gross + p2Gross;
       return gross > 0 ? parseFloat((tax / gross * 100).toFixed(1)) : 0;
     });
 
@@ -276,19 +276,19 @@
       return { label, data: _rows.map(r => Math.round(adj(fn(r.snap), r) / 1000)), backgroundColor: color, stack: 'wealth' };
     }
     const datasets = [];
-    if (_viewPerson === 'both' || _viewPerson === 'woody') {
-      datasets.push(wds(`SIPP – ${p1}`,           s => s.woodySIPP,        '#E84D4D'));
-      datasets.push(wds(`ISA – ${p1}`,            s => s.woodyISA,         '#4472C4'));
-      datasets.push(wds(`GIA – ${p1}`,            s => s.woodyGIA,         '#FFC000'));
-      datasets.push(wds(`Interest accts – ${p1}`, s => s.woodyIntBal || 0, '#9B59B6'));
-      datasets.push(wds(`Cash – ${p1}`,           s => s.woodyCash,        '#B0B0B0'));
+    if (_viewPerson === 'both' || _viewPerson === 'p1') {
+      datasets.push(wds(`SIPP – ${p1}`,           s => s.p1SIPP,        '#E84D4D'));
+      datasets.push(wds(`ISA – ${p1}`,            s => s.p1ISA,         '#4472C4'));
+      datasets.push(wds(`GIA – ${p1}`,            s => s.p1GIA,         '#FFC000'));
+      datasets.push(wds(`Interest accts – ${p1}`, s => s.p1IntBal || 0, '#9B59B6'));
+      datasets.push(wds(`Cash – ${p1}`,           s => s.p1Cash,        '#B0B0B0'));
     }
-    if (_viewPerson === 'both' || _viewPerson === 'heidi') {
-      datasets.push(wds(`SIPP – ${p2}`,           s => s.heidiSIPP,        '#FF8C8C'));
-      datasets.push(wds(`ISA – ${p2}`,            s => s.heidiISA,         '#5B9BD5'));
-      datasets.push(wds(`GIA – ${p2}`,            s => s.heidiGIA,         '#FFD966'));
-      datasets.push(wds(`Interest accts – ${p2}`, s => s.heidiIntBal || 0, '#C39BD3'));
-      datasets.push(wds(`Cash – ${p2}`,           s => s.heidiCash,        '#D0D0D0'));
+    if (_viewPerson === 'both' || _viewPerson === 'p2') {
+      datasets.push(wds(`SIPP – ${p2}`,           s => s.p2SIPP,        '#FF8C8C'));
+      datasets.push(wds(`ISA – ${p2}`,            s => s.p2ISA,         '#5B9BD5'));
+      datasets.push(wds(`GIA – ${p2}`,            s => s.p2GIA,         '#FFD966'));
+      datasets.push(wds(`Interest accts – ${p2}`, s => s.p2IntBal || 0, '#C39BD3'));
+      datasets.push(wds(`Cash – ${p2}`,           s => s.p2Cash,        '#D0D0D0'));
     }
     const wCtx = document.getElementById('wealthChart')?.getContext('2d');
     if (!wCtx) return;
@@ -328,14 +328,14 @@
       let grandWI = 0, grandWC = 0, grandHI = 0, grandHC = 0, grandBni = 0;
       let body = '<tbody>';
       _rows.forEach(r => {
-        const wi = a(r.woodyIncomeTax, r), wc = a(r.woodyCGT, r);
-        const hi = a(r.heidiIncomeTax, r), hc = a(r.heidiCGT, r);
+        const wi = a(r.p1IncomeTax, r), wc = a(r.p1CGT, r);
+        const hi = a(r.p2IncomeTax, r), hc = a(r.p2CGT, r);
         const bc = a(r.bniCGTBill || 0, r);
         const wt = wi + wc, ht = hi + hc, hh = wt + ht + bc;
         cumTax += hh;
         grandWI += wi; grandWC += wc; grandHI += hi; grandHC += hc; grandBni += bc;
         body += `<tr>
-          <td>${r.year}</td><td>${r.woodyAge}</td><td>${r.heidiAge}</td>
+          <td>${r.year}</td><td>${r.p1Age}</td><td>${r.p2Age}</td>
           <td>${f(wi)}</td><td>${f(wc)}</td><td>${f(wt)}</td>
           <td>${f(hi)}</td><td>${f(hc)}</td><td>${f(ht)}</td>
           <td>${f(bc)}</td><td>${f(hh)}</td><td>${f(cumTax)}</td>
@@ -364,12 +364,12 @@
         const s  = r.snap;
         const av = v => a(v, r);
         const cell = v => { const adj2 = a(v, r); return `<td${adj2 < 1 && v > 0 ? ' class="depleted"' : ''}>${f(adj2)}</td>`; };
-        const wTotal = av((s.woodyCash||0)+(s.woodyIntBal||0)+(s.woodyGIA||0)+(s.woodySIPP||0)+(s.woodyISA||0)
-                         +(s.heidiCash||0)+(s.heidiIntBal||0)+(s.heidiGIA||0)+(s.heidiSIPP||0)+(s.heidiISA||0));
+        const wTotal = av((s.p1Cash||0)+(s.p1IntBal||0)+(s.p1GIA||0)+(s.p1SIPP||0)+(s.p1ISA||0)
+                         +(s.p2Cash||0)+(s.p2IntBal||0)+(s.p2GIA||0)+(s.p2SIPP||0)+(s.p2ISA||0));
         body += `<tr>
-          <td>${r.year}</td><td>${r.woodyAge}</td><td>${r.heidiAge}</td>
-          ${cell(s.woodyCash)}${cell(s.woodyIntBal||0)}${cell(s.woodyGIA)}${cell(s.woodySIPP)}${cell(s.woodyISA)}
-          ${cell(s.heidiCash)}${cell(s.heidiIntBal||0)}${cell(s.heidiGIA)}${cell(s.heidiSIPP)}${cell(s.heidiISA)}
+          <td>${r.year}</td><td>${r.p1Age}</td><td>${r.p2Age}</td>
+          ${cell(s.p1Cash)}${cell(s.p1IntBal||0)}${cell(s.p1GIA)}${cell(s.p1SIPP)}${cell(s.p1ISA)}
+          ${cell(s.p2Cash)}${cell(s.p2IntBal||0)}${cell(s.p2GIA)}${cell(s.p2SIPP)}${cell(s.p2ISA)}
           <td>${f(wTotal)}</td>
         </tr>`;
       });

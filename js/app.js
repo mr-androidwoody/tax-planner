@@ -487,9 +487,9 @@
       return RetireTabs.switchTab(tab);
     }
 
-    if (action === 'view-both')  return CR.setView('both',  el);
-    if (action === 'view-woody') return CR.setView('woody', el);
-    if (action === 'view-heidi') return CR.setView('heidi', el);
+    if (action === 'view-both')  return CR.setView('both', el);
+    if (action === 'view-woody') return CR.setView('p1',   el);
+    if (action === 'view-heidi') return CR.setView('p2',   el);
     if (action === 'real-on')    return CR.setReal(true,  el);
     if (action === 'real-off')   return CR.setReal(false, el);
     if (action === 'tab-charts') return CR.setTab('charts', el);
