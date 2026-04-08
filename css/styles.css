@@ -1227,6 +1227,26 @@ input[type="radio"] { accent-color: var(--accent); }
   opacity: 0.4;
 }
 
+#incomeLegend {
+  display: block;
+  width: 100%;
+}
+
+.legend-group {
+  display: block;
+  width: 100%;
+}
+
+.split-legend-row {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  width: 100%;
+
+  /* kill any inherited layout */
+  column-count: unset !important;
+  column-gap: unset !important;
+}
+
 .alerts {
   display: flex;
   flex-direction: column;
