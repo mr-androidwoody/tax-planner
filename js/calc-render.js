@@ -126,40 +126,72 @@
   // INCOME LEGEND
   // ─────────────────────────────────────────────
   function renderIncomeLegend(chart) {
-    const host = document.getElementById('incomeLegend');
-    if (!host) return;
-    host.innerHTML = '';
-    const datasets = chart.data.datasets || [];
-    const { p1, p2 } = getNames();
-    const p1sets = datasets.map((ds, i) => ({ ds, i })).filter(x => x.ds.label.includes(`– ${p1}`));
-    const p2sets = datasets.map((ds, i) => ({ ds, i })).filter(x => x.ds.label.includes(`– ${p2}`));
+  const host = document.getElementById('incomeLegend');
+  if (!host) return;
+  host.innerHTML = '';
 
-    function makeRow(items) {
-      const row = document.createElement('div');
-      row.className = 'split-legend-row';
-      items.forEach(({ ds, i }) => {
-        const item   = document.createElement('div');
-        item.className = 'split-legend-item';
-        if (!chart.isDatasetVisible(i)) item.classList.add('is-hidden');
-        const swatch = document.createElement('span');
-        swatch.className = 'split-legend-swatch';
-        swatch.style.background = ds.backgroundColor;
-        const label  = document.createElement('span');
-        label.textContent = ds.label;
-        item.appendChild(swatch);
-        item.appendChild(label);
-        item.addEventListener('click', () => {
-          chart.setDatasetVisibility(i, !chart.isDatasetVisible(i));
-          chart.update();
-          renderIncomeLegend(chart);
-        });
-        row.appendChild(item);
-      });
-      return row;
-    }
-    if (p1sets.length) host.appendChild(makeRow(p1sets));
-    if (p2sets.length) host.appendChild(makeRow(p2sets));
+  const datasets = chart.data.datasets || [];
+  const { p1, p2 } = getNames();
+
+  const p1sets = datasets.map((ds, i) => ({ ds, i }))
+    .filter(x => x.ds.label.includes(`– ${p1}`));
+
+  const p2sets = datasets.map((ds, i) => ({ ds, i }))
+    .filter(x => x.ds.label.includes(`– ${p2}`));
+
+  function cleanLabel(label, name) {
+    return label.replace(`– ${name}`, '').trim();
   }
+
+  function makeGroup(title, items, personName) {
+    if (!items.length) return null;
+
+    const group = document.createElement('div');
+    group.className = 'legend-group';
+
+    const heading = document.createElement('div');
+    heading.className = 'legend-heading';
+    heading.textContent = title;
+
+    const row = document.createElement('div');
+    row.className = 'split-legend-row';
+
+    items.forEach(({ ds, i }) => {
+      const item = document.createElement('div');
+      item.className = 'split-legend-item';
+      if (!chart.isDatasetVisible(i)) item.classList.add('is-hidden');
+
+      const swatch = document.createElement('span');
+      swatch.className = 'split-legend-swatch';
+      swatch.style.background = ds.backgroundColor;
+
+      const label = document.createElement('span');
+      label.textContent = cleanLabel(ds.label, personName);
+
+      item.appendChild(swatch);
+      item.appendChild(label);
+
+      item.addEventListener('click', () => {
+        chart.setDatasetVisibility(i, !chart.isDatasetVisible(i));
+        chart.update();
+        renderIncomeLegend(chart);
+      });
+
+      row.appendChild(item);
+    });
+
+    group.appendChild(heading);
+    group.appendChild(row);
+
+    return group;
+  }
+
+  const g1 = makeGroup(p1, p1sets, p1);
+  const g2 = makeGroup(p2, p2sets, p2);
+
+  if (g1) host.appendChild(g1);
+  if (g2) host.appendChild(g2);
+}
 
   // ─────────────────────────────────────────────
   // CHARTS
