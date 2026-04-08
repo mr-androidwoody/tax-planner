@@ -72,9 +72,7 @@
       .map((a) => {
         const rate = a.rate != null ? a.rate + '%' : '–';
         const draw = a.monthlyDraw != null ? D.formatMoney(a.monthlyDraw) + '/mo' : '–';
-
         const ownerLabel = a.owner === 'p1' ? ownerNames[0] : ownerNames[1];
-
         return `<div style="margin-bottom:4px">
           <strong>${a.name}</strong> (${ownerLabel}, ${a.wrapper})
           – rate ${rate}, draw ${draw}, balance ${D.formatMoney(a.balance || 0)}
@@ -83,12 +81,21 @@
       .join('');
   }
 
+  // Returns true for wrappers where rate/draw fields should be disabled.
+  // ISA interest compounds inside the wrapper and is never separately drawn.
+  // SIPP interest likewise — it grows inside the pension and exits via the
+  // normal withdrawal order. Only GIA and Cash wrappers support interest draws.
+  function _isNoInterestWrapper(wrapper) {
+    return wrapper === 'ISA' || wrapper === 'SIPP';
+  }
+
   function renderAccountRow(acc, ownerNames) {
     const tbody = document.getElementById('acct-tbody');
     const tr = document.createElement('tr');
     tr.id = 'acct-row-' + acc.id;
 
-    const fixed = D.FIXED_CASH_WRAPPERS.has(acc.wrapper);
+    const fixed      = D.FIXED_CASH_WRAPPERS.has(acc.wrapper);
+    const noInterest = _isNoInterestWrapper(acc.wrapper);
 
     const wrapperOptions = D.WRAPPERS.map(
       (w) => `<option value="${w}" ${acc.wrapper === w ? 'selected' : ''}>${w}</option>`
@@ -116,6 +123,11 @@
     `
     ).join('');
 
+    // Rate and draw values are cleared and disabled for ISA/SIPP wrappers.
+    const rateValue = noInterest ? '' : (acc.rate ?? '');
+    const drawValue = noInterest ? '' : (acc.monthlyDraw != null ? D.formatCurrency(acc.monthlyDraw) : '');
+    const interestDisabledAttr = noInterest ? 'disabled style="opacity:0.35"' : '';
+
     tr.innerHTML = `
       <td class="col-name">
         <input type="text" value="${acc.name}" placeholder="Account name"
@@ -140,16 +152,16 @@
 
       <td class="col-rate">
         <input type="number" min="0" max="20" step="0.01"
-          value="${acc.rate ?? ''}" placeholder="–"
-          data-account-id="${acc.id}" data-field="rate">
+          value="${rateValue}" placeholder="–"
+          data-account-id="${acc.id}" data-field="rate"
+          ${interestDisabledAttr}>
       </td>
 
       <td class="col-draw">
         <input type="text" inputmode="numeric" data-currency-input="true"
           data-account-id="${acc.id}" data-field="monthlyDraw"
-          value="${
-            acc.monthlyDraw != null ? D.formatCurrency(acc.monthlyDraw) : ''
-          }" placeholder="–">
+          value="${drawValue}" placeholder="–"
+          ${interestDisabledAttr}>
       </td>
 
       <td class="col-total" id="badge-${acc.id}"></td>
@@ -211,13 +223,30 @@
     const row = document.getElementById('acct-row-' + acc.id);
     if (!row) return;
 
-    const fixed = D.FIXED_CASH_WRAPPERS.has(acc.wrapper);
+    const fixed      = D.FIXED_CASH_WRAPPERS.has(acc.wrapper);
+    const noInterest = _isNoInterestWrapper(acc.wrapper);
 
+    // Alloc % inputs — disabled for fixed Cash wrappers (unchanged behaviour)
     D.ALLOC_CLASSES.forEach((cls) => {
       const inp = row.querySelector(`[data-field="${cls}"]`);
       if (!inp) return;
       inp.disabled = fixed;
     });
+
+    // Rate and monthly draw — disabled and cleared for ISA and SIPP wrappers
+    const rateInp = row.querySelector('[data-field="rate"]');
+    const drawInp = row.querySelector('[data-field="monthlyDraw"]');
+
+    if (rateInp) {
+      rateInp.disabled     = noInterest;
+      rateInp.style.opacity = noInterest ? '0.35' : '';
+      if (noInterest) rateInp.value = '';
+    }
+    if (drawInp) {
+      drawInp.disabled     = noInterest;
+      drawInp.style.opacity = noInterest ? '0.35' : '';
+      if (noInterest) drawInp.value = '';
+    }
   }
 
   window.RetireRender = {

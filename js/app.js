@@ -208,50 +208,48 @@
     }
   }
 
-    function applyAssumptionsInputs(a) {
-      if (!a) return;
-    
-      const sv = (id, val) => {
-        const el = safeEl(id);
-        if (el && val != null) el.value = val;
-      };
-    
-      sv('spending',          a.spending);
-      sv('stepDownPct',       a.stepDownPct);
-      sv('growth',            a.growth);
-      sv('inflation',         a.inflation);
-      sv('thresholdFromYearVal', a.thresholdFromYear);
-      sv('dividendYield',     a.dividendYield);
-      sv('bniP1GIA',          a.bniP1GIA);
-      sv('bniP2GIA',          a.bniP2GIA);
-    
-      if (a.thresholdMode) {
-        const r = document.querySelector(`input[name="thresholdMode"][value="${a.thresholdMode}"]`);
-        if (r) r.checked = true;
-      }
-    
-      if (a.withdrawalMode) {
-        const r = document.querySelector(`input[name="withdrawalMode"][value="${a.withdrawalMode}"]`);
-        if (r) r.checked = true;
-      }
-    
-      ['p1Order1','p1Order2','p1Order3','p2Order1','p2Order2','p2Order3']
-        .forEach(id => sv(id, a[id]));
-    
-      const bni = safeEl('bniEnabled');
-      if (bni) {
-        bni.checked = !!a.bniEnabled;
-        ['bniP1GIA','bniP2GIA'].forEach(id => {
-          const el = safeEl(id);
-          if (el) {
-            el.disabled = !a.bniEnabled;
-            el.style.opacity = a.bniEnabled ? '' : '0.45';
-          }
-        });
-      }
+  function applyAssumptionsInputs(a) {
+    if (!a) return;
+  
+    const sv = (id, val) => {
+      const el = safeEl(id);
+      if (el && val != null) el.value = val;
+    };
+  
+    sv('spending',          a.spending);
+    sv('stepDownPct',       a.stepDownPct);
+    sv('growth',            a.growth);
+    sv('inflation',         a.inflation);
+    sv('thresholdFromYearVal', a.thresholdFromYear);
+    sv('dividendYield',     a.dividendYield);
+    sv('bniP1GIA',          a.bniP1GIA);
+    sv('bniP2GIA',          a.bniP2GIA);
+
+    if (a.thresholdMode) {
+      const r = document.querySelector(`input[name="thresholdMode"][value="${a.thresholdMode}"]`);
+      if (r) r.checked = true;
     }
 
-    
+    if (a.withdrawalMode) {
+      const r = document.querySelector(`input[name="withdrawalMode"][value="${a.withdrawalMode}"]`);
+      if (r) r.checked = true;
+    }
+
+    ['p1Order1','p1Order2','p1Order3','p2Order1','p2Order2','p2Order3']
+      .forEach(id => sv(id, a[id]));
+
+    const bni = safeEl('bniEnabled');
+    if (bni) {
+      bni.checked = !!a.bniEnabled;
+      ['bniP1GIA','bniP2GIA'].forEach(id => {
+        const el = safeEl(id);
+        if (el) {
+          el.disabled = !a.bniEnabled;
+          el.style.opacity = a.bniEnabled ? '' : '0.45';
+        }
+      });
+    }
+  }
 
   // ─────────────────────────────
   // OWNER NAMES
@@ -379,7 +377,6 @@
     const p1 = safeValue('sp-p1name').trim() || 'Person 1';
     const p2 = safeValue('sp-p2name').trim() || 'Person 2';
 
-    // [data-p1="suffix"] → "{p1} suffix"
     document.querySelectorAll('[data-p1]').forEach(el => {
       const suffix = el.getAttribute('data-p1');
       el.textContent = suffix ? `${p1} ${suffix}` : p1;
@@ -389,7 +386,6 @@
       el.textContent = suffix ? `${p2} ${suffix}` : p2;
     });
 
-    // Step-down label and hint
     document.querySelectorAll('[data-p1-stepdown]').forEach(el => {
       el.textContent = 'Reduced spending';
       el.setAttribute('title', `Reduces the gross spending target from the year ${p1} turns 75.`);
@@ -398,7 +394,6 @@
       el.textContent = `Reduces the gross spending target from the year ${p1} turns 75.`;
     });
 
-    // View toggle buttons
     document.querySelectorAll('[data-p1-btn]').forEach(el => { el.textContent = p1; });
     document.querySelectorAll('[data-p2-btn]').forEach(el => { el.textContent = p2; });
   }
@@ -406,8 +401,6 @@
   // ─────────────────────────────
   // P2 TOGGLE
   // ─────────────────────────────
-
-  // All field IDs that belong to Person 2 in the Assumptions tab.
   const P2_FIELD_IDS = [
     'p2DOB',
     'p2Salary', 'p2SalaryStopAge',
@@ -423,7 +416,6 @@
   function applyP2State() {
     const enabled = state.p2enabled;
 
-    // ── Assumptions tab: individual named inputs ──
     P2_FIELD_IDS.forEach(id => {
       const el = safeEl(id);
       if (!el) return;
@@ -431,12 +423,10 @@
       el.style.opacity = enabled ? '' : '0.45';
     });
 
-    // ── Assumptions tab: .p2-field containers (labels, subsection headers, order-rows) ──
     document.querySelectorAll('.p2-field').forEach(el => {
       el.classList.toggle('p2-disabled', !enabled);
     });
 
-    // ── Setup tab: Person 2 name/dob inputs ──
     const p2setup = safeEl('p2-setup-fields');
     if (p2setup) {
       p2setup.classList.toggle('p2-disabled', !enabled);
@@ -445,7 +435,6 @@
       });
     }
 
-    // ── Accounts table: rows owned by p2 ──
     document.querySelectorAll('#acct-tbody tr').forEach(row => {
       const ownerSel = row.querySelector('[data-field="owner"]');
       if (!ownerSel) return;
@@ -478,13 +467,11 @@
         )
         .reduce((s, a) => s + (a.value || 0), 0);
 
-    // ── Helper: set a plain-text span ──
     const setText = (id, val) => {
       const el = safeEl(id);
       if (el) el.textContent = (val === undefined || val === null || val === '') ? '–' : val;
     };
 
-    // ── Helper: set a hidden input (for gatherInputs()) ──
     const setHidden = (id, val) => {
       const el = safeEl(id);
       if (!el) return;
@@ -492,13 +479,11 @@
         ? '' : D.MONEY_FIELDS.has(id) ? String(Math.round(Number(val) || 0)) : val;
     };
 
-    // ── Card 1: People & Projection ──
     const p1dob  = safeValue('sp-p1dob');
     const p2dob  = safeValue('sp-p2dob');
     const sy     = safeValue('sp-startYear');
     const ey     = safeValue('sp-endYear');
 
-    // Find salary/SP for each person from setup inputs
     const p1sal      = D.parseCurrency(safeEl('p1Salary')?.value      || '');
     const p1salstop  = safeEl('p1SalaryStopAge')?.value || '–';
     const p1spage    = safeEl('p1SPAge')?.value          || '–';
@@ -525,7 +510,6 @@
     setText('ai-startyear', sy || '–');
     setText('ai-endyear',   ey || '–');
 
-    // Hidden inputs consumed by gatherInputs()
     setHidden('p1DOB',          p1dob);
     setHidden('p2DOB',          p2dob);
     setHidden('startYear',      sy);
@@ -539,7 +523,6 @@
     setHidden('p2SPAge',        p2spage !== '–' ? p2spage : '');
     setHidden('p2SP',           p2sp);
 
-    // ── Card 3: Portfolio Balances ──
     const p1cash = sumBy('p1', 'Cash');
     const p2cash = sumBy('p2', 'Cash');
     const p1sipp = sumBy('p1', 'SIPP');
@@ -558,7 +541,6 @@
     setText('ai-p2isa',  D.formatMoney(p2isa));
     setText('ai-p2gia',  D.formatMoney(p2gia));
 
-    // Hidden inputs for gatherInputs()
     setHidden('p1Cash', p1cash);
     setHidden('p2Cash', p2cash);
     setHidden('p1SIPP', p1sipp);
@@ -615,8 +597,6 @@
 
   // ─────────────────────────────
   // GATHER INPUTS (DOM → plain object)
-  // Single source of truth for all sidebar DOM reads.
-  // engine.js must contain zero document.* calls.
   // ─────────────────────────────
   function gv(id)  { return D.parseCurrency(safeEl(id)?.value || ''); }
   function gvi(id) { return parseInt(String(D.parseCurrency(safeEl(id)?.value || '')), 10) || 0; }
@@ -677,200 +657,230 @@
     };
   }
 
-    // ─────────────────────────────
-    // RUN PROJECTION
-    // ─────────────────────────────
-    function runProjection() {
-      const result = E.runProjection(gatherInputs(), state.portfolioAccounts);
-      if (!result) return;
-    
-      CR.setResults(result.rows);
-      CR.renderAlerts(result.depletions);
-      CR.renderMetrics();
-      CR.renderCharts();
-    
-      // Auto-advance to Results tab
-      RetireTabs.switchTab('results');
-      state.activeTab = 'results';
-    }
-    
-    // ─────────────────────────────
-    // CURRENCY FORMATTING
-    // ─────────────────────────────
-    document.addEventListener('focusin', (e) => {
-      if (!e.target.matches('.currency-input')) return;
-      if (String(e.target.value).trim() === '') return;
-      e.target.value = String(Math.round(D.parseCurrency(e.target.value)));
-    });
-    
-    document.addEventListener('focusout', (e) => {
-      if (!e.target.matches('.currency-input')) return;
-      R.applyCurrencyFormattingToInput(e.target);
-    });
-    
-    // ─────────────────────────────
-    // GLOBAL CLICK DISPATCHER
-    // ─────────────────────────────
-    document.addEventListener('click', (e) => {
-      const el = e.target.closest('[data-action]');
-      if (!el) return;
-    
-      const action = el.dataset.action;
-    
-      if (action === 'add-account')    return addAccount();
-      if (action === 'remove-account') return removeAccount(el);
-      if (action === 'save-setup')     return saveSetup();
-      if (action === 'load-setup')     return loadSetup();
-      if (action === 'save-assumptions')   return saveAssumptions();
-      if (action === 'delete-assumptions') return deleteAssumptions();
-      if (action === 'load-excel')     return window.RetireExcelLoader.openFilePicker();
-      if (action === 'run-projection') return runProjection();
-    
-      if (action === 'switch-tab') {
-        const tab = el.dataset.tab;
-        if (state.activeTab === 'setup') syncSetupToAssumptions();
-        state.activeTab = tab;
-        return RetireTabs.switchTab(tab);
-      }
-    
-      if (action === 'view-both')   return CR.setView('both', el);
-      if (action === 'view-p1')     return CR.setView('p1', el);
-      if (action === 'view-p2')     return CR.setView('p2', el);
-      if (action === 'real-on')     return CR.setReal(true, el);
-      if (action === 'real-off')    return CR.setReal(false, el);
-      if (action === 'tab-charts')  return CR.setTab('charts', el);
-      if (action === 'tab-tables')  return CR.setTab('tables', el);
-    });
-    
-    // ─────────────────────────────
-    // BNI + P2 TOGGLES
-    // ─────────────────────────────
-    document.addEventListener('change', (e) => {
-      if (e.target.id === 'bniEnabled') {
-        const enabled = e.target.checked;
-        ['bniP1GIA', 'bniP2GIA'].forEach(id => {
-          const el = safeEl(id);
-          if (el) {
-            el.disabled = !enabled;
-            el.style.opacity = enabled ? '' : '0.45';
-          }
-        });
-      }
-    
-      if (e.target.id === 'p2enabled') {
-        state.p2enabled = e.target.checked;
-        applyP2State();
-      }
-    });
-    
-    // ─────────────────────────────
-    // EXCEL LOAD
-    // ─────────────────────────────
-    document.addEventListener('excel-loaded', (e) => {
-      const { accounts, params } = e.detail;
-    
-      state.portfolioAccounts = [];
-      state.nextId = 1;
-    
-      const tbody = safeEl('acct-tbody');
-      if (tbody) tbody.innerHTML = '';
-    
-      const ownerNames = [
-        String(params.p1name || 'Person 1'),
-        String(params.p2name || 'Person 2'),
-      ];
-    
-      if (safeEl('sp-p1name')) safeEl('sp-p1name').value = ownerNames[0];
-      if (safeEl('sp-p2name')) safeEl('sp-p2name').value = ownerNames[1];
-    
-      accounts.forEach(a => {
-        const acc = { id: state.nextId++, ...a };
-        state.portfolioAccounts.push(acc);
-        R.renderAccountRow(acc, ownerNames);
-        R.updateRowBadge(acc);
-        R.applyWrapperFieldState(acc);
-      });
-    
+  // ─────────────────────────────
+  // RUN PROJECTION
+  // ─────────────────────────────
+  function runProjection() {
+    const result = E.runProjection(gatherInputs(), state.portfolioAccounts);
+    if (!result) return;
+  
+    CR.setResults(result.rows);
+    CR.renderAlerts(result.depletions);
+    CR.renderMetrics();
+    CR.renderCharts();
+  
+    RetireTabs.switchTab('results');
+    state.activeTab = 'results';
+  }
+  
+  // ─────────────────────────────
+  // CURRENCY FORMATTING
+  // ─────────────────────────────
+  document.addEventListener('focusin', (e) => {
+    if (!e.target.matches('.currency-input')) return;
+    if (String(e.target.value).trim() === '') return;
+    e.target.value = String(Math.round(D.parseCurrency(e.target.value)));
+  });
+  
+  document.addEventListener('focusout', (e) => {
+    if (!e.target.matches('.currency-input')) return;
+    R.applyCurrencyFormattingToInput(e.target);
+  });
+  
+  // ─────────────────────────────
+  // ACCOUNT FIELD CHANGE HANDLER
+  // Handles live updates to account rows including wrapper changes.
+  // When wrapper changes, applyWrapperFieldState is called to immediately
+  // disable/clear rate and draw fields for ISA and SIPP wrappers.
+  // ─────────────────────────────
+  document.addEventListener('change', (e) => {
+    // ── Account field changes ──
+    const accountId = e.target.dataset?.accountId;
+    if (accountId) {
+      const field = e.target.dataset.field;
+      syncAccountsFromDOM();
       refreshSetupSummary();
-    
-      const MONEY = D.MONEY_FIELDS;
-    
-      Object.entries(params).forEach(([k, v]) => {
-        if (k === 'p1name' || k === 'p2name') return;
-    
-        const el = safeEl(k);
-        if (!el) return;
-    
-        if (el.type === 'checkbox') {
-          el.checked = String(v).toLowerCase() === 'true';
-    
-          if (el.id === 'bniEnabled') {
-            ['bniP1GIA', 'bniP2GIA'].forEach(fid => {
-              const f = safeEl(fid);
-              if (f) {
-                f.disabled = !el.checked;
-                f.style.opacity = el.checked ? '' : '0.45';
-              }
-            });
-          }
-          return;
+
+      if (field === 'wrapper') {
+        const acc = state.portfolioAccounts.find(a => a.id === Number(accountId));
+        if (acc) {
+          R.applyWrapperFieldState(acc);
+          // Re-sync after applyWrapperFieldState may have cleared rate/draw fields
+          syncAccountsFromDOM();
         }
-    
-        if (el.type === 'radio') return;
-    
-        el.value = MONEY.has(k) ? formatCurrency(Number(v) || 0) : v;
-      });
-    
-      if (params.thresholdMode) {
-        const radio = document.querySelector(`input[name="thresholdMode"][value="${params.thresholdMode}"]`);
-        if (radio) radio.checked = true;
       }
-    
-      if (params.p1DOB && safeEl('sp-p1dob')) safeEl('sp-p1dob').value = params.p1DOB;
-      if (params.p2DOB && safeEl('sp-p2dob')) safeEl('sp-p2dob').value = params.p2DOB;
-    
-      showToast(`Loaded ${accounts.length} accounts from Excel ✓`);
-      updateSidebarNames();
-      applyP2State();
-    });
-    
-    // ─────────────────────────────
-    // STEPPER BUTTONS (INSIDE IIFE)
-    // ─────────────────────────────
-    document.addEventListener('click', function (e) {
-      const btn = e.target.closest('.stepper-btn');
-      if (!btn) return;
-    
-      const targetId = btn.dataset.stepFor;
-      const dir      = Number(btn.dataset.stepDirection);
-      const input    = document.getElementById(targetId);
-      if (!input) return;
-    
-      const step = Number(input.step) || 1;
-      const val  = Number(input.value) || 0;
-    
-      input.value = val + (dir * step);
-      input.dispatchEvent(new Event('input',  { bubbles: true }));
-      input.dispatchEvent(new Event('change', { bubbles: true }));
-    });
-    
-    // ─────────────────────────────
-    // INIT
-    // ─────────────────────────────
-    refreshSetupSummary();
-    R.initialiseCurrencyInputs();
-    RetireTabs.init();
-    
-    // ─────────────────────────────
-    // LOAD SAVED ASSUMPTIONS
-    // ─────────────────────────────
-    const savedAssumptions = localStorage.getItem(ASSUMPTIONS_KEY);
-    if (savedAssumptions) {
-      try {
-        applyAssumptionsInputs(JSON.parse(savedAssumptions));
-      } catch (e) {
-        console.error(e);
+
+      if (field === 'owner') {
+        R.refreshOwnerOptions(state.portfolioAccounts, getOwnerNames());
       }
+
+      return;
     }
-    
-    })();
+
+    // ── BnI toggle ──
+    if (e.target.id === 'bniEnabled') {
+      const enabled = e.target.checked;
+      ['bniP1GIA', 'bniP2GIA'].forEach(id => {
+        const el = safeEl(id);
+        if (el) {
+          el.disabled = !enabled;
+          el.style.opacity = enabled ? '' : '0.45';
+        }
+      });
+      return;
+    }
+  
+    // ── P2 toggle ──
+    if (e.target.id === 'p2enabled') {
+      state.p2enabled = e.target.checked;
+      applyP2State();
+      return;
+    }
+  });
+
+  // ─────────────────────────────
+  // GLOBAL CLICK DISPATCHER
+  // ─────────────────────────────
+  document.addEventListener('click', (e) => {
+    const el = e.target.closest('[data-action]');
+    if (!el) return;
+  
+    const action = el.dataset.action;
+  
+    if (action === 'add-account')    return addAccount();
+    if (action === 'remove-account') return removeAccount(el);
+    if (action === 'save-setup')     return saveSetup();
+    if (action === 'load-setup')     return loadSetup();
+    if (action === 'save-assumptions')   return saveAssumptions();
+    if (action === 'delete-assumptions') return deleteAssumptions();
+    if (action === 'delete-portfolio')   return deletePortfolio();
+    if (action === 'load-excel')     return window.RetireExcelLoader.openFilePicker();
+    if (action === 'run-projection') return runProjection();
+  
+    if (action === 'switch-tab') {
+      const tab = el.dataset.tab;
+      if (state.activeTab === 'setup') syncSetupToAssumptions();
+      state.activeTab = tab;
+      return RetireTabs.switchTab(tab);
+    }
+  
+    if (action === 'view-both')   return CR.setView('both', el);
+    if (action === 'view-p1')     return CR.setView('p1', el);
+    if (action === 'view-p2')     return CR.setView('p2', el);
+    if (action === 'real-on')     return CR.setReal(true, el);
+    if (action === 'real-off')    return CR.setReal(false, el);
+    if (action === 'tab-charts')  return CR.setTab('charts', el);
+    if (action === 'tab-tables')  return CR.setTab('tables', el);
+  });
+  
+  // ─────────────────────────────
+  // EXCEL LOAD
+  // ─────────────────────────────
+  document.addEventListener('excel-loaded', (e) => {
+    const { accounts, params } = e.detail;
+  
+    state.portfolioAccounts = [];
+    state.nextId = 1;
+  
+    const tbody = safeEl('acct-tbody');
+    if (tbody) tbody.innerHTML = '';
+  
+    const ownerNames = [
+      String(params.p1name || 'Person 1'),
+      String(params.p2name || 'Person 2'),
+    ];
+  
+    if (safeEl('sp-p1name')) safeEl('sp-p1name').value = ownerNames[0];
+    if (safeEl('sp-p2name')) safeEl('sp-p2name').value = ownerNames[1];
+  
+    accounts.forEach(a => {
+      const acc = { id: state.nextId++, ...a };
+      state.portfolioAccounts.push(acc);
+      R.renderAccountRow(acc, ownerNames);
+      R.updateRowBadge(acc);
+      R.applyWrapperFieldState(acc);
+    });
+  
+    refreshSetupSummary();
+  
+    const MONEY = D.MONEY_FIELDS;
+  
+    Object.entries(params).forEach(([k, v]) => {
+      if (k === 'p1name' || k === 'p2name') return;
+  
+      const el = safeEl(k);
+      if (!el) return;
+  
+      if (el.type === 'checkbox') {
+        el.checked = String(v).toLowerCase() === 'true';
+  
+        if (el.id === 'bniEnabled') {
+          ['bniP1GIA', 'bniP2GIA'].forEach(fid => {
+            const f = safeEl(fid);
+            if (f) {
+              f.disabled = !el.checked;
+              f.style.opacity = el.checked ? '' : '0.45';
+            }
+          });
+        }
+        return;
+      }
+  
+      if (el.type === 'radio') return;
+  
+      el.value = MONEY.has(k) ? formatCurrency(Number(v) || 0) : v;
+    });
+  
+    if (params.thresholdMode) {
+      const radio = document.querySelector(`input[name="thresholdMode"][value="${params.thresholdMode}"]`);
+      if (radio) radio.checked = true;
+    }
+  
+    if (params.p1DOB && safeEl('sp-p1dob')) safeEl('sp-p1dob').value = params.p1DOB;
+    if (params.p2DOB && safeEl('sp-p2dob')) safeEl('sp-p2dob').value = params.p2DOB;
+  
+    showToast(`Loaded ${accounts.length} accounts from Excel ✓`);
+    updateSidebarNames();
+    applyP2State();
+  });
+  
+  // ─────────────────────────────
+  // STEPPER BUTTONS
+  // ─────────────────────────────
+  document.addEventListener('click', function (e) {
+    const btn = e.target.closest('.stepper-btn');
+    if (!btn) return;
+  
+    const targetId = btn.dataset.stepFor;
+    const dir      = Number(btn.dataset.stepDirection);
+    const input    = document.getElementById(targetId);
+    if (!input) return;
+  
+    const step = Number(input.step) || 1;
+    const val  = Number(input.value) || 0;
+  
+    input.value = val + (dir * step);
+    input.dispatchEvent(new Event('input',  { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  
+  // ─────────────────────────────
+  // INIT
+  // ─────────────────────────────
+  refreshSetupSummary();
+  R.initialiseCurrencyInputs();
+  RetireTabs.init();
+  
+  // ─────────────────────────────
+  // LOAD SAVED ASSUMPTIONS
+  // ─────────────────────────────
+  const savedAssumptions = localStorage.getItem(ASSUMPTIONS_KEY);
+  if (savedAssumptions) {
+    try {
+      applyAssumptionsInputs(JSON.parse(savedAssumptions));
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  
+})();
