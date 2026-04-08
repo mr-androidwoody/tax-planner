@@ -301,6 +301,22 @@ canvas { display: block; width: 100%; height: auto; }
   border-color: #fca5a5;
 }
 
+.inline-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn-danger {
+  background: #dc2626;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.btn-danger:hover { background: #b91c1c; }
+
 /* ========================================
    Inputs / Selects
    ======================================== */
