@@ -1211,8 +1211,8 @@ input[type="radio"] { accent-color: var(--accent); }
   gap: 6px;
   white-space: nowrap;
 
-  /* force ~7 per row */
-  flex: 0 0 calc((100% - 96px) / 7);
+  /* natural width — THIS is the key fix */
+  flex: 0 0 auto;
 }
 
 .split-legend-swatch {
