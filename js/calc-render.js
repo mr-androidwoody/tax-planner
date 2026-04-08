@@ -189,8 +189,13 @@
           row.appendChild(item);
         });
     
-        group.appendChild(heading);
-        group.appendChild(row);
+        const wrapper = document.createElement('div');
+        wrapper.className = 'legend-line';
+        
+        wrapper.appendChild(heading);
+        wrapper.appendChild(row);
+        
+        group.appendChild(wrapper);
     
         return group;
       }
