@@ -814,10 +814,19 @@
   if (loadSetupBtn) {
     loadSetupBtn.addEventListener('click', () => {
       const raw = localStorage.getItem(STORAGE_KEY);
+
       if (!raw) {
-        showToast('No saved data found.', true);
+        // Flash button to error state in-place, reset after 2.5s
+        loadSetupBtn.textContent = 'No saved data found';
+        loadSetupBtn.classList.add('btn-load-error');
+        clearTimeout(loadSetupBtn._errTimer);
+        loadSetupBtn._errTimer = window.setTimeout(() => {
+          loadSetupBtn.textContent = 'Load saved';
+          loadSetupBtn.classList.remove('btn-load-error');
+        }, 2500);
         return;
       }
+
       triggerLoadFeedback(loadSetupBtn, 'Load saved', 800);
       try {
         applySetupInputs(JSON.parse(raw));
