@@ -325,34 +325,33 @@
     const taxTbl = document.getElementById('tax-table');
     if (taxTbl) {
       let cumTax = 0;
-      let grandWI = 0, grandWC = 0, grandHI = 0, grandHC = 0, grandBni = 0;
+      let grandWI = 0, grandWC = 0, grandHI = 0, grandHC = 0;
       let body = '<tbody>';
       _rows.forEach(r => {
         const wi = a(r.p1IncomeTax, r), wc = a(r.p1CGT, r);
         const hi = a(r.p2IncomeTax, r), hc = a(r.p2CGT, r);
-        const bc = a(r.bniCGTBill || 0, r);
-        const wt = wi + wc, ht = hi + hc, hh = wt + ht + bc;
+        const wt = wi + wc, ht = hi + hc, hh = wt + ht;
         cumTax += hh;
-        grandWI += wi; grandWC += wc; grandHI += hi; grandHC += hc; grandBni += bc;
+        grandWI += wi; grandWC += wc; grandHI += hi; grandHC += hc;
         body += `<tr>
           <td>${r.year}</td><td>${r.p1Age}</td><td>${r.p2Age}</td>
           <td>${f(wi)}</td><td>${f(wc)}</td><td>${f(wt)}</td>
           <td>${f(hi)}</td><td>${f(hc)}</td><td>${f(ht)}</td>
-          <td>${f(bc)}</td><td>${f(hh)}</td><td>${f(cumTax)}</td>
+          <td>${f(hh)}</td><td>${f(cumTax)}</td>
         </tr>`;
       });
-      const grand = grandWI + grandWC + grandHI + grandHC + grandBni;
+      const grand = grandWI + grandWC + grandHI + grandHC;
       body += `<tr class="total-row">
         <td colspan="3">Total</td>
         <td>${f(grandWI)}</td><td>${f(grandWC)}</td><td>${f(grandWI+grandWC)}</td>
         <td>${f(grandHI)}</td><td>${f(grandHC)}</td><td>${f(grandHI+grandHC)}</td>
-        <td>${f(grandBni)}</td><td>${f(grand)}</td><td>${f(grand)}</td>
+        <td>${f(grand)}</td><td>${f(grand)}</td>
       </tr></tbody>`;
       taxTbl.innerHTML = `<thead><tr>
         <th>Year</th><th>${p1} age</th><th>${p2} age</th>
         <th>${p1} income tax</th><th>${p1} CGT</th><th>${p1} total</th>
         <th>${p2} income tax</th><th>${p2} CGT</th><th>${p2} total</th>
-        <th>B&amp;ISA CGT</th><th>Household tax</th><th>Cumulative tax</th>
+        <th>Household tax</th><th>Cumulative tax</th>
       </tr></thead>` + body;
     }
 
