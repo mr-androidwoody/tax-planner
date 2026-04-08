@@ -1270,6 +1270,19 @@ input[type="radio"] { accent-color: var(--accent); }
   gap: 0;
 }
 
+.sidebar-legend__header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  padding: 0 0 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 2px;
+}
+
 .sidebar-legend__hint {
   font-size: 0.7rem;
   color: var(--muted);
