@@ -262,77 +262,65 @@
     }
 
     // ─────────────────────────────────────────────
-    // NET INCOME vs TARGET SPENDING CHART
+    // NET INCOME vs TARGET SPENDING CHART (FIXED)
     // ─────────────────────────────────────────────
     const spendingCtx = document.getElementById('spendingChart')?.getContext('2d');
     if (spendingCtx) {
-      const targetData = _rows.map(r => Math.round(adj(r.target || 0, r)));
-      const netData = _rows.map(r => {
-        if (_viewPerson === 'p1') return Math.round(adj((r.p1GrossIncome || 0) - (r.p1Tax || 0), r));
-        if (_viewPerson === 'p2') return Math.round(adj((r.p2GrossIncome || 0) - (r.p2Tax || 0), r));
-        return Math.round(adj(r.householdNetIncome || 0, r));
-      });
+    
+      function getNet(r) {
+        if (_viewPerson === 'p1') return (r.p1GrossIncome || 0) - (r.p1Tax || 0);
+        if (_viewPerson === 'p2') return (r.p2GrossIncome || 0) - (r.p2Tax || 0);
+        return (r.householdNetIncome || 0);
+      }
+    
+      const targetData = _rows.map(r =>
+        Math.round(adj(r.target || 0, r))
+      );
+    
+      const netData = _rows.map(r =>
+        Math.round(adj(getNet(r), r))
+      );
+    
       const shortfallData = _rows.map(r => {
+        const net = getNet(r);
         const target = r.target || 0;
-        const net = _viewPerson === 'p1'
-          ? ((r.p1GrossIncome || 0) - (r.p1Tax || 0))
-          : _viewPerson === 'p2'
-            ? ((r.p2GrossIncome || 0) - (r.p2Tax || 0))
-            : (r.householdNetIncome || 0);
-        return Math.round(adj(Math.max(0, target - net), r));
+        return Math.round(adj(net < target ? (target - net) : 0, r));
       });
+    
       const surplusData = _rows.map(r => {
+        const net = getNet(r);
         const target = r.target || 0;
-        const net = _viewPerson === 'p1'
-          ? ((r.p1GrossIncome || 0) - (r.p1Tax || 0))
-          : _viewPerson === 'p2'
-            ? ((r.p2GrossIncome || 0) - (r.p2Tax || 0))
-            : (r.householdNetIncome || 0);
-        return Math.round(adj(Math.max(0, net - target), r));
+        return Math.round(adj(net > target ? (net - target) : 0, r));
       });
-
+    
       if (_spendingChart) _spendingChart.destroy();
+    
       _spendingChart = new Chart(spendingCtx, {
+        type: 'bar',
         data: {
           labels,
           datasets: [
             {
-              type: 'line',
               label: 'Target spending',
               data: targetData,
-              borderColor: COLOURS.target,
               backgroundColor: COLOURS.target,
-              borderWidth: 2,
-              pointRadius: 2,
-              tension: 0.2,
-              yAxisID: 'y',
             },
             {
-              type: 'line',
               label: 'Net income',
               data: netData,
-              borderColor: COLOURS.net,
               backgroundColor: COLOURS.net,
-              borderWidth: 2,
-              pointRadius: 2,
-              tension: 0.2,
-              yAxisID: 'y',
             },
             {
-              type: 'bar',
               label: 'Shortfall',
               data: shortfallData,
               backgroundColor: COLOURS.shortfall,
-              stack: 'variance',
-              yAxisID: 'y',
+              hidden: true, // default OFF
             },
             {
-              type: 'bar',
               label: 'Surplus',
               data: surplusData,
               backgroundColor: COLOURS.surplus,
-              stack: 'variance',
-              yAxisID: 'y',
+              hidden: true, // default OFF
             },
           ],
         },
@@ -340,20 +328,29 @@
           responsive: true,
           maintainAspectRatio: false,
           plugins: {
-            legend: { display: true },
+            legend: {
+              display: true,
+              onClick: (e, legendItem, legend) => {
+                const index = legendItem.datasetIndex;
+                const chart = legend.chart;
+                chart.setDatasetVisibility(index, !chart.isDatasetVisible(index));
+                chart.update();
+              },
+            },
             tooltip: {
               callbacks: {
-                label: ctx => `${ctx.dataset.label}: ${D.formatMoney(ctx.parsed.y || 0)}`,
+                label: ctx =>
+                  `${ctx.dataset.label}: ${D.formatMoney(ctx.parsed.y || 0)}`,
               },
             },
           },
           scales: {
             x: {
-              stacked: true,
+              stacked: false, // critical: grouped bars
               ticks: { font: { size: 10 }, maxRotation: 45 },
             },
             y: {
-              stacked: true,
+              stacked: false,
               title: {
                 display: true,
                 text: _useReal ? 'Real £' : 'Nominal £',
