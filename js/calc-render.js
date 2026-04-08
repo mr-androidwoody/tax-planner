@@ -122,39 +122,26 @@
     if (mPort) mPort.textContent = fmt(adj(last.totalPortfolio, last));
   }
 
-  // ─────────────────────────────────────────────
-  // INCOME LEGEND
-  // ─────────────────────────────────────────────
-  function renderIncomeLegend(chart) {
-  const host = document.getElementById('incomeLegend');
-  if (!host) return;
-  host.innerHTML = '';
-
-  const datasets = chart.data.datasets || [];
-  const { p1, p2 } = getNames();
-
-  const p1sets = datasets.map((ds, i) => ({ ds, i }))
-    .filter(x => x.ds.label.includes(`– ${p1}`));
-
-  const p2sets = datasets.map((ds, i) => ({ ds, i }))
-    .filter(x => x.ds.label.includes(`– ${p2}`));
-
-  function cleanLabel(label, name) {
-    return label.replace(`– ${name}`, '').trim();
-  }
-
-    function makeGroup(title, items, personName) {
-      if (!items.length) return null;
+    // ─────────────────────────────────────────────
+    // INCOME LEGEND
+    // ─────────────────────────────────────────────
+    function renderIncomeLegend(chart) {
+      const host = document.getElementById('incomeLegend');
+      if (!host) return;
+      host.innerHTML = '';
     
-      const group = document.createElement('div');
-      group.className = 'legend-group';
+      const datasets = chart.data.datasets || [];
+      const { p1, p2 } = getNames();
     
-      const heading = document.createElement('div');
-      heading.className = 'legend-heading';
-      heading.textContent = title;
+      const p1sets = datasets.map((ds, i) => ({ ds, i }))
+        .filter(x => x.ds.label.includes(`– ${p1}`));
     
-      const row = document.createElement('div');
-      row.className = 'split-legend-row';
+      const p2sets = datasets.map((ds, i) => ({ ds, i }))
+        .filter(x => x.ds.label.includes(`– ${p2}`));
+    
+      function cleanLabel(label, name) {
+        return label.replace(`– ${name}`, '').trim();
+      }
     
       // helper to normalise label lengths
       function shortLabel(label) {
@@ -165,34 +152,55 @@
           .trim();
       }
     
-      items.forEach(({ ds, i }) => {
-        const item = document.createElement('div');
-        item.className = 'split-legend-item';
-        if (!chart.isDatasetVisible(i)) item.classList.add('is-hidden');
+      function makeGroup(title, items, personName) {
+        if (!items.length) return null;
     
-        const swatch = document.createElement('span');
-        swatch.className = 'split-legend-swatch';
-        swatch.style.background = ds.backgroundColor;
+        const group = document.createElement('div');
+        group.className = 'legend-group';
     
-        const label = document.createElement('span');
-        label.textContent = shortLabel(cleanLabel(ds.label, personName));
+        const heading = document.createElement('div');
+        heading.className = 'legend-heading';
+        heading.textContent = title;
     
-        item.appendChild(swatch);
-        item.appendChild(label);
+        const row = document.createElement('div');
+        row.className = 'split-legend-row';
     
-        item.addEventListener('click', () => {
-          chart.setDatasetVisibility(i, !chart.isDatasetVisible(i));
-          chart.update();
-          renderIncomeLegend(chart);
+        items.forEach(({ ds, i }) => {
+          const item = document.createElement('div');
+          item.className = 'split-legend-item';
+          if (!chart.isDatasetVisible(i)) item.classList.add('is-hidden');
+    
+          const swatch = document.createElement('span');
+          swatch.className = 'split-legend-swatch';
+          swatch.style.background = ds.backgroundColor;
+    
+          const label = document.createElement('span');
+          label.textContent = shortLabel(cleanLabel(ds.label, personName));
+    
+          item.appendChild(swatch);
+          item.appendChild(label);
+    
+          item.addEventListener('click', () => {
+            chart.setDatasetVisibility(i, !chart.isDatasetVisible(i));
+            chart.update();
+            renderIncomeLegend(chart);
+          });
+    
+          row.appendChild(item);
         });
     
-        row.appendChild(item);
-      });
+        group.appendChild(heading);
+        group.appendChild(row);
     
-      group.appendChild(heading);
-      group.appendChild(row);
+        return group;
+      }
     
-      return group;
+      // ✅ THIS WAS MISSING — REQUIRED
+      const g1 = makeGroup(p1, p1sets, p1);
+      const g2 = makeGroup(p2, p2sets, p2);
+    
+      if (g1) host.appendChild(g1);
+      if (g2) host.appendChild(g2);
     }
 
   // ─────────────────────────────────────────────
