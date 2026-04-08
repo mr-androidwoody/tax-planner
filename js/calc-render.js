@@ -6,9 +6,10 @@
   let _viewPerson = 'both';
   let _useReal    = true;
   let _activeTab  = 'charts';
-  let _incomeChart  = null;
-  let _taxChart     = null;
-  let _wealthChart  = null;
+  let _incomeChart     = null;
+  let _taxChart        = null;
+  let _wealthChart     = null;
+  let _spendingChart   = null;
 
   // ─────────────────────────────────────────────
   // HELPERS
@@ -163,42 +164,61 @@
   // ─────────────────────────────────────────────
   // CHARTS
   // ─────────────────────────────────────────────
-  function renderCharts() {
+    function renderCharts() {
     if (!_rows.length) return;
     const labels = _rows.map(r => r.year);
     const { p1, p2 } = getNames();
 
     const COLOURS = {
-      p1SP: '#4472C4', p2SP: '#70AD47',
-      p1SIPP: '#ED7D31', p2SIPP: '#FFC000',
-      p1ISA: '#5B9BD5', p2ISA: '#2E86C1',
-      p1GIA: '#A9D18E', p2GIA: '#78C86A',
-      intDraw: '#9B59B6', p1Cash: '#B0B0B0',
+      p1SP: '#4472C4',
+      p2SP: '#70AD47',
+      p1SIPP: '#ED7D31',
+      p2SIPP: '#FFC000',
+      p1ISA: '#5B9BD5',
+      p2ISA: '#2E86C1',
+      p1GIA: '#A9D18E',
+      p2GIA: '#78C86A',
+      intDraw: '#9B59B6',
+      p1Cash: '#B0B0B0',
       salary: '#FF7F7F',
+      target: '#1F2937',
+      net: '#2563EB',
+      shortfall: '#DC2626',
+      surplus: '#16A34A',
     };
 
     function ds(label, fn, color) {
-      return { label, data: _rows.map(r => Math.round(adj(fn(r), r) / 1000)), backgroundColor: color, stack: 'income' };
+      return {
+        label,
+        data: _rows.map(r => Math.round(adj(fn(r), r) / 1000)),
+        backgroundColor: color,
+        stack: 'income',
+      };
     }
 
+    // ─────────────────────────────────────────────
+    // INCOME CHART
+    // ─────────────────────────────────────────────
     let sets = [];
+
     if (_viewPerson === 'both' || _viewPerson === 'p1') {
-      sets.push(ds(`State Pension – ${p1}`,    r => r.p1SP,          COLOURS.p1SP));
-      sets.push(ds(`Salary – ${p1}`,           r => r.p1SalInc || 0, COLOURS.salary));
-      sets.push(ds(`SIPP – ${p1}`,             r => r.p1Drawn.SIPP,  COLOURS.p1SIPP));
-      sets.push(ds(`ISA – ${p1}`,              r => r.p1Drawn.ISA,   COLOURS.p1ISA));
-      sets.push(ds(`GIA – ${p1}`,              r => r.p1Drawn.GIA,   COLOURS.p1GIA));
-      sets.push(ds(`Interest draw – ${p1}`,    r => r.p1IntDraw,     COLOURS.intDraw));
-      sets.push(ds(`Cash draw – ${p1}`,        r => r.p1Drawn.Cash,  COLOURS.p1Cash));
+      sets.push(ds(`State Pension – ${p1}`, r => r.p1SP, COLOURS.p1SP));
+      sets.push(ds(`Salary – ${p1}`, r => r.p1SalInc || 0, COLOURS.salary));
+      sets.push(ds(`SIPP – ${p1}`, r => r.p1Drawn.SIPP, COLOURS.p1SIPP));
+      sets.push(ds(`ISA – ${p1}`, r => r.p1Drawn.ISA, COLOURS.p1ISA));
+      sets.push(ds(`GIA – ${p1}`, r => r.p1Drawn.GIA, COLOURS.p1GIA));
+      sets.push(ds(`Interest draw – ${p1}`, r => r.p1IntDraw, COLOURS.intDraw));
+      sets.push(ds(`Cash draw – ${p1}`, r => r.p1Drawn.Cash, COLOURS.p1Cash));
     }
+
     if (_viewPerson === 'both' || _viewPerson === 'p2') {
-      sets.push(ds(`State Pension – ${p2}`,    r => r.p2SP,          COLOURS.p2SP));
-      sets.push(ds(`Salary – ${p2}`,           r => r.p2SalInc,      COLOURS.salary));
-      sets.push(ds(`SIPP – ${p2}`,             r => r.p2Drawn.SIPP,  COLOURS.p2SIPP));
-      sets.push(ds(`ISA – ${p2}`,              r => r.p2Drawn.ISA,   COLOURS.p2ISA));
-      sets.push(ds(`GIA – ${p2}`,              r => r.p2Drawn.GIA,   COLOURS.p2GIA));
-      sets.push(ds(`Interest draw – ${p2}`,    r => r.p2IntDraw,     COLOURS.intDraw));
-      sets.push(ds(`Cash draw – ${p2}`,        r => r.p2Drawn.Cash,  COLOURS.p1Cash));
+      sets.push(ds(`State Pension – ${p2}`, r => r.p2SP, COLOURS.p2SP));
+      sets.push(ds(`Salary – ${p2}`, r => r.p2SalInc || 0, COLOURS.salary));
+      sets.push(ds(`SIPP – ${p2}`, r => r.p2Drawn.SIPP, COLOURS.p2SIPP));
+      sets.push(ds(`ISA – ${p2}`, r => r.p2Drawn.ISA, COLOURS.p2ISA));
+      sets.push(ds(`GIA – ${p2}`, r => r.p2Drawn.GIA, COLOURS.p2GIA));
+      sets.push(ds(`Interest draw – ${p2}`, r => r.p2IntDraw, COLOURS.intDraw));
+      sets.push(ds(`Cash draw – ${p2}`, r => r.p2Drawn.Cash, COLOURS.p1Cash));
     }
 
     const incCtx = document.getElementById('incomeChart')?.getContext('2d');
@@ -208,35 +228,172 @@
         type: 'bar',
         data: { labels, datasets: sets },
         options: {
-          responsive: true, maintainAspectRatio: false,
+          responsive: true,
+          maintainAspectRatio: false,
           plugins: {
             legend: { display: false },
-            tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${D.formatMoney((ctx.parsed.y || 0) * 1000)}` } },
+            tooltip: {
+              callbacks: {
+                label: ctx => `${ctx.dataset.label}: ${D.formatMoney((ctx.parsed.y || 0) * 1000)}`,
+              },
+            },
           },
           scales: {
-            x: { stacked: true, ticks: { font: { size: 10 }, maxRotation: 45 } },
-            y: { stacked: true,
-              title: { display: true, text: _useReal ? 'Real £k' : 'Nominal £k', font: { size: 11 } },
-              ticks: { font: { size: 11 }, callback: v => v + 'k' } },
+            x: {
+              stacked: true,
+              ticks: { font: { size: 10 }, maxRotation: 45 },
+            },
+            y: {
+              stacked: true,
+              title: {
+                display: true,
+                text: _useReal ? 'Real £k' : 'Nominal £k',
+                font: { size: 11 },
+              },
+              ticks: {
+                font: { size: 11 },
+                callback: v => v + 'k',
+              },
+            },
           },
         },
       });
       renderIncomeLegend(_incomeChart);
     }
 
-    const taxData  = _rows.map(r => {
-      const t = _viewPerson === 'p1' ? r.p1IncomeTax + r.p1CGT
-              : _viewPerson === 'p2' ? r.p2IncomeTax + r.p2CGT
-              : r.p1IncomeTax + r.p1CGT + r.p2IncomeTax + r.p2CGT;
+    // ─────────────────────────────────────────────
+    // NET INCOME vs TARGET SPENDING CHART
+    // ─────────────────────────────────────────────
+    const spendingCtx = document.getElementById('spendingChart')?.getContext('2d');
+    if (spendingCtx) {
+      const targetData = _rows.map(r => Math.round(adj(r.target || 0, r)));
+      const netData = _rows.map(r => {
+        if (_viewPerson === 'p1') return Math.round(adj((r.p1GrossIncome || 0) - (r.p1Tax || 0), r));
+        if (_viewPerson === 'p2') return Math.round(adj((r.p2GrossIncome || 0) - (r.p2Tax || 0), r));
+        return Math.round(adj(r.householdNetIncome || 0, r));
+      });
+      const shortfallData = _rows.map(r => {
+        const target = r.target || 0;
+        const net = _viewPerson === 'p1'
+          ? ((r.p1GrossIncome || 0) - (r.p1Tax || 0))
+          : _viewPerson === 'p2'
+            ? ((r.p2GrossIncome || 0) - (r.p2Tax || 0))
+            : (r.householdNetIncome || 0);
+        return Math.round(adj(Math.max(0, target - net), r));
+      });
+      const surplusData = _rows.map(r => {
+        const target = r.target || 0;
+        const net = _viewPerson === 'p1'
+          ? ((r.p1GrossIncome || 0) - (r.p1Tax || 0))
+          : _viewPerson === 'p2'
+            ? ((r.p2GrossIncome || 0) - (r.p2Tax || 0))
+            : (r.householdNetIncome || 0);
+        return Math.round(adj(Math.max(0, net - target), r));
+      });
+
+      if (_spendingChart) _spendingChart.destroy();
+      _spendingChart = new Chart(spendingCtx, {
+        data: {
+          labels,
+          datasets: [
+            {
+              type: 'line',
+              label: 'Target spending',
+              data: targetData,
+              borderColor: COLOURS.target,
+              backgroundColor: COLOURS.target,
+              borderWidth: 2,
+              pointRadius: 2,
+              tension: 0.2,
+              yAxisID: 'y',
+            },
+            {
+              type: 'line',
+              label: 'Net income',
+              data: netData,
+              borderColor: COLOURS.net,
+              backgroundColor: COLOURS.net,
+              borderWidth: 2,
+              pointRadius: 2,
+              tension: 0.2,
+              yAxisID: 'y',
+            },
+            {
+              type: 'bar',
+              label: 'Shortfall',
+              data: shortfallData,
+              backgroundColor: COLOURS.shortfall,
+              stack: 'variance',
+              yAxisID: 'y',
+            },
+            {
+              type: 'bar',
+              label: 'Surplus',
+              data: surplusData,
+              backgroundColor: COLOURS.surplus,
+              stack: 'variance',
+              yAxisID: 'y',
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: true },
+            tooltip: {
+              callbacks: {
+                label: ctx => `${ctx.dataset.label}: ${D.formatMoney(ctx.parsed.y || 0)}`,
+              },
+            },
+          },
+          scales: {
+            x: {
+              stacked: true,
+              ticks: { font: { size: 10 }, maxRotation: 45 },
+            },
+            y: {
+              stacked: true,
+              title: {
+                display: true,
+                text: _useReal ? 'Real £' : 'Nominal £',
+                font: { size: 11 },
+              },
+              ticks: {
+                font: { size: 11 },
+                callback: v => '£' + Math.round(v).toLocaleString('en-GB'),
+              },
+            },
+          },
+        },
+      });
+    }
+
+    // ─────────────────────────────────────────────
+    // TAX CHART
+    // ─────────────────────────────────────────────
+    const taxData = _rows.map(r => {
+      const t = _viewPerson === 'p1'
+        ? r.p1IncomeTax + r.p1CGT
+        : _viewPerson === 'p2'
+          ? r.p2IncomeTax + r.p2CGT
+          : r.p1IncomeTax + r.p1CGT + r.p2IncomeTax + r.p2CGT;
       return Math.round(adj(t, r));
     });
+
     const rateData = _rows.map(r => {
-      const tax = _viewPerson === 'p1' ? r.p1IncomeTax + r.p1CGT
-                : _viewPerson === 'p2' ? r.p2IncomeTax + r.p2CGT
-                : r.p1IncomeTax + r.p1CGT + r.p2IncomeTax + r.p2CGT;
-      const p1Gross = r.p1SP + (r.p1SalInc || 0) + r.p1Drawn.SIPP + r.p1Drawn.ISA + r.p1Drawn.GIA + r.p1IntDraw + r.p1Drawn.Cash;
-      const p2Gross = r.p2SP + r.p2SalInc + r.p2Drawn.SIPP + r.p2Drawn.ISA + r.p2Drawn.GIA + r.p2IntDraw + r.p2Drawn.Cash;
-      const gross = _viewPerson === 'p1' ? p1Gross : _viewPerson === 'p2' ? p2Gross : p1Gross + p2Gross;
+      const tax = _viewPerson === 'p1'
+        ? r.p1IncomeTax + r.p1CGT
+        : _viewPerson === 'p2'
+          ? r.p2IncomeTax + r.p2CGT
+          : r.p1IncomeTax + r.p1CGT + r.p2IncomeTax + r.p2CGT;
+
+      const gross = _viewPerson === 'p1'
+        ? (r.p1GrossIncome || 0)
+        : _viewPerson === 'p2'
+          ? (r.p2GrossIncome || 0)
+          : (r.householdGrossIncome || 0);
+
       return gross > 0 ? parseFloat((tax / gross * 100).toFixed(1)) : 0;
     });
 
@@ -244,30 +401,175 @@
     if (taxCtx) {
       if (_taxChart) _taxChart.destroy();
       _taxChart = new Chart(taxCtx, {
-        type: 'bar',
-        data: { labels, datasets: [
-          { label: 'Tax paid (£)', data: taxData, backgroundColor: '#4472C4', yAxisID: 'y', order: 2 },
-          { label: 'Effective rate (%)', data: rateData, type: 'line', borderColor: '#E84D4D', backgroundColor: 'transparent', pointRadius: 0, borderWidth: 2, yAxisID: 'y2', order: 1 },
-        ]},
+        data: {
+          labels,
+          datasets: [
+            {
+              type: 'bar',
+              label: 'Tax paid',
+              data: taxData,
+              backgroundColor: '#C55A11',
+              yAxisID: 'y',
+            },
+            {
+              type: 'line',
+              label: 'Effective tax rate',
+              data: rateData,
+              borderColor: '#7F6000',
+              backgroundColor: '#7F6000',
+              borderWidth: 2,
+              pointRadius: 2,
+              tension: 0.2,
+              yAxisID: 'y1',
+            },
+          ],
+        },
         options: {
-          responsive: true, maintainAspectRatio: false,
+          responsive: true,
+          maintainAspectRatio: false,
           plugins: {
-            legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
-            tooltip: { callbacks: { label: ctx => ctx.dataset.yAxisID === 'y2' ? `${ctx.dataset.label}: ${ctx.parsed.y}%` : `${ctx.dataset.label}: ${D.formatMoney(ctx.parsed.y || 0)}` } },
+            legend: { display: true },
+            tooltip: {
+              callbacks: {
+                label: ctx => {
+                  if (ctx.dataset.yAxisID === 'y1') return `${ctx.dataset.label}: ${ctx.parsed.y}%`;
+                  return `${ctx.dataset.label}: ${D.formatMoney(ctx.parsed.y || 0)}`;
+                },
+              },
+            },
           },
           scales: {
-            x: { ticks: { font: { size: 10 }, maxRotation: 45 } },
-            y: { position: 'left', title: { display: true, text: _useReal ? 'Real £' : 'Nominal £', font: { size: 11 } },
-              ticks: { font: { size: 11 }, callback: v => D.formatMoney(v) } },
-            y2: { position: 'right', grid: { drawOnChartArea: false },
-              title: { display: true, text: 'Effective rate %', font: { size: 11 } },
-              ticks: { font: { size: 11 }, callback: v => v + '%' }, min: 0 },
+            x: {
+              ticks: { font: { size: 10 }, maxRotation: 45 },
+            },
+            y: {
+              position: 'left',
+              title: {
+                display: true,
+                text: _useReal ? 'Real £' : 'Nominal £',
+                font: { size: 11 },
+              },
+              ticks: {
+                font: { size: 11 },
+                callback: v => '£' + Math.round(v).toLocaleString('en-GB'),
+              },
+            },
+            y1: {
+              position: 'right',
+              grid: { drawOnChartArea: false },
+              title: {
+                display: true,
+                text: 'Rate %',
+                font: { size: 11 },
+              },
+              ticks: {
+                callback: v => v + '%',
+              },
+            },
           },
         },
       });
     }
 
-    _renderWealthChart(labels, p1, p2);
+    // ─────────────────────────────────────────────
+    // WEALTH CHART
+    // ─────────────────────────────────────────────
+    const wealthCtx = document.getElementById('wealthChart')?.getContext('2d');
+    if (wealthCtx) {
+      const wealthData = [
+        {
+          label: `${p1} Cash`,
+          data: _rows.map(r => Math.round(adj((r.snap.p1Cash || 0) + (r.snap.p1IntBal || 0), r))),
+          backgroundColor: '#B0B0B0',
+          stack: 'wealth',
+        },
+        {
+          label: `${p1} GIA`,
+          data: _rows.map(r => Math.round(adj(r.snap.p1GIA || 0, r))),
+          backgroundColor: '#A9D18E',
+          stack: 'wealth',
+        },
+        {
+          label: `${p1} SIPP`,
+          data: _rows.map(r => Math.round(adj(r.snap.p1SIPP || 0, r))),
+          backgroundColor: '#ED7D31',
+          stack: 'wealth',
+        },
+        {
+          label: `${p1} ISA`,
+          data: _rows.map(r => Math.round(adj(r.snap.p1ISA || 0, r))),
+          backgroundColor: '#5B9BD5',
+          stack: 'wealth',
+        },
+        {
+          label: `${p2} Cash`,
+          data: _rows.map(r => Math.round(adj((r.snap.p2Cash || 0) + (r.snap.p2IntBal || 0), r))),
+          backgroundColor: '#D0D0D0',
+          stack: 'wealth',
+        },
+        {
+          label: `${p2} GIA`,
+          data: _rows.map(r => Math.round(adj(r.snap.p2GIA || 0, r))),
+          backgroundColor: '#78C86A',
+          stack: 'wealth',
+        },
+        {
+          label: `${p2} SIPP`,
+          data: _rows.map(r => Math.round(adj(r.snap.p2SIPP || 0, r))),
+          backgroundColor: '#FFC000',
+          stack: 'wealth',
+        },
+        {
+          label: `${p2} ISA`,
+          data: _rows.map(r => Math.round(adj(r.snap.p2ISA || 0, r))),
+          backgroundColor: '#2E86C1',
+          stack: 'wealth',
+        },
+      ];
+
+      if (_wealthChart) _wealthChart.destroy();
+      _wealthChart = new Chart(wealthCtx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: _viewPerson === 'p1'
+            ? wealthData.slice(0, 4)
+            : _viewPerson === 'p2'
+              ? wealthData.slice(4)
+              : wealthData,
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: true },
+            tooltip: {
+              callbacks: {
+                label: ctx => `${ctx.dataset.label}: ${D.formatMoney(ctx.parsed.y || 0)}`,
+              },
+            },
+          },
+          scales: {
+            x: {
+              stacked: true,
+              ticks: { font: { size: 10 }, maxRotation: 45 },
+            },
+            y: {
+              stacked: true,
+              title: {
+                display: true,
+                text: _useReal ? 'Real £' : 'Nominal £',
+                font: { size: 11 },
+              },
+              ticks: {
+                font: { size: 11 },
+                callback: v => '£' + Math.round(v).toLocaleString('en-GB'),
+              },
+            },
+          },
+        },
+      });
+    }
   }
 
   function _renderWealthChart(labels, p1, p2) {
