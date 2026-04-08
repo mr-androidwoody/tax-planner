@@ -288,7 +288,8 @@
 
     // Step-down label and hint
     document.querySelectorAll('[data-p1-stepdown]').forEach(el => {
-      el.textContent = `Reduce spending from ${p1}'s age 75 by`;
+      el.textContent = 'Reduced spending';
+      el.setAttribute('title', `Reduces the gross spending target from the year ${p1} turns 75.`);
     });
     document.querySelectorAll('[data-p1-stepdown-hint]').forEach(el => {
       el.textContent = `Reduces the gross spending target from the year ${p1} turns 75.`;
