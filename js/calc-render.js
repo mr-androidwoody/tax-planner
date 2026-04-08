@@ -196,7 +196,7 @@
       p1GIA: '#A9D18E',
       p2GIA: '#78C86A',
       intDraw: '#9B59B6',
-      p1Divs: '#27AE60',
+      p1Divs: '#C0392B',
       p2Divs: '#E74C3C',
       p1Cash: '#B0B0B0',
       salary: '#FF7F7F',
@@ -206,18 +206,10 @@
       surplus: '#16A34A',
     };
 
-    // ds builds a dataset for the income chart.
-    // p1fn / p2fn extract the p1 and p2 portions separately so the
-    // _viewPerson toggle can show only the relevant person's contribution
-    // while always measuring shortfall against the full household target.
-    function ds(label, p1fn, p2fn, color) {
-      const both = r => (p1fn(r) || 0) + (p2fn(r) || 0);
-      const fn   = _viewPerson === 'p1' ? p1fn
-                 : _viewPerson === 'p2' ? p2fn
-                 : both;
+    function ds(label, fn, color) {
       return {
         label,
-        data: _rows.map(r => adj(fn(r) || 0, r) / 1000),
+        data: _rows.map(r => adj(fn(r), r) / 1000),
         backgroundColor: color,
         stack: 'income',
       };
@@ -225,39 +217,27 @@
 
     // ─────────────────────────────────────────────
     // INCOME CHART
-    // One dataset per source type; filtered by _viewPerson.
-    // Shortfall always measured against full household target (65k).
-    // Red shortfall fills the gap when visible income can't meet the target.
+    // One dataset per source type; p1+p2 combined gross draws.
+    // Bars sum to exactly the gross spending target in funded years (no rounding per-source).
+    // Red shortfall fills the gap when income genuinely can't meet the target.
     // ─────────────────────────────────────────────
 
-    // Full household target — always the 65k line regardless of person toggle
-    const _targetData      = _rows.map(r => adj(r.target || 0, r) / 1000);
-    // Engine shortfall — gap between visible person's gross income and full household target
-    const _engineShortfall = _rows.map(r => {
-      const p1Gross = (r.p1SP || 0) + (r.p1SalInc || 0) + (r.p1Drawn.SIPP || 0) +
-                      (r.p1Drawn.ISA || 0) + (r.p1Drawn.GIA || 0) +
-                      (r.p1IntDraw || 0) + (r.p1Divs || 0) + (r.p1Drawn.Cash || 0);
-      const p2Gross = (r.p2SP || 0) + (r.p2SalInc || 0) + (r.p2Drawn.SIPP || 0) +
-                      (r.p2Drawn.ISA || 0) + (r.p2Drawn.GIA || 0) +
-                      (r.p2IntDraw || 0) + (r.p2Divs || 0) + (r.p2Drawn.Cash || 0);
-      const visibleGross = _viewPerson === 'p1' ? p1Gross
-                         : _viewPerson === 'p2' ? p2Gross
-                         : p1Gross + p2Gross;
-      return adj(Math.max(0, (r.target || 0) - visibleGross), r) / 1000;
-    });
+    const _targetData     = _rows.map(r => adj(r.target || 0, r) / 1000);
+    const _engineShortfall = _rows.map(r => adj(Math.max(0, (r.target || 0) - (r.householdGrossIncome || 0)), r) / 1000);
 
     let sets = [];
-    sets.push(ds('State Pension', r => r.p1SP         || 0, r => r.p2SP         || 0, COLOURS.p1SP));
-    sets.push(ds('Salary',        r => r.p1SalInc     || 0, r => r.p2SalInc     || 0, COLOURS.salary));
-    sets.push(ds('SIPP',          r => r.p1Drawn.SIPP || 0, r => r.p2Drawn.SIPP || 0, COLOURS.p1SIPP));
-    sets.push(ds('ISA',           r => r.p1Drawn.ISA  || 0, r => r.p2Drawn.ISA  || 0, COLOURS.p1ISA));
-    sets.push(ds('GIA',           r => r.p1Drawn.GIA  || 0, r => r.p2Drawn.GIA  || 0, COLOURS.p1GIA));
-    sets.push(ds('Interest',      r => r.p1IntDraw    || 0, r => r.p2IntDraw    || 0, COLOURS.intDraw));
-    sets.push(ds('Dividends',     r => r.p1Divs       || 0, r => r.p2Divs       || 0, COLOURS.p1Divs));
-    sets.push(ds('Cash',          r => r.p1Drawn.Cash || 0, r => r.p2Drawn.Cash || 0, COLOURS.p1Cash));
+    // Row 1: Salary, Cash, Interest, Dividends
+    // Row 2: GIA, ISA, SIPP / WP, State Pension  (+Shortfall appended after)
+    sets.push(ds('Salary',        r => (r.p1SalInc     || 0) + (r.p2SalInc     || 0), COLOURS.salary));
+    sets.push(ds('Cash',          r => (r.p1Drawn.Cash || 0) + (r.p2Drawn.Cash || 0), COLOURS.p1Cash));
+    sets.push(ds('Interest',      r => (r.p1IntDraw    || 0) + (r.p2IntDraw    || 0), COLOURS.intDraw));
+    sets.push(ds('Dividends',     r => (r.p1Divs       || 0) + (r.p2Divs       || 0), COLOURS.p1Divs));
+    sets.push(ds('GIA',           r => (r.p1Drawn.GIA  || 0) + (r.p2Drawn.GIA  || 0), COLOURS.p1GIA));
+    sets.push(ds('ISA',           r => (r.p1Drawn.ISA  || 0) + (r.p2Drawn.ISA  || 0), COLOURS.p1ISA));
+    sets.push(ds('SIPP / WP',     r => (r.p1Drawn.SIPP || 0) + (r.p2Drawn.SIPP || 0), COLOURS.p1SIPP));
+    sets.push(ds('State Pension', r => (r.p1SP         || 0) + (r.p2SP         || 0), COLOURS.p1SP));
 
-    // Red shortfall — gap between visible income and full household target
-    // Seeded from engine shortfall (zero in funded years); grows as sources are toggled off
+    // Red shortfall — fills gap between visible sources and target
     sets.push({
       label: 'Spending shortfall',
       data: _engineShortfall.slice(),
@@ -265,8 +245,22 @@
       stack: 'income',
     });
 
+    // Flat target line
+    sets.push({
+      label: 'Spending target',
+      data: _targetData.slice(),
+      type: 'line',
+      stack: undefined,
+      backgroundColor: 'transparent',
+      borderColor: COLOURS.target,
+      borderWidth: 2,
+      borderDash: [6, 3],
+      pointRadius: 0,
+      tension: 0,
+      order: 0,
+    });
+
     // Recompute shortfall when sources are toggled on/off
-    // Always measures against the full household target
     function recomputeShortfall(chart) {
       const sfIdx = chart.data.datasets.findIndex(d => d.label === 'Spending shortfall');
       if (sfIdx < 0) return;
