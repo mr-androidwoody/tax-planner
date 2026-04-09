@@ -137,7 +137,7 @@
       return s + (gross > 0 ? tax / gross : 0);
     }, 0) / _rows.length;
 
-    const spending    = parseFloat(document.getElementById('spending')?.value)    || 0;
+    const spending    = D.parseCurrency(document.getElementById('spending')?.value || '0');
     const stepDownPct = parseFloat(document.getElementById('stepDownPct')?.value) || 0;
     const fmtK = n => '£' + Math.round(n).toLocaleString('en-GB');
     let incomeTargetStr;
