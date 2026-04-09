@@ -1345,6 +1345,11 @@ input[type="radio"] { accent-color: var(--accent); }
   padding: 6px 10px;
 }
 
+.sidebar-legend--scrollable {
+  overflow-y: auto;
+  max-height: 340px;
+}
+
 .sidebar-legend__header {
   display: flex;
   justify-content: space-between;
