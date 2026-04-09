@@ -1182,6 +1182,7 @@ input[type="radio"] { accent-color: var(--accent); }
   padding-bottom: 4px;
   position: relative;
   z-index: 1;
+  border-bottom: 1px solid var(--border);
 }
 
 .results-tab {
@@ -1294,6 +1295,7 @@ input[type="radio"] { accent-color: var(--accent); }
   flex-direction: column;
   gap: 2px;
   background: var(--panel-soft);
+  border: 1px solid var(--border-strong);
   border-radius: 10px;
   padding: 2px;
   flex: 1;
