@@ -344,8 +344,6 @@
           <h1>Assumptions</h1>
           <p>Set your target annual household budget and the specific years you want this spending level to cover.</p>
         </div>
-
-        <!-- Save assumptions + delete with inline confirm -->
         <div class="assump-intro-actions">
           <button class="btn btn-success" id="saveAssumptionsBtn" data-action="save-assumptions" type="button">
             Save assumptions
@@ -366,23 +364,19 @@
       <div class="assump-layout">
         <div class="assump-row-top">
 
-          <!-- ── Panel: Person 1 ── -->
+          <!-- Person 1 -->
           <div class="assump-card">
             <div class="assump-card-title">Person 1</div>
-
             <div class="assump-section">
               <p class="assump-section__label">Summary</p>
-              <div class="assump-section__body">
-                <div class="assump-info-row"><span class="assump-info-key">Name</span><span class="assump-info-val" id="ai-p1name">–</span></div>
-                <div class="assump-info-row"><span class="assump-info-key">Birth year</span><span class="assump-info-val" id="ai-p1dob">–</span></div>
-                <div class="assump-info-row"><span class="assump-info-key">Salary (£/yr)</span><span class="assump-info-val" id="ai-p1salary">–</span></div>
-                <div class="assump-info-row"><span class="assump-info-key">Salary stops age</span><span class="assump-info-val" id="ai-p1salarystop">–</span></div>
-                <div class="assump-info-row"><span class="assump-info-key">State pension age</span><span class="assump-info-val" id="ai-p1spage">–</span></div>
-                <div class="assump-info-row"><span class="assump-info-key">State pension (£/yr)</span><span class="assump-info-val" id="ai-p1sp">–</span></div>
-              </div>
+              <div class="assump-info-row--boxed"><span class="assump-info-key">Name</span><span class="assump-info-val" id="ai-p1name">–</span></div>
+              <div class="assump-info-row--boxed"><span class="assump-info-key">Birth year</span><span class="assump-info-val" id="ai-p1dob">–</span></div>
+              <div class="assump-info-row--boxed"><span class="assump-info-key">Salary (£/yr)</span><span class="assump-info-val" id="ai-p1salary">–</span></div>
+              <div class="assump-info-row--boxed"><span class="assump-info-key">Salary stops age</span><span class="assump-info-val" id="ai-p1salarystop">–</span></div>
+              <div class="assump-info-row--boxed"><span class="assump-info-key">State pension age</span><span class="assump-info-val" id="ai-p1spage">–</span></div>
+              <div class="assump-info-row--boxed"><span class="assump-info-key">State pension (£/yr)</span><span class="assump-info-val" id="ai-p1sp">–</span></div>
             </div>
-
-            <!-- Hidden inputs still needed by gatherInputs() -->
+            <!-- Hidden inputs needed by gatherInputs() -->
             <input type="hidden" id="p1DOB">
             <input type="hidden" id="p2DOB">
             <input type="hidden" id="startYear">
@@ -405,78 +399,75 @@
             <input type="hidden" id="p2SP">
           </div>
 
-          <!-- ── Panel: Person 2 ── -->
+          <!-- Person 2 -->
           <div class="assump-card p2-field">
             <div class="assump-card-title">Person 2</div>
-
             <div class="assump-section">
               <p class="assump-section__label">Summary</p>
-              <div class="assump-section__body">
-                <div class="assump-info-row"><span class="assump-info-key">Name</span><span class="assump-info-val" id="ai-p2name">–</span></div>
-                <div class="assump-info-row"><span class="assump-info-key">Birth year</span><span class="assump-info-val" id="ai-p2dob">–</span></div>
-                <div class="assump-info-row"><span class="assump-info-key">Salary (£/yr)</span><span class="assump-info-val" id="ai-p2salary">–</span></div>
-                <div class="assump-info-row"><span class="assump-info-key">Salary stops age</span><span class="assump-info-val" id="ai-p2salarystop">–</span></div>
-                <div class="assump-info-row"><span class="assump-info-key">State pension age</span><span class="assump-info-val" id="ai-p2spage">–</span></div>
-                <div class="assump-info-row"><span class="assump-info-key">State pension (£/yr)</span><span class="assump-info-val" id="ai-p2sp">–</span></div>
-              </div>
+              <div class="assump-info-row--boxed"><span class="assump-info-key">Name</span><span class="assump-info-val" id="ai-p2name">–</span></div>
+              <div class="assump-info-row--boxed"><span class="assump-info-key">Birth year</span><span class="assump-info-val" id="ai-p2dob">–</span></div>
+              <div class="assump-info-row--boxed"><span class="assump-info-key">Salary (£/yr)</span><span class="assump-info-val" id="ai-p2salary">–</span></div>
+              <div class="assump-info-row--boxed"><span class="assump-info-key">Salary stops age</span><span class="assump-info-val" id="ai-p2salarystop">–</span></div>
+              <div class="assump-info-row--boxed"><span class="assump-info-key">State pension age</span><span class="assump-info-val" id="ai-p2spage">–</span></div>
+              <div class="assump-info-row--boxed"><span class="assump-info-key">State pension (£/yr)</span><span class="assump-info-val" id="ai-p2sp">–</span></div>
             </div>
           </div>
 
-          <!-- ── Panel: Portfolio Balances ── -->
+          <!-- Portfolio Balances -->
           <div class="assump-card">
             <div class="assump-card-title">Portfolio Balances</div>
-
             <div class="assump-section">
               <div class="assump-info-grid">
                 <div class="assump-info-block">
                   <p class="assump-section__label" data-p1>Person 1</p>
-                  <div class="assump-section__body">
-                    <div class="assump-info-row"><span class="assump-info-key">Cash</span><span class="assump-info-val" id="ai-p1cash">–</span></div>
-                    <div class="assump-info-row"><span class="assump-info-key">SIPP</span><span class="assump-info-val" id="ai-p1sipp">–</span></div>
-                    <div class="assump-info-row"><span class="assump-info-key">ISA</span><span class="assump-info-val" id="ai-p1isa">–</span></div>
-                    <div class="assump-info-row"><span class="assump-info-key">GIA</span><span class="assump-info-val" id="ai-p1gia">–</span></div>
-                  </div>
+                  <div class="assump-info-row--boxed"><span class="assump-info-key">Cash</span><span class="assump-info-val" id="ai-p1cash">–</span></div>
+                  <div class="assump-info-row--boxed"><span class="assump-info-key">SIPP</span><span class="assump-info-val" id="ai-p1sipp">–</span></div>
+                  <div class="assump-info-row--boxed"><span class="assump-info-key">ISA</span><span class="assump-info-val" id="ai-p1isa">–</span></div>
+                  <div class="assump-info-row--boxed"><span class="assump-info-key">GIA</span><span class="assump-info-val" id="ai-p1gia">–</span></div>
                 </div>
                 <div class="assump-info-block p2-field">
                   <p class="assump-section__label" data-p2>Person 2</p>
-                  <div class="assump-section__body">
-                    <div class="assump-info-row"><span class="assump-info-key">Cash</span><span class="assump-info-val" id="ai-p2cash">–</span></div>
-                    <div class="assump-info-row"><span class="assump-info-key">SIPP</span><span class="assump-info-val" id="ai-p2sipp">–</span></div>
-                    <div class="assump-info-row"><span class="assump-info-key">ISA</span><span class="assump-info-val" id="ai-p2isa">–</span></div>
-                    <div class="assump-info-row"><span class="assump-info-key">GIA</span><span class="assump-info-val" id="ai-p2gia">–</span></div>
-                  </div>
+                  <div class="assump-info-row--boxed"><span class="assump-info-key">Cash</span><span class="assump-info-val" id="ai-p2cash">–</span></div>
+                  <div class="assump-info-row--boxed"><span class="assump-info-key">SIPP</span><span class="assump-info-val" id="ai-p2sipp">–</span></div>
+                  <div class="assump-info-row--boxed"><span class="assump-info-key">ISA</span><span class="assump-info-val" id="ai-p2isa">–</span></div>
+                  <div class="assump-info-row--boxed"><span class="assump-info-key">GIA</span><span class="assump-info-val" id="ai-p2gia">–</span></div>
                 </div>
               </div>
             </div>
-
             <div class="assump-section">
               <p class="assump-section__label">GIA dividends</p>
               <div class="assump-section__body">
-                <div class="field" style="margin-bottom:0">
+                <div class="field" style="margin-bottom:6px">
                   <label>Dividend yield on GIA equities (%)</label>
-                  <input type="number" id="dividendYield" value="1.5" min="0" max="10" step="0.1" style="width:80px">
+                  <div class="stepper-input">
+                    <input type="number" id="dividendYield" value="1.5" min="0" max="10" step="0.1">
+                    <button class="stepper-btn" data-step-for="dividendYield" data-step-direction="1" type="button">&#x25B2;</button>
+                    <button class="stepper-btn" data-step-for="dividendYield" data-step-direction="-1" type="button">&#x25BC;</button>
+                  </div>
                 </div>
                 <div class="hint">Dividends treated as taxable income each year (not reinvested).</div>
               </div>
             </div>
-
             <div class="assump-section" id="int-accts-section" style="display:none">
               <p class="assump-section__label">Interest-bearing accounts</p>
               <div class="assump-section__body" id="int-accts-list"></div>
             </div>
           </div>
 
-          <!-- ── Panel: Spending ── -->
+          <!-- Spending -->
           <div class="assump-card">
             <div class="assump-card-title">Spending</div>
-
             <div class="assump-section">
               <p class="assump-section__label">Target</p>
               <div class="assump-section__body">
                 <div class="two-col">
                   <div class="field">
                     <label>Annual household (£)</label>
-                    <input type="text" id="spending" class="currency-input" placeholder="e.g. 45,000">
+                    <div class="currency-stepper">
+                      <input type="text" id="spending" class="currency-input" placeholder="e.g. 45,000">
+                      <button class="stepper-btn" data-step-for="spending" data-step-direction="1" data-step-amount="1000" type="button">&#x25B2;</button>
+                      <button class="stepper-btn" data-step-for="spending" data-step-direction="-1" data-step-amount="1000" type="button">&#x25BC;</button>
+                    </div>
                   </div>
                   <div class="field">
                     <label data-p1-stepdown title="Reduces the household spending target from the year Person 1 reaches age 75.">Reduced at 75</label>
@@ -493,7 +484,6 @@
                 <div class="hint" data-p1-stepdown-hint>Reduces the gross spending target from the year Person 1 turns 75.</div>
               </div>
             </div>
-
             <div class="assump-section">
               <p class="assump-section__label">Projection range</p>
               <div class="assump-section__body">
@@ -523,60 +513,57 @@
 
         <div class="assump-row-bottom">
 
-          <!-- ── Panel: Growth & Inflation ── -->
+          <!-- Growth & Inflation -->
           <div class="assump-card">
             <div class="assump-card-title">Growth &amp; Inflation</div>
-
             <div class="assump-section">
               <p class="assump-section__label">Rates</p>
               <div class="assump-section__body">
                 <div class="two-col">
                   <div class="field" style="margin-bottom:0">
                     <label>Portfolio growth (%/yr)</label>
-                    <input type="number" id="growth" step="0.1" placeholder="e.g. 4">
+                    <div class="stepper-input">
+                      <input type="number" id="growth" step="0.1" placeholder="e.g. 4">
+                      <button class="stepper-btn" data-step-for="growth" data-step-direction="1" type="button">&#x25B2;</button>
+                      <button class="stepper-btn" data-step-for="growth" data-step-direction="-1" type="button">&#x25BC;</button>
+                    </div>
                   </div>
                   <div class="field" style="margin-bottom:0">
                     <label>Inflation (%/yr)</label>
-                    <input type="number" id="inflation" step="0.1" placeholder="e.g. 2.5">
+                    <div class="stepper-input">
+                      <input type="number" id="inflation" step="0.1" placeholder="e.g. 2.5">
+                      <button class="stepper-btn" data-step-for="inflation" data-step-direction="1" type="button">&#x25B2;</button>
+                      <button class="stepper-btn" data-step-for="inflation" data-step-direction="-1" type="button">&#x25BC;</button>
+                    </div>
                   </div>
                 </div>
                 <div class="hint">Growth is nominal. Real return ≈ growth − inflation.</div>
               </div>
             </div>
-
             <div class="assump-section">
               <p class="assump-section__label">Growth presets</p>
-              <div class="assump-section__body">
-                <div style="display:flex;gap:6px;flex-wrap:wrap">
-                  <button type="button" class="preload-btn" id="preset-cautious" onclick="
-                    document.getElementById('growth').value='3';
-                    ['preset-cautious','preset-baseline','preset-balanced'].forEach(id=>document.getElementById(id).style.fontWeight='normal');
-                    this.style.fontWeight='bold';
-                  ">Cautious 3%</button>
-                  <button type="button" class="preload-btn" id="preset-baseline" onclick="
-                    document.getElementById('growth').value='4';
-                    ['preset-cautious','preset-baseline','preset-balanced'].forEach(id=>document.getElementById(id).style.fontWeight='normal');
-                    this.style.fontWeight='bold';
-                  ">Baseline 4%</button>
-                  <button type="button" class="preload-btn" id="preset-balanced" onclick="
-                    document.getElementById('growth').value='5';
-                    ['preset-cautious','preset-baseline','preset-balanced'].forEach(id=>document.getElementById(id).style.fontWeight='normal');
-                    this.style.fontWeight='bold';
-                  ">Balanced 5%</button>
-                </div>
+              <div class="assump-radio-group">
+                <label class="assump-radio-label">
+                  <input type="radio" name="growthPreset" value="3" onchange="document.getElementById('growth').value='3'"> Cautious — 3%
+                </label>
+                <label class="assump-radio-label">
+                  <input type="radio" name="growthPreset" value="4" onchange="document.getElementById('growth').value='4'"> Baseline — 4%
+                </label>
+                <label class="assump-radio-label">
+                  <input type="radio" name="growthPreset" value="5" onchange="document.getElementById('growth').value='5'"> Balanced — 5%
+                </label>
               </div>
             </div>
           </div>
 
-          <!-- ── Panel: Tax ── -->
+          <!-- Tax -->
           <div class="assump-card">
             <div class="assump-card-title">Tax</div>
-
             <div class="assump-section">
               <p class="assump-section__label">Tax threshold uprating</p>
-              <div class="assump-section__body">
+              <div class="assump-radio-group">
                 <label class="assump-radio-label">
-                  <input type="radio" name="thresholdMode" id="thresholdFrozen" value="frozen" checked> Frozen – fiscal drag applies
+                  <input type="radio" name="thresholdMode" id="thresholdFrozen" value="frozen" checked> Frozen — fiscal drag applies
                 </label>
                 <label class="assump-radio-label">
                   <input type="radio" name="thresholdMode" id="thresholdFromYear" value="fromYear"> Uprated from year
@@ -591,13 +578,12 @@
             </div>
           </div>
 
-          <!-- ── Panel: Withdrawal Split Mode ── -->
+          <!-- Withdrawal Split Mode -->
           <div class="assump-card">
             <div class="assump-card-title">Withdrawal Split Mode</div>
-
             <div class="assump-section">
               <p class="assump-section__label">Split mode</p>
-              <div class="assump-section__body">
+              <div class="assump-radio-group">
                 <label class="assump-radio-label">
                   <input type="radio" name="withdrawalMode" value="50/50"> 50/50 mechanical split (wrapper order only)
                 </label>
@@ -606,7 +592,6 @@
                 </label>
               </div>
             </div>
-
             <div class="assump-section">
               <p class="assump-section__label">Wrapper order (1st → last) — after Cash</p>
               <div class="assump-section__body">
@@ -627,16 +612,19 @@
             </div>
           </div>
 
-          <!-- ── Panel: Bed & ISA ── -->
+          <!-- Bed & ISA -->
           <div class="assump-card">
             <div class="assump-card-title">Bed &amp; ISA</div>
-
             <div class="assump-section">
-              <div class="assump-enable-row">
-                <input type="checkbox" id="bniEnabled">
-                <label for="bniEnabled">Enable bed-and-ISA strategy</label>
+              <p class="assump-section__label">Strategy</p>
+              <div class="assump-radio-group" style="margin-bottom:10px">
+                <label class="assump-radio-label">
+                  <input type="radio" name="bniEnabled" id="bniEnabled" value="true"> Enabled
+                </label>
+                <label class="assump-radio-label">
+                  <input type="radio" name="bniEnabled" id="bniDisabled" value="false" checked> Disabled
+                </label>
               </div>
-
               <div class="assump-section__body">
                 <p class="assump-section__label" data-p1 style="margin-bottom:4px">Person 1</p>
                 <div class="field" style="margin-bottom:8px">
@@ -658,6 +646,7 @@
       </div><!-- /.assump-layout -->
 
     </div><!-- /#tab-assumptions -->
+
 
     <!-- ═══════════════════════════════════════════
          TAB 3 — RESULTS
