@@ -1225,6 +1225,7 @@ input[type="radio"] { accent-color: var(--accent); }
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 3fr);
   gap: 12px;
+  margin-top: 12px;
 }
 
 .chart-sidebar {
