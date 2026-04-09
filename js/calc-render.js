@@ -419,7 +419,33 @@
     host.appendChild(header);
 
     chart.data.datasets.forEach((ds, i) => {
-      if (ds.type === 'line') return;
+      if (ds.type === 'line') {
+        // Render line datasets as a special legend item with a line swatch
+        const item = document.createElement('div');
+        item.className = 'sidebar-legend__item sidebar-legend__item--fixed';
+
+        const swatch = document.createElement('span');
+        swatch.className = 'sidebar-legend__swatch';
+        swatch.style.background = 'none';
+        swatch.style.borderTop = `2px solid ${ds.borderColor}`;
+        swatch.style.height = '0';
+        swatch.style.alignSelf = 'center';
+
+        const label = document.createElement('span');
+        label.textContent = ds.label;
+        label.style.flex = '1';
+
+        const note = document.createElement('span');
+        note.className = 'sidebar-legend__fixed-note';
+        note.textContent = 'right axis';
+        note.style.marginLeft = 'auto';
+
+        item.appendChild(swatch);
+        item.appendChild(label);
+        item.appendChild(note);
+        host.appendChild(item);
+        return;
+      }
 
       const fixed = ds._fixed === true;
       const item = document.createElement('div');
@@ -671,12 +697,13 @@
         type: 'line',
         label: 'Effective tax rate',
         data: rateData,
-        borderColor: '#7F6000',
-        backgroundColor: '#7F6000',
+        borderColor: '#991B1B',
+        backgroundColor: '#991B1B',
         borderWidth: 2,
         pointRadius: 2,
         tension: 0.2,
         yAxisID: 'y1',
+        order: 0,
       });
 
       if (_spendingChart) _spendingChart.destroy();
