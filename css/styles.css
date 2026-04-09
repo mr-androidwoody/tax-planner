@@ -1150,55 +1150,31 @@ input[type="radio"] { accent-color: var(--accent); }
 }
 
 /* ─────────────────────────────
-   Portfolio Balances footer token row
+   Portfolio Balances footer — total only
    ───────────────────────────── */
 
 .portfolio-footer {
   margin-top: 10px;
-  padding-top: 10px;
+  padding: 10px 12px;
   border-top: 1px solid var(--border);
   display: flex;
-  gap: 0;
-}
-
-.portfolio-footer__token {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 3px;
-  padding: 6px 4px;
-  border-right: 1px solid var(--border);
+  justify-content: space-between;
 }
 
-.portfolio-footer__token:last-child {
-  border-right: none;
-}
-
-.portfolio-footer__token-label {
-  font-size: 0.62rem;
+.portfolio-footer__label {
+  font-size: 0.7rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--muted);
-  white-space: nowrap;
 }
 
-.portfolio-footer__token-value {
-  font-size: 0.82rem;
-  font-weight: 700;
-  color: var(--text);
-  letter-spacing: -0.01em;
-  white-space: nowrap;
-}
-
-.portfolio-footer__token--total .portfolio-footer__token-label {
-  color: var(--accent);
-}
-
-.portfolio-footer__token--total .portfolio-footer__token-value {
-  font-size: 0.88rem;
+.portfolio-footer__value {
+  font-size: 0.94rem;
   font-weight: 800;
+  color: var(--text);
+  letter-spacing: -0.02em;
 }
 
 /* ─────────────────────────────
@@ -1315,7 +1291,8 @@ input[type="radio"] { accent-color: var(--accent); }
   font-weight: 400;
   color: var(--text);
   cursor: pointer;
-  padding: 6px 10px;
+  padding: 0 10px;
+  min-height: 36px;
   background: var(--panel-soft);
   border: 1px solid var(--border);
   border-bottom: none;
