@@ -1162,7 +1162,8 @@ input[type="radio"] { accent-color: var(--accent); }
   display: flex;
   align-items: flex-end;
   gap: 3px;
-  margin-bottom: -1px;
+  margin-bottom: 0;
+  padding-bottom: 4px;
   position: relative;
   z-index: 1;
 }
@@ -1182,7 +1183,11 @@ input[type="radio"] { accent-color: var(--accent); }
 
 .results-tab--active {
   background: var(--panel-solid);
-  color: var(--text);
+  color: var(--accent);
+  font-weight: 700;
+  border-top: 3px solid var(--accent);
+  margin-bottom: -4px;
+  padding-bottom: 12px;
 }
 
 .results-tab--inactive {
@@ -1203,7 +1208,7 @@ input[type="radio"] { accent-color: var(--accent); }
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 3fr);
   border: 1px solid var(--border);
-  border-radius: 0 var(--radius-xs) var(--radius-xs) var(--radius-xs);
+  border-radius: var(--radius-xs);
   background: var(--panel-solid);
   overflow: hidden;
 }
