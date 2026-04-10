@@ -291,6 +291,9 @@
       ['bniP1GIA','bniP2GIA'].forEach(id => {
         const el = safeEl(id);
         if (el) { el.disabled = !a.bniEnabled; el.style.opacity = a.bniEnabled ? '' : '0.45'; }
+        el?.closest('.currency-stepper')?.querySelectorAll('.stepper-btn').forEach(b => {
+          b.disabled = !a.bniEnabled; b.style.opacity = a.bniEnabled ? '' : '0.45';
+        });
       });
     }
 
@@ -726,6 +729,9 @@
       ['bniP1GIA', 'bniP2GIA'].forEach(id => {
         const el = safeEl(id);
         if (el) { el.disabled = !enabled; el.style.opacity = enabled ? '' : '0.45'; }
+        el?.closest('.currency-stepper')?.querySelectorAll('.stepper-btn').forEach(b => {
+          b.disabled = !enabled; b.style.opacity = enabled ? '' : '0.45';
+        });
       });
       return;
     }
@@ -865,6 +871,9 @@
           ['bniP1GIA', 'bniP2GIA'].forEach(fid => {
             const f = safeEl(fid);
             if (f) { f.disabled = !el.checked; f.style.opacity = el.checked ? '' : '0.45'; }
+            f?.closest('.currency-stepper')?.querySelectorAll('.stepper-btn').forEach(b => {
+              b.disabled = !el.checked; b.style.opacity = el.checked ? '' : '0.45';
+            });
           });
         }
         return;
@@ -901,12 +910,17 @@
       : btn.closest('.stepper-input')?.querySelector('input');
     if (!input) return;
 
-    const step = Number(input.step) || 1;
-    const val  = Number(input.value) || 0;
-    const min  = input.min !== '' ? Number(input.min) : -Infinity;
-    const max  = input.max !== '' ? Number(input.max) :  Infinity;
+    const isCurrency = input.type === 'text';
+    const step   = Number(btn.dataset.stepAmount) || Number(input.step) || 1;
+    const val    = isCurrency ? (D.parseCurrency(input.value) || 0) : (Number(input.value) || 0);
+    const min    = input.min !== '' ? Number(input.min) : -Infinity;
+    const max    = input.max !== '' ? Number(input.max) :  Infinity;
 
-    input.value = Math.min(max, Math.max(min, val + (dir * step)));
+    // Derive decimal places from step to avoid float drift (e.g. 4.2 not 4.199999…)
+    const decimals  = (step.toString().split('.')[1] || '').length;
+    const newVal    = parseFloat(Math.min(max, Math.max(min, val + dir * step)).toFixed(decimals));
+
+    input.value = isCurrency ? D.formatCurrency(newVal) : newVal;
     input.dispatchEvent(new Event('input',  { bubbles: true }));
     input.dispatchEvent(new Event('change', { bubbles: true }));
   });
