@@ -902,18 +902,7 @@
     if (!input) return;
 
     const step = Number(input.step) || 1;
-    
-    let val;
-    
-    if (input.classList.contains('currency-input')) {
-      val = D.parseCurrency(input.value || 0);
-    } else {
-      val = Number(input.value);
-    }
-    
-    if (isNaN(val)) val = 0;
-
-      
+    const val  = Number(input.value) || 0;
     const min  = input.min !== '' ? Number(input.min) : -Infinity;
     const max  = input.max !== '' ? Number(input.max) :  Infinity;
 
