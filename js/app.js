@@ -622,8 +622,8 @@
 
   function gatherInputs() {
     const bniEnabled   = safeEl('bniEnabled')?.checked || false;
-    const growthRaw    = parseFloat(safeEl('growth')?.value) || 0;
-    const inflationRaw = parseFloat(safeEl('inflation')?.value) || 0;
+    const growthRaw    = gv('growth');
+    const inflationRaw = gv('inflation');
 
     return {
       startYear:         gvi('startYear'),
@@ -691,18 +691,9 @@
   });
 
   document.addEventListener('focusout', (e) => {
-      if (!e.target.matches('.currency-input')) return;
-    
-      const raw = D.parseCurrency(e.target.value || 0);
-    
-      // FIX: allow placeholder to reappear
-      if (!e.target.value || raw === 0) {
-        e.target.value = '';
-        return;
-      }
-    
-      R.applyCurrencyFormattingToInput(e.target);
-    });
+    if (!e.target.matches('.currency-input')) return;
+    R.applyCurrencyFormattingToInput(e.target);
+  });
 
   // ─────────────────────────────
   // LIVE INPUT — account table
@@ -752,15 +743,10 @@
 
     if (e.target.id === 'bniEnabled') {
       const enabled = e.target.checked;
-    
       ['bniP1GIA', 'bniP2GIA'].forEach(id => {
         const el = safeEl(id);
-        if (!el) return;
-    
-        el.disabled = !enabled;
-        el.style.opacity = enabled ? '' : '0.45';
+        if (el) { el.disabled = false; el.style.opacity = ''; }
       });
-    
       return;
     }
 
@@ -947,10 +933,9 @@
     
       // FIX: correctly parse currency inputs
       if (input.classList.contains('currency-input')) {
-        input.value = next;
-        R.applyCurrencyFormattingToInput(input);
+        val = D.parseCurrency(input.value || 0);
       } else {
-        input.value = next;
+        val = Number(input.value);
       }
     
       if (isNaN(val)) val = 0;
@@ -958,21 +943,17 @@
       const min = input.min !== '' ? Number(input.min) : -Infinity;
       const max = input.max !== '' ? Number(input.max) :  Infinity;
     
-      let next = Math.min(max, Math.max(min, val + (dir * step)));
-
-      // FIX: handle decimal precision properly
-      if (input.type === 'number' && input.step && input.step.includes('.')) {
-        const decimals = input.step.split('.')[1].length;
-        next = Number(next.toFixed(decimals));
-      }
+      const next = Math.min(max, Math.max(min, val + (dir * step)));
     
+      // FIX: preserve formatting for currency fields
       if (input.classList.contains('currency-input')) {
         input.value = D.formatCurrency(next);
       } else {
         input.value = next;
       }
     
-      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('input',  { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
     });
     
     
