@@ -1908,10 +1908,15 @@ input[type="radio"] { accent-color: var(--accent); }
   gap: 2px;
   padding: 3px;
   border-radius: 10px;
+  /* Re-state track styles so they survive any cascade ordering issues */
+  background: var(--panel-soft);
+  border: 1px solid var(--border);
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.10);
 }
 
 .sidebar-toggle--row button {
   flex: 0 0 auto;
+  width: auto; /* overrides width:100% from .sidebar-toggle button */
   padding: 6px 14px;
 }
 
