@@ -794,33 +794,23 @@
       </div>
 
       <!-- ── Tables tab ── -->
-      <div id="results-panel-tables" class="chart-panel" style="display:none">
-        <div class="chart-sidebar">
-          <div class="sidebar-controls">
-            <div class="sidebar-controls__col">
-              <p class="chart-sidebar__label">Person</p>
-              <div class="sidebar-toggle">
-                <button class="is-active" data-action="view-both">Both</button>
-                <button data-action="view-p1" data-p1-btn>Person 1</button>
-                <button data-action="view-p2" data-p2-btn>Person 2</button>
+      <div id="results-panel-tables" class="chart-panel chart-panel--full" style="display:none">
+        <div class="chart-canvas-area" id="tables-panel">
+          <div class="table-toolbar">
+            <div class="table-toolbar__left">
+              <div class="sidebar-toggle sidebar-toggle--row">
+                <button class="is-active" data-table-select="tax">Tax by year</button>
+                <button data-table-select="wealth">Wealth by year</button>
               </div>
             </div>
-            <div class="sidebar-controls__col">
-              <p class="chart-sidebar__label">Chart mode</p>
-              <div class="sidebar-toggle">
+            <div class="table-toolbar__right">
+              <p class="chart-sidebar__label">Values</p>
+              <div class="sidebar-toggle sidebar-toggle--row">
                 <button class="is-active" data-action="real-on">Real</button>
                 <button data-action="real-off">Nominal</button>
               </div>
             </div>
           </div>
-          <hr class="chart-sidebar__divider"/>
-          <p class="chart-sidebar__label">Table</p>
-          <div class="sidebar-table-selector">
-            <button class="is-active" data-table-select="tax">Tax by year</button>
-            <button data-table-select="wealth">Wealth by year</button>
-          </div>
-        </div>
-        <div class="chart-canvas-area" id="tables-panel">
           <div id="tables-tax-view">
             <h2>Tax by year</h2>
             <div style="overflow-x:auto"><table id="tax-table" class="data-table"></table></div>
