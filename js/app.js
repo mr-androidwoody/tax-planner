@@ -259,44 +259,64 @@
     refreshSetupSummary();
   }
 
-  function applyAssumptionsInputs(a) {
-    if (!a) return;
-
-    const sv = (id, val) => { const el = safeEl(id); if (el && val != null) el.value = val; };
-
-    sv('spending',             a.spending);
-    sv('stepDownPct',          a.stepDownPct);
-    sv('growth',               a.growth);
-    sv('inflation',            a.inflation);
-    sv('thresholdFromYearVal', a.thresholdFromYear);
-    sv('dividendYield',        a.dividendYield);
-    sv('bniP1GIA',             a.bniP1GIA);
-    sv('bniP2GIA',             a.bniP2GIA);
-
-    if (a.thresholdMode) {
-      const r = document.querySelector(`input[name="thresholdMode"][value="${a.thresholdMode}"]`);
-      if (r) r.checked = true;
-    }
-    if (a.withdrawalMode) {
-      const r = document.querySelector(`input[name="withdrawalMode"][value="${a.withdrawalMode}"]`);
-      if (r) r.checked = true;
-    }
-
-    ['p1Order1','p1Order2','p1Order3','p2Order1','p2Order2','p2Order3']
-      .forEach(id => sv(id, a[id]));
-
-    const bni = safeEl('bniEnabled');
-    if (bni) {
-      bni.checked = !!a.bniEnabled;
-      ['bniP1GIA','bniP2GIA'].forEach(id => {
+    function applyAssumptionsInputs(a) {
+      if (!a) return;
+    
+      const sv = (id, val) => {
         const el = safeEl(id);
-        if (el) { el.disabled = !a.bniEnabled; el.style.opacity = a.bniEnabled ? '' : '0.45'; }
-      });
+        if (!el) return;
+    
+        if (el.classList.contains('currency-input')) {
+          if (val === '' || val === null || val === undefined || val === 0) {
+            el.value = '';
+          } else {
+            el.value = D.formatCurrency(val);
+          }
+          return;
+        }
+    
+        if (val != null) {
+          el.value = val;
+        }
+      };
+    
+      sv('spending',             a.spending);
+      sv('stepDownPct',          a.stepDownPct);
+      sv('growth',               a.growth);
+      sv('inflation',            a.inflation);
+      sv('thresholdFromYearVal', a.thresholdFromYear);
+      sv('dividendYield',        a.dividendYield);
+      sv('bniP1GIA',             a.bniP1GIA);
+      sv('bniP2GIA',             a.bniP2GIA);
+    
+      if (a.thresholdMode) {
+        const r = document.querySelector(`input[name="thresholdMode"][value="${a.thresholdMode}"]`);
+        if (r) r.checked = true;
+      }
+    
+      if (a.withdrawalMode) {
+        const r = document.querySelector(`input[name="withdrawalMode"][value="${a.withdrawalMode}"]`);
+        if (r) r.checked = true;
+      }
+    
+      ['p1Order1','p1Order2','p1Order3','p2Order1','p2Order2','p2Order3']
+        .forEach(id => sv(id, a[id]));
+    
+      const bni = safeEl('bniEnabled');
+      if (bni) {
+        bni.checked = !!a.bniEnabled;
+        ['bniP1GIA','bniP2GIA'].forEach(id => {
+          const el = safeEl(id);
+          if (el) {
+            el.disabled = !a.bniEnabled;
+            el.style.opacity = a.bniEnabled ? '' : '0.45';
+          }
+        });
+      }
+    
+      updateSidebarNames();
+      applyP2State();
     }
-
-    updateSidebarNames();
-    applyP2State();
-  }
 
   // ─────────────────────────────
   // OWNER NAMES
@@ -602,8 +622,8 @@
 
   function gatherInputs() {
     const bniEnabled   = safeEl('bniEnabled')?.checked || false;
-    const growthRaw    = gv('growth');
-    const inflationRaw = gv('inflation');
+    const growthRaw    = parseFloat(safeEl('growth')?.value) || 0;
+    const inflationRaw = parseFloat(safeEl('inflation')?.value) || 0;
 
     return {
       startYear:         gvi('startYear'),
@@ -671,9 +691,18 @@
   });
 
   document.addEventListener('focusout', (e) => {
-    if (!e.target.matches('.currency-input')) return;
-    R.applyCurrencyFormattingToInput(e.target);
-  });
+      if (!e.target.matches('.currency-input')) return;
+    
+      const raw = D.parseCurrency(e.target.value || 0);
+    
+      // FIX: allow placeholder to reappear
+      if (!e.target.value || raw === 0) {
+        e.target.value = '';
+        return;
+      }
+    
+      R.applyCurrencyFormattingToInput(e.target);
+    });
 
   // ─────────────────────────────
   // LIVE INPUT — account table
@@ -723,10 +752,15 @@
 
     if (e.target.id === 'bniEnabled') {
       const enabled = e.target.checked;
+    
       ['bniP1GIA', 'bniP2GIA'].forEach(id => {
         const el = safeEl(id);
-        if (el) { el.disabled = !enabled; el.style.opacity = enabled ? '' : '0.45'; }
+        if (!el) return;
+    
+        el.disabled = !enabled;
+        el.style.opacity = enabled ? '' : '0.45';
       });
+    
       return;
     }
 
@@ -913,9 +947,10 @@
     
       // FIX: correctly parse currency inputs
       if (input.classList.contains('currency-input')) {
-        val = D.parseCurrency(input.value || 0);
+        input.value = next;
+        R.applyCurrencyFormattingToInput(input);
       } else {
-        val = Number(input.value);
+        input.value = next;
       }
     
       if (isNaN(val)) val = 0;
@@ -923,17 +958,21 @@
       const min = input.min !== '' ? Number(input.min) : -Infinity;
       const max = input.max !== '' ? Number(input.max) :  Infinity;
     
-      const next = Math.min(max, Math.max(min, val + (dir * step)));
+      let next = Math.min(max, Math.max(min, val + (dir * step)));
+
+      // FIX: handle decimal precision properly
+      if (input.type === 'number' && input.step && input.step.includes('.')) {
+        const decimals = input.step.split('.')[1].length;
+        next = Number(next.toFixed(decimals));
+      }
     
-      // FIX: preserve formatting for currency fields
       if (input.classList.contains('currency-input')) {
         input.value = D.formatCurrency(next);
       } else {
         input.value = next;
       }
     
-      input.dispatchEvent(new Event('input',  { bubbles: true }));
-      input.dispatchEvent(new Event('change', { bubbles: true }));
+      input.dispatchEvent(new Event('input', { bubbles: true }));
     });
     
     
