@@ -2369,3 +2369,24 @@ input[type="radio"] { accent-color: var(--accent); }
   color: var(--accent);
   margin-right: 4px;
 }
+
+/* Shortfall severity banner inside insight pane */
+.chart-insight-banner {
+  padding: 8px 12px;
+  border-radius: var(--radius-xs);
+  font-size: 0.8rem;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.chart-insight-banner--warn {
+  background: #fff8e6;
+  border-left: 3px solid var(--warning);
+  color: #7a4f00;
+}
+
+.chart-insight-banner--danger {
+  background: #fff1f1;
+  border-left: 3px solid var(--danger);
+  color: #7f1d1d;
+}
