@@ -543,82 +543,180 @@
   }
 
   // ─────────────────────────────────────────────
-  // ENGINE NOTES OVERLAY
+  // INSIGHT BUTTON + PANE (shared by Income and Wealth charts)
   // ─────────────────────────────────────────────
-  let _overlayOpen = false;
+  let _wealthPaneOpen = false;
+  let _incomePaneOpen = false;
 
   const ANNOTATION_GROUPS = [
     { event: 'cash_surplus', emoji: '💰', label: 'Surplus cash' },
     { event: 'sp_starts',   emoji: '🏦', label: 'State Pension' },
     { event: 'salary_stop', emoji: '💼', label: 'Salary stops' },
-    { event: 'shortfall',   emoji: '⚠️',  label: 'Shortfall years' },
     { event: 'depletion',   emoji: '🛑', label: 'Depletions' },
   ];
 
-  function renderAnnotationsOverlay() {
-    const panel = document.getElementById('results-panel-wealth');
-    if (!panel) return;
+  function fmt0(n) { return '£' + Math.round(n).toLocaleString('en-GB'); }
 
-    // Remove any existing overlay
-    const existing = panel.querySelector('.engine-notes-overlay');
+  // Inject ⓘ button into .chart-wrap top-right. chartId = 'income' | 'wealth'
+  function renderInsightButton(chartId, hasContent) {
+    const wrap = document.getElementById(chartId === 'income' ? 'incomeChart' : 'wealthChart')
+      ?.closest('.chart-wrap');
+    if (!wrap) return;
+
+    const existing = wrap.querySelector('.chart-insight-btn');
     if (existing) existing.remove();
-    if (!_overlayOpen) return;
+    if (!hasContent) return;
 
-    const overlay = document.createElement('div');
-    overlay.className = 'engine-notes-overlay';
-    overlay.innerHTML = `
-      <div class="engine-notes-overlay__header">
-        <span>Engine notes</span>
-        <button class="engine-notes-overlay__close" aria-label="Close">✕</button>
-      </div>
-      <div class="engine-notes-overlay__body"></div>
-    `;
+    const isOpen = chartId === 'income' ? _incomePaneOpen : _wealthPaneOpen;
 
-    const body = overlay.querySelector('.engine-notes-overlay__body');
+    const btn = document.createElement('button');
+    btn.className = 'chart-insight-btn' + (isOpen ? ' is-active' : '');
+    btn.setAttribute('aria-label', 'Show chart insights');
+    btn.innerHTML = `<span class="chart-insight-btn__icon">ⓘ</span>`;
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (chartId === 'income') _incomePaneOpen = !_incomePaneOpen;
+      else _wealthPaneOpen = !_wealthPaneOpen;
+      renderInsightPane(chartId);
+      btn.classList.toggle('is-active');
+    });
+    wrap.appendChild(btn);
+  }
+
+  // Build and inject (or remove) the insight pane over the chart canvas
+  function renderInsightPane(chartId) {
+    const wrap = document.getElementById(chartId === 'income' ? 'incomeChart' : 'wealthChart')
+      ?.closest('.chart-wrap');
+    if (!wrap) return;
+
+    const existing = wrap.querySelector('.chart-insight-pane');
+    if (existing) existing.remove();
+
+    const isOpen = chartId === 'income' ? _incomePaneOpen : _wealthPaneOpen;
+    if (!isOpen) return;
+
+    const pane = document.createElement('div');
+    pane.className = 'chart-insight-pane';
+
+    const header = document.createElement('div');
+    header.className = 'chart-insight-pane__header';
+    const title = document.createElement('span');
+    title.className = 'chart-insight-pane__title';
+    title.textContent = chartId === 'income' ? '⚠️ Shortfall detected' : 'ⓘ Projection insights';
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'chart-insight-pane__close';
+    closeBtn.textContent = '✕';
+    closeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (chartId === 'income') _incomePaneOpen = false;
+      else _wealthPaneOpen = false;
+      renderInsightPane(chartId);
+      renderInsightButton(chartId, true);
+    });
+    header.appendChild(title);
+    header.appendChild(closeBtn);
+    pane.appendChild(header);
+
+    const body = document.createElement('div');
+    body.className = 'chart-insight-pane__body';
+
+    if (chartId === 'income') {
+      body.appendChild(buildShortfallInsight());
+    } else {
+      body.appendChild(buildWealthInsights());
+    }
+
+    pane.appendChild(body);
+
+    // Close on click outside
+    setTimeout(() => {
+      document.addEventListener('click', function outsideClick(e) {
+        if (!pane.contains(e.target) && !e.target.closest('.chart-insight-btn')) {
+          if (chartId === 'income') _incomePaneOpen = false;
+          else _wealthPaneOpen = false;
+          renderInsightPane(chartId);
+          renderInsightButton(chartId, true);
+          document.removeEventListener('click', outsideClick);
+        }
+      });
+    }, 0);
+
+    wrap.appendChild(pane);
+  }
+
+  function buildShortfallInsight() {
+    const sfRows = _rows.filter(r => (r.cashflowShortfall || 0) > 0);
+    const frag = document.createDocumentFragment();
+    if (!sfRows.length) return frag;
+
+    const total = sfRows.reduce((s, r) => s + (r.cashflowShortfall || 0), 0);
+    const peak  = Math.max(...sfRows.map(r => r.cashflowShortfall || 0));
+    const peakRow = sfRows.find(r => (r.cashflowShortfall || 0) === peak);
+    const first = sfRows[0];
+    const last  = sfRows[sfRows.length - 1];
+
+    const items = [
+      { label: 'First shortfall', value: `${first.year}` },
+      { label: 'Duration',        value: `${sfRows.length} year${sfRows.length !== 1 ? 's' : ''} (${first.year}–${last.year})` },
+      { label: 'Total gap',       value: fmt0(total) },
+      { label: 'Peak annual gap', value: `${fmt0(peak)} in ${peakRow.year}` },
+    ];
+
+    items.forEach(({ label, value }) => {
+      const row = document.createElement('div');
+      row.className = 'chart-insight-row';
+      row.innerHTML = `<span class="chart-insight-row__label">${label}</span><span class="chart-insight-row__value">${value}</span>`;
+      frag.appendChild(row);
+    });
+
+    const note = document.createElement('p');
+    note.className = 'chart-insight-note';
+    note.textContent = 'Red bars on the chart show the annual gap. Adjust your spending target or portfolio to eliminate the shortfall.';
+    frag.appendChild(note);
+    return frag;
+  }
+
+  function buildWealthInsights() {
+    const frag = document.createDocumentFragment();
+    if (!_annotations.length) return frag;
 
     ANNOTATION_GROUPS.forEach(({ event, emoji, label }) => {
       const items = _annotations.filter(a => a.event === event);
       if (!items.length) return;
 
       const group = document.createElement('div');
-      group.className = 'engine-notes-group';
+      group.className = 'chart-insight-group';
 
       const heading = document.createElement('div');
-      heading.className = 'engine-notes-group__heading';
+      heading.className = 'chart-insight-group__heading';
       heading.textContent = `${emoji} ${label}`;
       group.appendChild(heading);
 
-      items.forEach(a => {
+      // Summarise repeating events; show discrete ones as-is
+      if (event === 'cash_surplus' && items.length > 1) {
+        const first = items[0], last = items[items.length - 1];
+        const total = _rows
+          .filter(r => r.year >= first.year && r.year <= last.year)
+          .reduce((s, r) => s + Math.max(0, (r.p1SP || 0) + (r.p2SP || 0) + (r.p1SalInc || 0) + (r.p2SalInc || 0) + (r.p1Divs || 0) + (r.p2Divs || 0) - (r.target || 0)), 0);
+        const firstAmt = items[0].message.match(/£[\d,]+/)?.[0] || '';
+        const lastAmt  = last.message.match(/£[\d,]+/)?.[0] || '';
         const row = document.createElement('div');
-        row.className = 'engine-notes-group__row';
-        row.innerHTML = `<span class="engine-notes-year">${a.year}</span><span>${a.message}</span>`;
+        row.className = 'chart-insight-summary';
+        row.textContent = `${first.year}–${last.year}: Annual household surplus above target parked in ${items[0].message.split('parked in ')[1]} — ${firstAmt} rising to ${lastAmt}/yr (total ${fmt0(total)})`;
         group.appendChild(row);
-      });
+      } else {
+        items.forEach(a => {
+          const row = document.createElement('div');
+          row.className = 'chart-insight-summary';
+          row.innerHTML = `<span class="chart-insight-year">${a.year}</span> ${a.message}`;
+          group.appendChild(row);
+        });
+      }
 
-      body.appendChild(group);
+      frag.appendChild(group);
     });
 
-    // Close on ✕
-    overlay.querySelector('.engine-notes-overlay__close').addEventListener('click', () => {
-      _overlayOpen = false;
-      renderAnnotationsOverlay();
-      // Re-render legend so button label reflects closed state
-      if (_wealthChart) renderWealthLegend(_wealthChart);
-    });
-
-    // Close on click outside overlay
-    setTimeout(() => {
-      document.addEventListener('click', function outsideClick(e) {
-        if (!overlay.contains(e.target)) {
-          _overlayOpen = false;
-          renderAnnotationsOverlay();
-          if (_wealthChart) renderWealthLegend(_wealthChart);
-          document.removeEventListener('click', outsideClick);
-        }
-      });
-    }, 0);
-
-    panel.appendChild(overlay);
+    return frag;
   }
 
   // ─────────────────────────────────────────────
@@ -643,20 +741,6 @@
     intro.className = 'chart-intro';
     intro.textContent = 'Shows portfolio balance by wrapper at end of each year. Click any legend item to show or hide it in the chart.';
     host.appendChild(intro);
-
-    // Engine notes button — only shown when there are annotations
-    if (_annotations.length > 0) {
-      const notesBtn = document.createElement('button');
-      notesBtn.className = 'engine-notes-btn' + (_overlayOpen ? ' is-active' : '');
-      notesBtn.textContent = `ⓘ Engine notes (${_annotations.length})`;
-      notesBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        _overlayOpen = !_overlayOpen;
-        renderAnnotationsOverlay();
-        renderWealthLegend(chart);
-      });
-      host.appendChild(notesBtn);
-    }
 
     const header = document.createElement('div');
     header.className = 'sidebar-legend__header';
@@ -783,6 +867,8 @@
         },
       });
       renderIncomeLegend(_incomeChart, recomputeShortfall);
+      const hasShortfall = _engineShortfall.some(v => v > 0);
+      renderInsightButton('income', hasShortfall);
     }
 
     // ─────────────────────────────────────────────
@@ -987,6 +1073,7 @@
         },
       });
       renderWealthLegend(_wealthChart);
+      renderInsightButton('wealth', _annotations.length > 0);
     }
   }
 

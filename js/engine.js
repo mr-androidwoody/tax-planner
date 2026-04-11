@@ -458,9 +458,7 @@
       const cashflowShortfall = Math.max(0, target - householdNetCashflow);
       const cashflowSurplus   = Math.max(0, householdNetCashflow - target);
 
-      if (cashflowShortfall > 0)
-        annotations.push({ year, person: 'both', event: 'shortfall',
-          message: `Spending target unmet — shortfall of £${Math.round(cashflowShortfall).toLocaleString('en-GB')}` });
+
 
       const p1NaturalIncome = p1SP + p1SalInc + p1IntDraw + p1Divs;    
       const p2NaturalIncome =  p2SP + p2SalInc + p2IntDraw + p2Divs;
