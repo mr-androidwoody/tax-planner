@@ -59,6 +59,7 @@
     });
 
     const depletions = {};
+    const annotations = [];
     let cumInfl = 1;
     const rows = [];
 
@@ -71,6 +72,20 @@
       const p2SP     = p2Age >= p2SPAge ? p2SPAmt * cumInfl : 0;
       const p2SalInc = (p2SalaryStop && p2Age <= p2SalaryStop) ? p2Salary * cumInfl : 0;
       const p1SalInc = (p1SalaryStop && p1Age <= p1SalaryStop) ? p1Salary * cumInfl : 0;
+
+      // Annotations: one-off lifecycle events
+      if (p1Age === p1SPAge && p1SPAmt > 0)
+        annotations.push({ year, person: 'p1', event: 'sp_starts',
+          message: `${p1name} State Pension begins (£${Math.round(p1SPAmt).toLocaleString('en-GB')}/yr)` });
+      if (p2Age === p2SPAge && p2SPAmt > 0)
+        annotations.push({ year, person: 'p2', event: 'sp_starts',
+          message: `${p2name} State Pension begins (£${Math.round(p2SPAmt).toLocaleString('en-GB')}/yr)` });
+      if (p1SalaryStop && p1Age === p1SalaryStop + 1 && p1Salary > 0)
+        annotations.push({ year, person: 'p1', event: 'salary_stop',
+          message: `${p1name} salary stops` });
+      if (p2SalaryStop && p2Age === p2SalaryStop + 1 && p2Salary > 0)
+        annotations.push({ year, person: 'p2', event: 'salary_stop',
+          message: `${p2name} salary stops` });
       const target   = (spending * cumInfl) * (
         stepDownPct > 0 && p1Age >= 75 ? (1 - stepDownPct / 100) : 1
       );
@@ -149,7 +164,11 @@
       const preIntGuaranteed = p1SP + p2SP + p1SalInc + p2SalInc + p1Divs + p2Divs;
       // Surplus salary/SP above target goes to p1 cash buffer
       const preIntSurplus    = Math.max(0, preIntGuaranteed - target);
-      if (preIntSurplus > 0) p1Bal.Cash = (p1Bal.Cash || 0) + preIntSurplus;
+      if (preIntSurplus > 0) {
+        p1Bal.Cash = (p1Bal.Cash || 0) + preIntSurplus;
+        annotations.push({ year, person: 'p1', event: 'cash_surplus',
+          message: `Household surplus income (£${Math.round(preIntSurplus).toLocaleString('en-GB')}) above target parked in ${p1name} Cash` });
+      }
       let intBudget = Math.max(0, target - preIntGuaranteed);
 
       intAccts.forEach(a => {
@@ -394,10 +413,10 @@
       };
       Object.entries(checkMap).forEach(([key, bal]) => {
         if (!depletions[key] && (startBal[key] || 0) > 0 && bal <= 0) {
-          depletions[key] = {
-            year,
-            age: year - (key.startsWith(p1name) ? p1DOB : p2DOB),
-          };
+          const age = year - (key.startsWith(p1name) ? p1DOB : p2DOB);
+          depletions[key] = { year, age };
+          annotations.push({ year, person: key.startsWith(p1name) ? 'p1' : 'p2',
+            event: 'depletion', message: `${key} depleted` });
         }
       });
 
@@ -438,6 +457,10 @@
 
       const cashflowShortfall = Math.max(0, target - householdNetCashflow);
       const cashflowSurplus   = Math.max(0, householdNetCashflow - target);
+
+      if (cashflowShortfall > 0)
+        annotations.push({ year, person: 'both', event: 'shortfall',
+          message: `Spending target unmet — shortfall of £${Math.round(cashflowShortfall).toLocaleString('en-GB')}` });
 
       const p1NaturalIncome = p1SP + p1SalInc + p1IntDraw + p1Divs;    
       const p2NaturalIncome =  p2SP + p2SalInc + p2IntDraw + p2Divs;
@@ -508,7 +531,7 @@
       cumInfl *= (1 + inflation); // advance AFTER this year's figures are recorded
     }
 
-    return { rows, depletions };
+    return { rows, depletions, annotations };
   }
 
   window.RetireEngine = { runProjection };

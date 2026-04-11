@@ -3,6 +3,7 @@
 
   // State shared within this module
   let _rows       = [];
+  let _annotations = [];
   let _viewPerson = 'both';
   let _useReal    = true;
   let _activeResultsTab = 'income';
@@ -28,9 +29,10 @@
   // ─────────────────────────────────────────────
   // PUBLIC: receive new projection results
   // ─────────────────────────────────────────────
-  function setResults(rows) {
-    _rows = rows;
-    window._debugRows = rows; // TEMP DEBUG — remove after diagnosis
+  function setResults(result) {
+    _rows        = result.rows || result; // backwards-compat if bare array passed
+    _annotations = result.annotations || [];
+    window._debugRows = _rows; // TEMP DEBUG — remove after diagnosis
   }
 
   // ─────────────────────────────────────────────
@@ -541,6 +543,85 @@
   }
 
   // ─────────────────────────────────────────────
+  // ENGINE NOTES OVERLAY
+  // ─────────────────────────────────────────────
+  let _overlayOpen = false;
+
+  const ANNOTATION_GROUPS = [
+    { event: 'cash_surplus', emoji: '💰', label: 'Surplus cash' },
+    { event: 'sp_starts',   emoji: '🏦', label: 'State Pension' },
+    { event: 'salary_stop', emoji: '💼', label: 'Salary stops' },
+    { event: 'shortfall',   emoji: '⚠️',  label: 'Shortfall years' },
+    { event: 'depletion',   emoji: '🛑', label: 'Depletions' },
+  ];
+
+  function renderAnnotationsOverlay() {
+    const panel = document.getElementById('results-panel-wealth');
+    if (!panel) return;
+
+    // Remove any existing overlay
+    const existing = panel.querySelector('.engine-notes-overlay');
+    if (existing) existing.remove();
+    if (!_overlayOpen) return;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'engine-notes-overlay';
+    overlay.innerHTML = `
+      <div class="engine-notes-overlay__header">
+        <span>Engine notes</span>
+        <button class="engine-notes-overlay__close" aria-label="Close">✕</button>
+      </div>
+      <div class="engine-notes-overlay__body"></div>
+    `;
+
+    const body = overlay.querySelector('.engine-notes-overlay__body');
+
+    ANNOTATION_GROUPS.forEach(({ event, emoji, label }) => {
+      const items = _annotations.filter(a => a.event === event);
+      if (!items.length) return;
+
+      const group = document.createElement('div');
+      group.className = 'engine-notes-group';
+
+      const heading = document.createElement('div');
+      heading.className = 'engine-notes-group__heading';
+      heading.textContent = `${emoji} ${label}`;
+      group.appendChild(heading);
+
+      items.forEach(a => {
+        const row = document.createElement('div');
+        row.className = 'engine-notes-group__row';
+        row.innerHTML = `<span class="engine-notes-year">${a.year}</span><span>${a.message}</span>`;
+        group.appendChild(row);
+      });
+
+      body.appendChild(group);
+    });
+
+    // Close on ✕
+    overlay.querySelector('.engine-notes-overlay__close').addEventListener('click', () => {
+      _overlayOpen = false;
+      renderAnnotationsOverlay();
+      // Re-render legend so button label reflects closed state
+      if (_wealthChart) renderWealthLegend(_wealthChart);
+    });
+
+    // Close on click outside overlay
+    setTimeout(() => {
+      document.addEventListener('click', function outsideClick(e) {
+        if (!overlay.contains(e.target)) {
+          _overlayOpen = false;
+          renderAnnotationsOverlay();
+          if (_wealthChart) renderWealthLegend(_wealthChart);
+          document.removeEventListener('click', outsideClick);
+        }
+      });
+    }, 0);
+
+    panel.appendChild(overlay);
+  }
+
+  // ─────────────────────────────────────────────
   // WEALTH LEGEND
   // ─────────────────────────────────────────────
   function buildWealthTooltip(label) {
@@ -562,6 +643,20 @@
     intro.className = 'chart-intro';
     intro.textContent = 'Shows portfolio balance by wrapper at end of each year. Click any legend item to show or hide it in the chart.';
     host.appendChild(intro);
+
+    // Engine notes button — only shown when there are annotations
+    if (_annotations.length > 0) {
+      const notesBtn = document.createElement('button');
+      notesBtn.className = 'engine-notes-btn' + (_overlayOpen ? ' is-active' : '');
+      notesBtn.textContent = `ⓘ Engine notes (${_annotations.length})`;
+      notesBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        _overlayOpen = !_overlayOpen;
+        renderAnnotationsOverlay();
+        renderWealthLegend(chart);
+      });
+      host.appendChild(notesBtn);
+    }
 
     const header = document.createElement('div');
     header.className = 'sidebar-legend__header';

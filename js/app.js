@@ -663,7 +663,7 @@
     syncSetupToAssumptions();
     const result = E.runProjection(gatherInputs(), state.portfolioAccounts);
     if (!result) return;
-    CR.setResults(result.rows);
+    CR.setResults(result);
     CR.renderAlerts(result.depletions);
     CR.renderMetrics();
     CR.renderCharts();
