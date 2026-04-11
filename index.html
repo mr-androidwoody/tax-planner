@@ -558,7 +558,7 @@
               <div class="hint" style="margin-top:6px">Uprating affects the Personal Allowance, basic and higher-rate thresholds, and the CGT annual exempt amount.</div>
             </div>
             <div class="assump-section">
-              <p class="assump-section__label"><span class="assump-tooltip-anchor">GIA dividends<span class="assump-tooltip">The annual dividend yield on GIA equity holdings. Treated as taxable income each year — not reinvested. Drawn before any wrapper withdrawals are made. Note: currently assumes all GIA dividends are distributed. Accumulating funds that reinvest dividends into NAV are not yet modelled separately.</span></span></p>
+              <p class="assump-section__label"><span class="assump-tooltip-anchor">GIA dividends<span class="assump-tooltip">The annual dividend yield on GIA equity holdings. In pay-out mode, dividends are treated as taxable income each year and drawn before any wrapper withdrawals. In reinvest mode, dividends are assumed to compound inside the GIA (e.g. accumulation units) — no dividend income is recognised and the full total-return growth rate applies to the full balance. Note: reinvest mode does not model the notional tax on accumulation fund income; it is a planning approximation.</span></span></p>
               <div class="assump-section__body">
                 <div class="assump-inline-field">
                   <div class="assump-inline-field__input">
@@ -568,7 +568,15 @@
                       <button class="stepper-btn" data-step-for="dividendYield" data-step-direction="-1" type="button">&#x25BC;</button>
                     </div>
                   </div>
-                  <span class="assump-inline-field__hint">Dividends treated as taxable income each year (not reinvested).</span>
+                  <span class="assump-inline-field__hint">% annual dividend yield on GIA balance</span>
+                </div>
+                <div class="assump-radio-group" style="margin-top:8px">
+                  <label class="assump-radio-label">
+                    <input type="radio" name="dividendMode" id="dividendPayout" value="payout" checked> <strong>Pay out</strong> <span class="assump-inline-field__hint">taxable income each year</span>
+                  </label>
+                  <label class="assump-radio-label">
+                    <input type="radio" name="dividendMode" id="dividendReinvest" value="reinvest"> <strong>Reinvest</strong> <span class="assump-inline-field__hint">compound inside GIA (accumulation)</span>
+                  </label>
                 </div>
               </div>
             </div>
