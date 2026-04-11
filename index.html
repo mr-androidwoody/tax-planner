@@ -541,7 +541,7 @@
               <span class="assump-tooltip-anchor">Tax<span class="assump-tooltip">Controls how UK tax thresholds are uprated over the projection. Frozen means fiscal drag erodes real allowances each year; uprating preserves them in line with inflation.</span></span>
             </div>
             <div class="assump-section">
-              <p class="assump-section__label"><span class="assump-tooltip-anchor">Tax threshold uprating<span class="assump-tooltip">Applies to the Personal Allowance, basic and higher-rate thresholds, and the CGT annual exempt amount.</span></span></p>
+              <p class="assump-section__label">Tax threshold uprating</p>
               <div class="assump-radio-group">
                 <label class="assump-radio-label">
                   <input type="radio" name="thresholdMode" id="thresholdFrozen" value="frozen" checked> <strong>Frozen</strong> <span class="assump-inline-field__hint">fiscal drag applies</span>
@@ -555,9 +555,10 @@
                   <input type="radio" name="thresholdMode" id="thresholdAlways" value="always"> <strong>Always uprated</strong> <span class="assump-inline-field__hint">with inflation</span>
                 </label>
               </div>
+              <div class="hint" style="margin-top:6px">Uprating affects the Personal Allowance, basic and higher-rate thresholds, and the CGT annual exempt amount.</div>
             </div>
             <div class="assump-section">
-              <p class="assump-section__label"><span class="assump-tooltip-anchor">GIA dividends<span class="assump-tooltip">The annual dividend yield on GIA equity holdings. In pay-out mode, dividends are treated as taxable income each year and drawn before any wrapper withdrawals. In reinvest mode, dividends are assumed to compound inside the GIA (e.g. accumulation units) — no dividend income is recognised and the full total-return growth rate applies to the full balance. Note: reinvest mode does not model the notional tax on accumulation fund income; it is a planning approximation.</span></span></p>
+              <p class="assump-section__label"><span class="assump-tooltip-anchor">GIA dividends<span class="assump-tooltip">Pay out: dividends are taxable income each year, always paid regardless of whether they breach the spending target — any excess goes to cash. Reinvest: dividends compound inside the GIA (accumulation units); no income is recognised and the full growth rate applies to the full balance.</span></span></p>
               <div class="assump-section__body">
                 <div class="assump-inline-field">
                   <div class="assump-inline-field__input">
