@@ -92,8 +92,10 @@
 
     const totalIncome = nonSavings + savings + dividends;
     if (totalIncome <= 0) {
-      return { tax: 0, taxableIncomeAfterPA: 0, paUsed: 0,
-               nsNet: 0, savNet: 0, divNet: 0, savTaxable: 0, divTaxable: 0 };
+      return { tax: 0, taxableIncomeAfterPA: 0, pa: 0, paUsed: 0,
+               nsNet: 0, savNet: 0, divNet: 0,
+               srsCover: 0, savTaxable: 0, divTaxable: 0,
+               psa: 0, nsTax: 0, savTax: 0, divTax: 0 };
     }
 
     const pa = totalIncome > TAX.taperStart
@@ -150,8 +152,13 @@
     return {
       tax: nsTax + savTax + divTax,
       taxableIncomeAfterPA: nsNet + savNet + divNet,
+      pa,
       paUsed: pa - paRem,
-      nsNet, savNet, divNet, savTaxable, divTaxable,
+      nsNet, savNet, divNet,
+      srsCover,
+      savTaxable, divTaxable,
+      psa,
+      nsTax, savTax, divTax,
     };
   }
 
