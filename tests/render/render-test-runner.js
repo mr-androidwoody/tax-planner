@@ -46,8 +46,11 @@
 })();
 
 // ─────────────────────────────────────────────
-// ASSERTION HELPER
+// ASSERTION HELPER + SUITE RUNNER + FIXTURES
+// All wrapped in an IIFE so nothing leaks to global scope.
+// Only window.RenderTestRunner is exposed.
 // ─────────────────────────────────────────────
+(function() {
 const TOL = 0.01; // default absolute tolerance for floating point comparisons
 
 /**
@@ -283,10 +286,11 @@ function makeBobbyFixture() {
   ];
 }
 
-window.RenderTestRunner = {
-  test,
-  runSuite,
-  makeFixture,
-  makeBobbyFixture,
-  TOL,
-};
+  window.RenderTestRunner = {
+    test,
+    runSuite,
+    makeFixture,
+    makeBobbyFixture,
+    TOL,
+  };
+})(); // end IIFE
