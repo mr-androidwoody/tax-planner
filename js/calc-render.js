@@ -557,14 +557,12 @@
 
   function fmt0(n) { return '£' + Math.round(n).toLocaleString('en-GB'); }
 
-  // Inject ⓘ button into .chart-wrap top-right. chartId = 'income' | 'wealth'
+  // Inject ⓘ button into chart header anchor. chartId = 'income' | 'wealth'
   function renderInsightButton(chartId, hasContent) {
-    const wrap = document.getElementById(chartId === 'income' ? 'incomeChart' : 'wealthChart')
-      ?.closest('.chart-wrap');
-    if (!wrap) return;
+    const anchor = document.getElementById(chartId === 'income' ? 'income-insight-anchor' : 'wealth-insight-anchor');
+    if (!anchor) return;
 
-    const existing = wrap.querySelector('.chart-insight-btn');
-    if (existing) existing.remove();
+    anchor.innerHTML = '';
     if (!hasContent) return;
 
     const isOpen = chartId === 'income' ? _incomePaneOpen : _wealthPaneOpen;
@@ -572,15 +570,15 @@
     const btn = document.createElement('button');
     btn.className = 'chart-insight-btn' + (isOpen ? ' is-active' : '');
     btn.setAttribute('aria-label', 'Show chart insights');
-    btn.innerHTML = `<span class="chart-insight-btn__icon">ⓘ</span>`;
+    btn.innerHTML = `<span class="chart-insight-btn__icon">ⓘ</span><span class="chart-insight-btn__label">${chartId === 'income' ? 'Shortfall info' : 'Insights'}</span>`;
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       if (chartId === 'income') _incomePaneOpen = !_incomePaneOpen;
       else _wealthPaneOpen = !_wealthPaneOpen;
       renderInsightPane(chartId);
-      btn.classList.toggle('is-active');
+      renderInsightButton(chartId, true);
     });
-    wrap.appendChild(btn);
+    anchor.appendChild(btn);
   }
 
   // Build and inject (or remove) the insight pane over the chart canvas
@@ -588,7 +586,6 @@
     const wrap = document.getElementById(chartId === 'income' ? 'incomeChart' : 'wealthChart')
       ?.closest('.chart-wrap');
     if (!wrap) return;
-
     const existing = wrap.querySelector('.chart-insight-pane');
     if (existing) existing.remove();
 
