@@ -15,7 +15,8 @@
   // ─────────────────────────────────────────────
   // HELPERS
   // ─────────────────────────────────────────────
-  const adj = (val, row) => _useReal ? val * row.realDeflator : val;
+  const L   = window.RetireCalcRenderLogic;
+  const adj = (val, row) => L.adj(val, row, _useReal);
   const fmt = n => D.formatMoney(n);
 
   function getNames() {
@@ -120,23 +121,7 @@
   function renderMetrics() {
     if (!_rows.length) return;
 
-    const totalTax = _rows.reduce((s, r) => {
-      const t = _viewPerson === 'p1' ? r.p1IncomeTax + r.p1CGT + r.p1NI
-              : _viewPerson === 'p2' ? r.p2IncomeTax + r.p2CGT + r.p2NI
-              : r.p1IncomeTax + r.p1CGT + r.p1NI + r.p2IncomeTax + r.p2CGT + r.p2NI;
-      return s + adj(t, r);
-    }, 0);
-
-    const { lifetimeTax: _lt, lifetimeGross: _lg } = _rows.reduce((s, r) => {
-      const tax   = _viewPerson === 'p1' ? r.p1IncomeTax + r.p1CGT + r.p1NI
-                  : _viewPerson === 'p2' ? r.p2IncomeTax + r.p2CGT + r.p2NI
-                  : r.p1IncomeTax + r.p1CGT + r.p1NI + r.p2IncomeTax + r.p2CGT + r.p2NI;
-      const gross = _viewPerson === 'p1' ? (r.p1GrossIncome  || 0)
-                  : _viewPerson === 'p2' ? (r.p2GrossIncome  || 0)
-                  : (r.householdGrossIncome || 0);
-      return { lifetimeTax: s.lifetimeTax + adj(tax, r), lifetimeGross: s.lifetimeGross + adj(gross, r) };
-    }, { lifetimeTax: 0, lifetimeGross: 0 });
-    const avgRate = _lg > 0 ? _lt / _lg : 0;
+    const { totalTax, avgRate, lastPortfolio: _lp } = L.buildMetrics(_rows, _viewPerson, _useReal);
 
     const spending    = D.parseCurrency(document.getElementById('spending')?.value || '0');
     const stepDownPct = parseFloat(document.getElementById('stepDownPct')?.value) || 0;
@@ -149,7 +134,6 @@
       incomeTargetStr = fmtK(spending) + ' per year';
     }
 
-    const last = _rows[_rows.length - 1];
     const mTax    = document.getElementById('m-tax');
     const mRate   = document.getElementById('m-rate');
     const mTarget = document.getElementById('m-income-target');
@@ -157,7 +141,7 @@
     if (mTax)    mTax.textContent    = fmt(totalTax);
     if (mRate)   mRate.textContent   = (avgRate * 100).toFixed(1) + '%';
     if (mTarget) mTarget.textContent = incomeTargetStr;
-    if (mPort)   mPort.textContent   = fmt(adj(last.totalPortfolio, last));
+    if (mPort)   mPort.textContent   = fmt(_lp);
   }
 
   // ─────────────────────────────────────────────
@@ -633,88 +617,19 @@
     const labels = _rows.map(r => r.year);
     const { p1, p2 } = getNames();
 
-    const COLOURS = {
-      p1SP: '#4472C4',
-      p2SP: '#70AD47',
-      p1SIPP: '#ED7D31',
-      p2SIPP: '#FFC000',
-      p1ISA: '#5B9BD5',
-      p2ISA: '#2E86C1',
-      p1GIA: '#A9D18E',
-      p2GIA: '#78C86A',
-      intDraw: '#9B59B6',
-      p1Divs: '#27AE60',
-      p2Divs: '#E74C3C',
-      p1Cash: '#B0B0B0',
-      salary: '#FF7F7F',
-      target: '#1F2937',
-      net: '#2563EB',
-      shortfall: '#DC2626',
-      surplus: '#16A34A',
-    };
-
-    // ds builds a dataset for the income chart.
-    // p1fn / p2fn extract the p1 and p2 portions separately so the
-    // _viewPerson toggle can show only the relevant person's contribution
-    // while always measuring shortfall against the full household target.
-    function ds(label, p1fn, p2fn, color) {
-      const both = r => (p1fn(r) || 0) + (p2fn(r) || 0);
-      const fn   = _viewPerson === 'p1' ? p1fn
-                 : _viewPerson === 'p2' ? p2fn
-                 : both;
-      return {
-        label,
-        data: _rows.map(r => adj(fn(r) || 0, r) / 1000),
-        backgroundColor: color,
-        stack: 'income',
-        _lifetimeValue: _rows.reduce((s, r) => s + adj(fn(r) || 0, r), 0),
-      };
-    }
-
     // ─────────────────────────────────────────────
     // INCOME CHART
-    // One dataset per source type; filtered by _viewPerson.
-    // Shortfall always measured against full household target (65k).
-    // Red shortfall fills the gap when visible income can't meet the target.
     // ─────────────────────────────────────────────
 
-    // Full household target — always the 65k line regardless of person toggle
+    // Full household target — always used for shortfall regardless of person toggle
     const _targetData      = _rows.map(r => adj(r.target || 0, r) / 1000);
-    // Engine shortfall — gap between visible person's gross income and full household target
-    _engineShortfall = _rows.map(r => {
-      const p1Gross = (r.p1SP || 0) + (r.p1SalInc || 0) + (r.p1Drawn.SIPP || 0) +
-                      (r.p1Drawn.ISA || 0) + (r.p1Drawn.GIA || 0) +
-                      (r.p1IntDraw || 0) + (r.p1DivsUsed || 0) + (r.p1Drawn.Cash || 0);
-      const p2Gross = (r.p2SP || 0) + (r.p2SalInc || 0) + (r.p2Drawn.SIPP || 0) +
-                      (r.p2Drawn.ISA || 0) + (r.p2Drawn.GIA || 0) +
-                      (r.p2IntDraw || 0) + (r.p2DivsUsed || 0) + (r.p2Drawn.Cash || 0);
-      const visibleGross = _viewPerson === 'p1' ? p1Gross
-                         : _viewPerson === 'p2' ? p2Gross
-                         : p1Gross + p2Gross;
-      return adj(Math.max(0, (r.target || 0) - visibleGross), r) / 1000;
-    });
 
-    let sets = [];
-    sets.push(ds('Salary',        r => r.p1SalInc     || 0, r => r.p2SalInc     || 0, COLOURS.salary));
-    sets.push(ds('Cash',          r => r.p1Drawn.Cash || 0, r => r.p2Drawn.Cash || 0, COLOURS.p1Cash));
-    sets.push(ds('Interest',      r => r.p1IntDraw    || 0, r => r.p2IntDraw    || 0, COLOURS.intDraw));
-    sets.push(ds('Dividends',     r => r.p1DivsUsed  || 0, r => r.p2DivsUsed  || 0, COLOURS.p1Divs));
-    sets.push(ds('GIA',           r => r.p1Drawn.GIA  || 0, r => r.p2Drawn.GIA  || 0, COLOURS.p1GIA));
-    sets.push(ds('ISA',           r => r.p1Drawn.ISA  || 0, r => r.p2Drawn.ISA  || 0, COLOURS.p1ISA));
-    sets.push(ds('SIPP / WP',     r => r.p1Drawn.SIPP || 0, r => r.p2Drawn.SIPP || 0, COLOURS.p1SIPP));
-    sets.push(ds('State Pension', r => r.p1SP         || 0, r => r.p2SP         || 0, COLOURS.p1SP));
+    const sets = L.buildIncomeDatasets(_rows, _viewPerson, _useReal);
 
-    // Red shortfall — gap between visible income and full household target
-    // Seeded from engine shortfall (zero in funded years); grows as sources are toggled off
-    sets.push({
-      label: 'Shortfall',
-      data: _engineShortfall.slice(),
-      backgroundColor: COLOURS.shortfall,
-      stack: 'income',
-    });
+    // Extract the engine shortfall from the Shortfall dataset for legend use
+    _engineShortfall = sets[sets.length - 1].data.slice();
 
-    // Recompute shortfall when sources are toggled on/off
-    // Always measures against the full household target
+    // Recompute shortfall when sources are toggled on/off in the legend
     function recomputeShortfall(chart) {
       const sfIdx = chart.data.datasets.findIndex(d => d.label === 'Shortfall');
       if (sfIdx < 0) return;
@@ -776,70 +691,18 @@
     }
 
     // ─────────────────────────────────────────────
-    // TAX / RATE DATA (hoisted — used by both Gross vs Net and Tax charts)
+    // TAX / RATE DATA — used by both Gross vs Net and Tax charts
     // ─────────────────────────────────────────────
-    const taxData = _rows.map(r => {
-      const t = _viewPerson === 'p1'
-        ? r.p1IncomeTax + r.p1CGT + r.p1NI
-        : _viewPerson === 'p2'
-          ? r.p2IncomeTax + r.p2CGT + r.p2NI
-          : r.p1IncomeTax + r.p1CGT + r.p1NI + r.p2IncomeTax + r.p2CGT + r.p2NI;
-      return Math.round(adj(t, r));
-    });
-
-    const rateData = _rows.map(r => {
-      const tax = _viewPerson === 'p1'
-        ? r.p1IncomeTax + r.p1CGT + r.p1NI
-        : _viewPerson === 'p2'
-          ? r.p2IncomeTax + r.p2CGT + r.p2NI
-          : r.p1IncomeTax + r.p1CGT + r.p1NI + r.p2IncomeTax + r.p2CGT + r.p2NI;
-
-      const gross = _viewPerson === 'p1'
-        ? (r.p1GrossIncome || 0)
-        : _viewPerson === 'p2'
-          ? (r.p2GrossIncome || 0)
-          : (r.householdGrossIncome || 0);
-
-      return gross > 0 ? parseFloat((tax / gross * 100).toFixed(1)) : 0;
-    });
+    const { taxData, rateData } = L.buildTaxChartData(_rows, _viewPerson, _useReal);
 
     // ─────────────────────────────────────────────
     // GROSS VS NET INCOME CHART
     // Two segments only: Net income (bottom) + Tax (top).
-    // Bar total = gross drawn (~£65k target). Tax segment shows what's lost.
+    // Bar total = gross drawn. Tax segment shows what's lost.
     // ─────────────────────────────────────────────
     const spendingCtx = document.getElementById('spendingChart')?.getContext('2d');
     if (spendingCtx) {
-      const grossNetSets = [];
-
-      const grossFn = r => _viewPerson === 'p1' ? (r.p1GrossIncome || 0)
-                        : _viewPerson === 'p2' ? (r.p2GrossIncome || 0)
-                        : (r.householdGrossIncome || 0);
-
-      const taxFn = r => _viewPerson === 'p1' ? (r.p1IncomeTax || 0) + (r.p1CGT || 0) + (r.p1NI || 0)
-                       : _viewPerson === 'p2' ? (r.p2IncomeTax || 0) + (r.p2CGT || 0) + (r.p2NI || 0)
-                       : (r.p1IncomeTax || 0) + (r.p1CGT || 0) + (r.p1NI || 0) + (r.p2IncomeTax || 0) + (r.p2CGT || 0) + (r.p2NI || 0);
-
-      const netFn = r => grossFn(r) - taxFn(r);
-
-      grossNetSets.push({
-        label: 'Net income',
-        data: _rows.map(r => adj(netFn(r), r) / 1000),
-        backgroundColor: '#4472C4',
-        stack: 'gross',
-        type: 'bar',
-        _lifetimeValue: _rows.reduce((s, r) => s + adj(netFn(r), r), 0),
-      });
-
-      grossNetSets.push({
-        label: 'Tax',
-        data: _rows.map(r => adj(taxFn(r), r) / 1000),
-        backgroundColor: '#C55A11',
-        stack: 'gross',
-        type: 'bar',
-        _lifetimeValue: _rows.reduce((s, r) => s + adj(taxFn(r), r), 0),
-        _fixed: true,
-      });
+      const grossNetSets = L.buildGrossNetDatasets(_rows, _viewPerson, _useReal);
 
       if (_spendingChart) _spendingChart.destroy();
       _spendingChart = new Chart(spendingCtx, {
@@ -988,79 +851,14 @@
     // ─────────────────────────────────────────────
     const wealthCtx = document.getElementById('wealthChart')?.getContext('2d');
     if (wealthCtx) {
-      const wealthData = [
-        {
-          label: `${p1} Cash`,
-          data: _rows.map(r => Math.round(adj(r.snap.p1Cash || 0, r))),
-          backgroundColor: '#B0B0B0',
-          stack: 'wealth',
-        },
-        {
-          label: `${p1} Interest`,
-          data: _rows.map(r => Math.round(adj(r.snap.p1IntBal || 0, r))),
-          backgroundColor: '#9B59B6',
-          stack: 'wealth',
-        },
-        {
-          label: `${p1} GIA`,
-          data: _rows.map(r => Math.round(adj(r.snap.p1GIA || 0, r))),
-          backgroundColor: '#A9D18E',
-          stack: 'wealth',
-        },
-        {
-          label: `${p1} SIPP / WP`,
-          data: _rows.map(r => Math.round(adj(r.snap.p1SIPP || 0, r))),
-          backgroundColor: '#ED7D31',
-          stack: 'wealth',
-        },
-        {
-          label: `${p1} ISA`,
-          data: _rows.map(r => Math.round(adj(r.snap.p1ISA || 0, r))),
-          backgroundColor: '#5B9BD5',
-          stack: 'wealth',
-        },
-        {
-          label: `${p2} Cash`,
-          data: _rows.map(r => Math.round(adj(r.snap.p2Cash || 0, r))),
-          backgroundColor: '#D0D0D0',
-          stack: 'wealth',
-        },
-        {
-          label: `${p2} Interest`,
-          data: _rows.map(r => Math.round(adj(r.snap.p2IntBal || 0, r))),
-          backgroundColor: '#C39BD3',
-          stack: 'wealth',
-        },
-        {
-          label: `${p2} GIA`,
-          data: _rows.map(r => Math.round(adj(r.snap.p2GIA || 0, r))),
-          backgroundColor: '#78C86A',
-          stack: 'wealth',
-        },
-        {
-          label: `${p2} SIPP / WP`,
-          data: _rows.map(r => Math.round(adj(r.snap.p2SIPP || 0, r))),
-          backgroundColor: '#FFC000',
-          stack: 'wealth',
-        },
-        {
-          label: `${p2} ISA`,
-          data: _rows.map(r => Math.round(adj(r.snap.p2ISA || 0, r))),
-          backgroundColor: '#2E86C1',
-          stack: 'wealth',
-        },
-      ];
+      const wealthDatasets = L.buildWealthDatasets(_rows, _viewPerson, _useReal, p1, p2);
 
       if (_wealthChart) _wealthChart.destroy();
       _wealthChart = new Chart(wealthCtx, {
         type: 'bar',
         data: {
           labels,
-          datasets: _viewPerson === 'p1'
-            ? wealthData.slice(0, 5)
-            : _viewPerson === 'p2'
-              ? wealthData.slice(5)
-              : wealthData,
+          datasets: wealthDatasets,
         },
         options: {
           responsive: true,
@@ -1097,47 +895,6 @@
     }
   }
 
-  function _renderWealthChart(labels, p1, p2) {
-    if (!p1 || !p2) { const n = getNames(); p1 = n.p1; p2 = n.p2; }
-    function wds(label, fn, color) {
-      return { label, data: _rows.map(r => Math.round(adj(fn(r.snap), r) / 1000)), backgroundColor: color, stack: 'wealth' };
-    }
-    const datasets = [];
-    if (_viewPerson === 'both' || _viewPerson === 'p1') {
-      datasets.push(wds(`SIPP – ${p1}`,           s => s.p1SIPP,        '#E84D4D'));
-      datasets.push(wds(`ISA – ${p1}`,            s => s.p1ISA,         '#4472C4'));
-      datasets.push(wds(`GIA – ${p1}`,            s => s.p1GIA,         '#FFC000'));
-      datasets.push(wds(`Interest accts – ${p1}`, s => s.p1IntBal || 0, '#9B59B6'));
-      datasets.push(wds(`Cash – ${p1}`,           s => s.p1Cash,        '#B0B0B0'));
-    }
-    if (_viewPerson === 'both' || _viewPerson === 'p2') {
-      datasets.push(wds(`SIPP – ${p2}`,           s => s.p2SIPP,        '#FF8C8C'));
-      datasets.push(wds(`ISA – ${p2}`,            s => s.p2ISA,         '#5B9BD5'));
-      datasets.push(wds(`GIA – ${p2}`,            s => s.p2GIA,         '#FFD966'));
-      datasets.push(wds(`Interest accts – ${p2}`, s => s.p2IntBal || 0, '#C39BD3'));
-      datasets.push(wds(`Cash – ${p2}`,           s => s.p2Cash,        '#D0D0D0'));
-    }
-    const wCtx = document.getElementById('wealthChart')?.getContext('2d');
-    if (!wCtx) return;
-    if (_wealthChart) _wealthChart.destroy();
-    _wealthChart = new Chart(wCtx, {
-      type: 'bar',
-      data: { labels, datasets },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: {
-          legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
-          tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${D.formatMoney((ctx.parsed.y || 0) * 1000)}` } },
-        },
-        scales: {
-          x: { stacked: true, ticks: { font: { size: 10 }, maxRotation: 45 } },
-          y: { stacked: true,
-            title: { display: true, text: _useReal ? 'Real £k' : 'Nominal £k', font: { size: 11 } },
-            ticks: { font: { size: 11 }, callback: v => v + 'k' } },
-        },
-      },
-    });
-  }
 
   // ─────────────────────────────────────────────
   // TABLES
@@ -1145,24 +902,20 @@
   function renderTables() {
     if (!_rows.length) return;
     const f = n => D.formatMoney(n);
-    const a = (val, row) => _useReal ? val * row.realDeflator : val;
     const { p1, p2 } = getNames();
 
     // Tax table
     const taxTbl = document.getElementById('tax-table');
     if (taxTbl) {
-      let cumTax = 0;
+      const taxRows = L.buildTableTaxRows(_rows, _useReal);
       let grandWI = 0, grandWC = 0, grandWN = 0, grandHI = 0, grandHC = 0, grandHN = 0;
       let body = '<tbody>';
-      _rows.forEach(r => {
-        const wi = a(r.p1IncomeTax, r), wc = a(r.p1CGT, r), wn = a(r.p1NI || 0, r);
-        const hi = a(r.p2IncomeTax, r), hc = a(r.p2CGT, r), hn = a(r.p2NI || 0, r);
-        const wt = wi + wc + wn, ht = hi + hc + hn, hh = wt + ht;
-        cumTax += hh;
+      taxRows.forEach(row => {
+        const { year, p1Age, p2Age, wi, wc, wn, wt, hi, hc, hn, ht, hh, cumTax } = row;
         grandWI += wi; grandWC += wc; grandWN += wn;
         grandHI += hi; grandHC += hc; grandHN += hn;
         body += `<tr>
-          <td>${r.year}</td><td>${r.p1Age}</td><td>${r.p2Age}</td>
+          <td>${year}</td><td>${p1Age}</td><td>${p2Age}</td>
           <td>${f(wi)}</td><td>${f(wc)}</td><td>${f(wn)}</td><td>${f(wt)}</td>
           <td>${f(hi)}</td><td>${f(hc)}</td><td>${f(hn)}</td><td>${f(ht)}</td>
           <td>${f(hh)}</td><td>${f(cumTax)}</td>
@@ -1186,18 +939,21 @@
     // Wealth table
     const wTbl = document.getElementById('wealth-table');
     if (wTbl) {
+      const wealthRows = L.buildTableWealthRows(_rows, _useReal);
       let body = '<tbody>';
-      _rows.forEach(r => {
-        const s  = r.snap;
-        const av = v => a(v, r);
-        const cell = v => { const adj2 = a(v, r); return `<td${adj2 < 1 && v > 0 ? ' class="depleted"' : ''}>${f(adj2)}</td>`; };
-        const wTotal = av((s.p1Cash||0)+(s.p1IntBal||0)+(s.p1GIA||0)+(s.p1SIPP||0)+(s.p1ISA||0)
-                         +(s.p2Cash||0)+(s.p2IntBal||0)+(s.p2GIA||0)+(s.p2SIPP||0)+(s.p2ISA||0));
+      wealthRows.forEach(row => {
+        const { year, p1Age, p2Age,
+                p1Cash, p1IntBal, p1GIA, p1SIPP, p1ISA,
+                p2Cash, p2IntBal, p2GIA, p2SIPP, p2ISA, total } = row;
+        // Depleted marker: cell value rounds to zero but underlying snap was positive
+        const cell = (adjVal, snapVal) =>
+          `<td${adjVal < 1 && snapVal > 0 ? ' class="depleted"' : ''}>${f(adjVal)}</td>`;
+        const s = _rows.find(r => r.year === year).snap;
         body += `<tr>
-          <td>${r.year}</td><td>${r.p1Age}</td><td>${r.p2Age}</td>
-          ${cell(s.p1Cash)}${cell(s.p1IntBal||0)}${cell(s.p1GIA)}${cell(s.p1SIPP)}${cell(s.p1ISA)}
-          ${cell(s.p2Cash)}${cell(s.p2IntBal||0)}${cell(s.p2GIA)}${cell(s.p2SIPP)}${cell(s.p2ISA)}
-          <td>${f(wTotal)}</td>
+          <td>${year}</td><td>${p1Age}</td><td>${p2Age}</td>
+          ${cell(p1Cash, s.p1Cash)}${cell(p1IntBal, s.p1IntBal||0)}${cell(p1GIA, s.p1GIA)}${cell(p1SIPP, s.p1SIPP)}${cell(p1ISA, s.p1ISA)}
+          ${cell(p2Cash, s.p2Cash)}${cell(p2IntBal, s.p2IntBal||0)}${cell(p2GIA, s.p2GIA)}${cell(p2SIPP, s.p2SIPP)}${cell(p2ISA, s.p2ISA)}
+          <td>${f(total)}</td>
         </tr>`;
       });
       body += '</tbody>';
