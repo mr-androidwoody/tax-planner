@@ -234,9 +234,13 @@
       } else if (shortfall > 0) {
         // Tax-aware mode — only runs when there is a spending shortfall to fill
 
-        // Step 1: PA headroom — deduct all known income that consumes PA
-        const p1GuaranteedNS = p1SP + p1SalInc + p1IntTaxable + p1Divs;
-        const p2GuaranteedNS = p2SP + p2SalInc + p2IntTaxable + p2Divs;
+        // Step 1: PA headroom — only non-savings income (SP, salary) directly
+        // competes with SIPP taxable income for the same PA slice.
+        // Interest and dividends consume remaining PA after non-savings, but
+        // calcIncomeTaxDetailed handles that ordering correctly; we just need
+        // an accurate estimate of how much PA is free for a SIPP draw.
+        const p1GuaranteedNS = p1SP + p1SalInc;
+        const p2GuaranteedNS = p2SP + p2SalInc;
         const p1PAHeadroom   = Math.max(0, effThresholds.PA - p1GuaranteedNS);
         const p2PAHeadroom   = Math.max(0, effThresholds.PA - p2GuaranteedNS);
 

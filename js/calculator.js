@@ -109,8 +109,11 @@
     const srsCover   = Math.min(savNet, srsAvail);
     const savAfterSRS = savNet - srsCover;
 
-    const psa = (nonSavings + savings + dividends) <= TAX.basicLimit          ? TAX.psa.basic
-              : (nonSavings + savings + dividends) <= TAX.additionalThreshold ? TAX.psa.higher
+    // PSA tier is determined by tax band, which depends on taxable income after PA,
+    // compared against band widths (basicLimit - PA = basic band ceiling after PA).
+    const taxableForPSA = nsNet + savNet + divNet;
+    const psa = taxableForPSA <= (TAX.basicLimit - TAX.PA)          ? TAX.psa.basic
+              : taxableForPSA <= (TAX.additionalThreshold - TAX.PA) ? TAX.psa.higher
               : TAX.psa.additional;
     const psaCover   = Math.min(savAfterSRS, psa);
     const savTaxable = Math.max(0, savAfterSRS - psaCover);
