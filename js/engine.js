@@ -18,6 +18,7 @@
       thresholdMode, thresholdFromYear,
       bniEnabled, bniP1GIA, bniP2GIA,
       dividendYield,
+      dividendMode,
       withdrawalMode,
       p1Order, p2Order,
     } = inputs;
@@ -85,21 +86,26 @@
       const effThresholds = C.upratedTaxRules(baseRules, uprateFactor);
       const effCGTExempt  = effThresholds.cgtExempt;
 
-      // GIA dividends — opening balance × yield, paid out as cashflow (not reinvested).
-      // Full amount is taxable when received regardless of spending need.
-      // GIA balance is reduced by dividends before growth to avoid double-counting
-      // (growth rate is total return; extracting dividends separately requires netting them out first).
+      // GIA dividends — pay-out mode: extracted as taxable income, GIA reduced before growth
+      // to avoid double-counting (growth rate is total return; dividends must be netted out first).
+      // Reinvest mode: dividends compound inside the GIA — no income recognised, full balance grows.
       const p1GIAOpen  = p1Bal.GIA || 0;
       const p2GIAOpen  = p2Bal.GIA || 0;
-      const p1Divs     = p1GIAOpen * dividendYield;
-      const p2Divs     = p2GIAOpen * dividendYield;
-      // All dividends are taxable as received — no spending-cap capping
-      const p1DivsUsed = p1Divs;
-      const p2DivsUsed = p2Divs;
+      let p1Divs, p2Divs, p1DivsUsed, p2DivsUsed;
 
-      // Deduct dividends from GIA now (before growth) so growth applies to ex-dividend balance
-      p1Bal.GIA = Math.max(0, (p1Bal.GIA || 0) - p1Divs);
-      p2Bal.GIA = Math.max(0, (p2Bal.GIA || 0) - p2Divs);
+      if (dividendMode === 'reinvest') {
+        p1Divs = 0; p2Divs = 0;
+        p1DivsUsed = 0; p2DivsUsed = 0;
+        // GIA balance not reduced — dividends compound inside wrapper
+      } else {
+        p1Divs     = p1GIAOpen * dividendYield;
+        p2Divs     = p2GIAOpen * dividendYield;
+        p1DivsUsed = p1Divs;
+        p2DivsUsed = p2Divs;
+        // Deduct dividends from GIA before growth so growth applies to ex-dividend balance
+        p1Bal.GIA  = Math.max(0, (p1Bal.GIA || 0) - p1Divs);
+        p2Bal.GIA  = Math.max(0, (p2Bal.GIA || 0) - p2Divs);
+      }
 
       // FIX 1: annual CGT gain accumulators — reset each year, exemption applied once at year-end
       let p1AnnualGains = 0;

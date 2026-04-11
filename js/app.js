@@ -217,6 +217,7 @@
       bniP1GIA:          safeValue('bniP1GIA'),
       bniP2GIA:          safeValue('bniP2GIA'),
       dividendYield:     safeValue('dividendYield'),
+      dividendMode:      document.querySelector('input[name="dividendMode"]:checked')?.value ?? 'payout',
     };
   }
 
@@ -270,6 +271,8 @@
     sv('inflation',            a.inflation);
     sv('thresholdFromYearVal', a.thresholdFromYear);
     sv('dividendYield',        a.dividendYield);
+    const dm = document.querySelector(`input[name="dividendMode"][value="${a.dividendMode ?? 'payout'}"]`);
+    if (dm) dm.checked = true;
     sv('bniP1GIA',             a.bniP1GIA);
     sv('bniP2GIA',             a.bniP2GIA);
 
@@ -637,6 +640,7 @@
       bniP1GIA:          bniEnabled ? gv('bniP1GIA') : 0,
       bniP2GIA:          (bniEnabled && state.p2enabled) ? gv('bniP2GIA') : 0,
       dividendYield:     (parseFloat(safeEl('dividendYield')?.value) || 1.5) / 100,
+      dividendMode:      document.querySelector('input[name="dividendMode"]:checked')?.value ?? 'payout',
       withdrawalMode:    document.querySelector('input[name="withdrawalMode"]:checked')?.value || '50/50',
       p1Bal: {
         Cash: gv('p1Cash'), GIA: gv('p1GIA'), SIPP: gv('p1SIPP'), ISA: gv('p1ISA'),
