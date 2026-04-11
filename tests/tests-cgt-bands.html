@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>CGT Band Tests</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 14px; background: #0f1117; color: #e2e8f0; padding: 32px 24px; min-height: 100vh; }
+    h1 { font-size: 20px; font-weight: 600; color: #f8fafc; margin-bottom: 4px; }
+    .subtitle { color: #64748b; font-size: 13px; margin-bottom: 8px; }
+    .note { font-size: 12px; color: #94a3b8; background: #1e3a5f; border-left: 3px solid #3b82f6;
+      padding: 8px 12px; border-radius: 4px; margin-bottom: 28px; line-height: 1.6; }
+    .note strong { color: #bfdbfe; }
+    .summary { display: flex; gap: 16px; margin-bottom: 28px; flex-wrap: wrap; }
+    .summary-pill { padding: 8px 18px; border-radius: 999px; font-size: 13px; font-weight: 600; letter-spacing: 0.02em; }
+    .pill-total { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
+    .pill-pass  { background: #052e16; color: #4ade80; border: 1px solid #166534; }
+    .pill-fail  { background: #2d0a0a; color: #f87171; border: 1px solid #991b1b; }
+    .section-title { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+      color: #475569; margin: 28px 0 10px; padding-bottom: 8px; border-bottom: 1px solid #1e293b; }
+    .test-row { display: grid; grid-template-columns: 24px 1fr 110px 110px 80px;
+      align-items: center; gap: 0 12px; padding: 9px 12px; border-radius: 6px; margin-bottom: 3px; }
+    .test-row:hover { background: #1a2235; }
+    .test-row.pass { border-left: 3px solid #22c55e; }
+    .test-row.fail { border-left: 3px solid #ef4444; background: #1a0f0f; }
+    .test-icon { font-size: 15px; text-align: center; }
+    .test-icon.pass { color: #22c55e; } .test-icon.fail { color: #ef4444; }
+    .test-label { color: #cbd5e1; font-size: 13px; }
+    .test-label .test-id { color: #475569; font-size: 11px; margin-right: 6px; font-weight: 600; }
+    .col-headers { display: grid; grid-template-columns: 24px 1fr 110px 110px 80px;
+      gap: 0 12px; padding: 0 12px 6px; margin-bottom: 2px; }
+    .col-header { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+      color: #475569; text-align: right; }
+    .val { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; text-align: right; }
+    .val.expected { color: #64748b; }
+    .val.actual.ok  { color: #86efac; } .val.actual.bad { color: #fca5a5; font-weight: 700; }
+    .val.delta.ok { color: #475569; } .val.delta.bad { color: #f87171; }
+  </style>
+</head>
+<body>
+<h1>CGT Band Tests</h1>
+<p class="subtitle">Rate selection (18%/24%) · Band stacking · Annual exempt £3,000 · B&amp;I gains</p>
+<div class="note">
+  <strong>HMRC rules (2026-27):</strong> CGT annual exempt = £3,000. Gains stack on top of taxable income after PA. Basic band portion taxed at 18%; remainder at 24%. Basic band = £37,700. Engine pools B&amp;I and disposal gains annually; single exemption applied at year-end. Engine seeds cost basis = opening GIA balance, so gainRatio=0 in year 1. <strong>Tolerance:</strong> £0.02 pure function; £1.00 engine.
+</div>
+<div class="summary" id="summary"></div>
+<div id="output"></div>
+<script src="../js/data.js"></script>
+<script src="../js/calculator.js"></script>
+<script src="../js/engine.js"></script>
+<script>
+(function () {
+  const C   = window.RetireCalc;
+  const E   = window.RetireEngine;
+  const TAX = window.RetireData.TAX_RULES['2026-27'];
+
+  const P  = 0.02;
+  const EP = 1.00;
+
+  const results = [];
+  function test(id, label, actual, expected, tol) {
+    tol = tol !== undefined ? tol : P;
+    const delta = Math.abs((actual || 0) - expected);
+    results.push({ id, label, actual: actual || 0, expected, delta, pass: delta <= tol });
+  }
+
+  function CGT(taxableIncAfterPA, taxableGain) {
+    return C.calcCGT(taxableIncAfterPA, taxableGain, TAX);
+  }
+
+  function runEngine(overrides) {
+    const base = {
+      startYear: 2026, endYear: 2027,
+      p1DOB: 1966, p2DOB: 1967,
+      p1name: 'p1', p2name: 'p2',
+      spending: 0, stepDownPct: 0,
+      p1Salary: 0, p1SalaryStop: null,
+      p2Salary: 0, p2SalaryStop: null,
+      p1SPAge: 99, p1SPAmt: 0,
+      p2SPAge: 99, p2SPAmt: 0,
+      growth: 0, inflation: 0,
+      thresholdMode: 'never', thresholdFromYear: null,
+      bniEnabled: false, bniP1GIA: 0, bniP2GIA: 0,
+      dividendYield: 0, dividendMode: 'payout',
+      withdrawalMode: 'tax-aware',
+      p1Order: ['ISA', 'GIA', 'SIPP', 'Cash'],
+      p2Order: ['ISA', 'GIA', 'SIPP', 'Cash'],
+      p1Bal: { Cash: 0, GIA: 0, SIPP: 0, ISA: 0 },
+      p2Bal: { Cash: 0, GIA: 0, SIPP: 0, ISA: 0 },
+    };
+    const inputs = Object.assign({}, base, overrides);
+    const orig = window.alert; window.alert = () => {};
+    const result = E.runProjection(inputs, []);
+    window.alert = orig;
+    return result ? result : null;
+  }
+
+  // CGT01 — zero taxable gain → CGT=0; £0.01 taxable → £0.0018
+  ;(function () {
+    test('CGT01a', 'A1 · taxableGain=£0 → CGT=£0',              CGT(0, 0),    0);
+    test('CGT01b', 'A1 · taxableGain=£0.01 → CGT=£0.0018 (18%)', CGT(0, 0.01), 0.0018);
+  })();
+
+  // CGT02 — taxableGain=£1, no income: CGT=1×18%=£0.18
+  ;(function () {
+    test('CGT02a', 'A2 · taxableGain=£1, no income → CGT=£0.18 (18%)', CGT(0, 1), 0.18);
+  })();
+
+  // CGT03 — taxableInc=£10k, gain=£5k: basicRem=27700; all basic
+  // CGT=5000×18%=£900
+  ;(function () {
+    test('CGT03a', 'B1 · taxInc=£10k, gain=£5k — all basic (18%): CGT=£900', CGT(10000, 5000), 900);
+  })();
+
+  // CGT04 — taxableInc=£0, gain=£37,700 (fills entire basic band)
+  // CGT=37700×18%=£6,786
+  ;(function () {
+    test('CGT04a', 'B2 · taxInc=£0, gain=£37,700 — all basic: CGT=£6,786', CGT(0, 37700), 6786);
+  })();
+
+  // CGT05 — taxableInc=£37,700 (basic full), gain=£5k: all higher
+  // CGT=5000×24%=£1,200
+  ;(function () {
+    test('CGT05a', 'C1 · taxInc=£37,700 (basic full), gain=£5k — all higher: CGT=£1,200', CGT(37700, 5000), 1200);
+  })();
+
+  // CGT06 — taxableInc=£50k (higher rate), gain=£10k: all higher
+  // CGT=10000×24%=£2,400
+  ;(function () {
+    test('CGT06a', 'C2 · taxInc=£50k (higher rate), gain=£10k — all higher: CGT=£2,400', CGT(50000, 10000), 2400);
+  })();
+
+  // CGT07 — taxableInc=£35k, gain=£10k: straddles boundary
+  // basicRem=2700; atBasic=2700; atHigher=7300
+  // CGT=2700×18%+7300×24%=486+1752=£2,238
+  ;(function () {
+    test('CGT07a', 'D1 · taxInc=£35k, gain=£10k straddles: CGT=£2,238', CGT(35000, 10000), 2238);
+    test('CGT07b', 'D1 · basicRem=£2,700; atBasic×18%=£486',             2700 * 0.18, 486);
+    test('CGT07c', 'D1 · atHigher=£7,300×24%=£1,752',                    7300 * 0.24, 1752);
+  })();
+
+  // CGT08 — taxableInc=£37,699 (1p of basic left), gain=£1k
+  // atBasic=1; atHigher=999; CGT=0.18+239.76=£239.94
+  ;(function () {
+    test('CGT08a', 'D2 · taxInc=£37,699 (1p basic left), gain=£1k: CGT=£239.94', CGT(37699, 1000), 239.94);
+  })();
+
+  // CGT09 — engine: GIA disposal gain ratio via 2-year run
+  // Cash=0 so GIA must fund spending. p1Order GIA first.
+  // Year 1: GIA=200k cost=200k (gainRatio=0); draw=40k; cost→160k; GIA→160k*1.2=192k
+  // Year 2: gainRatio=(192-160)/192=1/6; draw=40k; gains=40k/6=6666.67
+  //   taxable=6666.67-3000=3666.67; CGT=3666.67×18%=£660
+  ;(function () {
+    const r = runEngine({
+      startYear: 2026, endYear: 2028,
+      spending: 40000, growth: 0.20,
+      p1Order: ['GIA', 'ISA', 'SIPP', 'Cash'],
+      p1Bal: { Cash: 0, GIA: 200000, SIPP: 0, ISA: 0 },
+    });
+    if (!r) return;
+    test('CGT09a', 'E1 · Year 1: gainRatio=0 → CGT=£0',               r.rows[0].p1CGT, 0, EP);
+    test('CGT09b', 'E1 · Year 2: annualGains≈£6,666.67',               r.rows[1].p1AnnualGains, 6666.67, EP);
+    test('CGT09c', 'E1 · Year 2: CGT=£660 (3,666.67×18%)',             r.rows[1].p1CGT, 660, EP);
+  })();
+
+  // CGT10 — salary=£60k pushes all gains into higher CGT band (24%)
+  // spending=£100k so salary(£60k) doesn't cover it; GIA draws £40k/yr (same as CGT09)
+  // yr2: gainRatio=1/6; draw=40k; gains=6666.67; taxable=3666.67
+  // nsNet=47430 (salary after PA) > basicBand → basicRem=0 → all at 24%: CGT=£880
+  ;(function () {
+    const r = runEngine({
+      startYear: 2026, endYear: 2028,
+      spending: 100000, growth: 0.20,
+      p1Salary: 60000, p1SalaryStop: 99,
+      p1Order: ['GIA', 'ISA', 'SIPP', 'Cash'],
+      p1Bal: { Cash: 0, GIA: 200000, SIPP: 0, ISA: 0 },
+    });
+    if (!r) return;
+    test('CGT10a', 'E2 · Year 2 salary=£60k: all gains at 24% → CGT=£880', r.rows[1].p1CGT, 880, EP);
+  })();
+
+  // CGT11 — B&I + disposal gains pooled in same year, single exemption
+  // Cash=0, ISA=0 so GIA funds all spending.
+  // Year 1: GIA=200k cost=200k; gainRatio=0; B&I gains=0; draw=40k gains=0
+  //   GIA→160k*1.2=192k; cost=160k
+  // Year 2: gainRatio=(192-160)/192=1/6
+  //   B&I=20k: B&I gains=20k*(1/6)=3333.33
+  //   spending=40k from GIA (after B&I GIA=172k): disposal gains=40k*(1/6)=6666.67... 
+  //   wait — gainRatio uses GIABalBefore (pre-B&I) = 192k for both B&I and disposal
+  //   disposal=40k (remaining shortfall after B&I moves funds to ISA... ISA now=24k)
+  //   Actually spending=40k: ISA has 24k → ISA drawn first then GIA=16k
+  //   disposal gains = 16k*(1/6) = 2666.67
+  //   total gains = 3333.33+2666.67 = 6000; taxable=3000; CGT=3000*0.18=540
+  // Hmm — let me use spending=0 so ONLY B&I causes gains, then result is clean
+  // spending=0: no disposal; B&I=20k; yr2 gains=3333.33; taxable=333.33; CGT=333.33*0.18=60
+  // That proves B&I gains ARE accumulated (non-zero). Then CGT12 tests the pooling.
+  ;(function () {
+    const r = runEngine({
+      startYear: 2026, endYear: 2028,
+      spending: 0, growth: 0.20,
+      bniEnabled: true, bniP1GIA: 20000,
+      p1Order: ['GIA', 'ISA', 'SIPP', 'Cash'],
+      p1Bal: { Cash: 0, GIA: 200000, SIPP: 0, ISA: 0 },
+    });
+    if (!r) return;
+    // Year 1: gainRatio=0 → B&I gains=0 → CGT=0
+    test('CGT11a', 'F1 · Year 1: B&I gainRatio=0 → CGT=£0',                  r.rows[0].p1CGT, 0, EP);
+    // Year 2: B&I gains=3333.33; taxable=333.33; CGT=333.33*18%=£60
+    test('CGT11b', 'F1 · Year 2: B&I gains=£3,333.33 (only source)',          r.rows[1].p1AnnualGains, 3333.33, EP);
+    test('CGT11c', 'F1 · Year 2: CGT=£60 (333.33×18%)',                       r.rows[1].p1CGT, 60, EP);
+  })();
+
+  // CGT12 — gains within exempt: GIA=60k growth=10%; yr1 draw=30k (gainRatio=0)
+  // GIA→30k*1.1=33k; cost=30k
+  // yr2: gainRatio=(33-30)/33=3/33=1/11; draw=30k; gains=30k/11=2727.27 < 3000 → CGT=0
+  ;(function () {
+    const r = runEngine({
+      startYear: 2026, endYear: 2028,
+      spending: 30000, growth: 0.10,
+      p1Order: ['GIA', 'ISA', 'SIPP', 'Cash'],
+      p1Bal: { Cash: 0, GIA: 60000, SIPP: 0, ISA: 0 },
+    });
+    if (!r) return;
+    test('CGT12a', 'F2 · Year 2: gains < £3k exempt → CGT=£0', r.rows[1].p1CGT, 0, EP);
+  })();
+
+  var groups = [
+  { title: "A - CGT exempt boundary (CGT01-CGT02)", ids: ["CGT01", "CGT02"] },
+  { title: "B - All gains at basic rate 18% (CGT03-CGT04)", ids: ["CGT03", "CGT04"] },
+  { title: "C - All gains at higher rate 24% (CGT05-CGT06)", ids: ["CGT05", "CGT06"] },
+  { title: "D - Gains straddling basic/higher boundary (CGT07-CGT08)", ids: ["CGT07", "CGT08"] },
+  { title: "E - Engine: GIA disposal gain ratio (CGT09-CGT10)", ids: ["CGT09", "CGT10"] },
+  { title: "F - Engine: B&I gains and exempt boundary (CGT11-CGT12)", ids: ["CGT11", "CGT12"] },
+];
+
+  var total  = results.length;
+  var passed = results.filter(function(r){ return r.pass; }).length;
+  var failed = total - passed;
+  document.getElementById('summary').innerHTML =
+    '<span class="summary-pill pill-total">' + total + ' assertions</span>' +
+    '<span class="summary-pill pill-pass">&#x2713; ' + passed + ' passed</span>' +
+    (failed > 0 ? '<span class="summary-pill pill-fail">&#x2717; ' + failed + ' failed</span>' : '');
+  function fmt(n) { return '£' + (n||0).toLocaleString('en-GB',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+  var out = document.getElementById('output');
+  groups.forEach(function(g) {
+    var rows = results.filter(function(r){ return g.ids.some(function(id){ return r.id.startsWith(id); }); });
+    if (!rows.length) return;
+    var sec = document.createElement('div');
+    var te = document.createElement('div'); te.className='section-title'; te.textContent=g.title; sec.appendChild(te);
+    var hd = document.createElement('div'); hd.className='col-headers';
+    hd.innerHTML='<span></span><span></span><span class="col-header">Expected</span><span class="col-header">Actual</span><span class="col-header">&#x394;</span>';
+    sec.appendChild(hd);
+    rows.forEach(function(r) {
+      var row=document.createElement('div'); row.className='test-row '+(r.pass?'pass':'fail');
+      row.innerHTML='<span class="test-icon '+(r.pass?'pass':'fail')+'">'+(r.pass?'&#x2713;':'&#x2717;')+'</span>'+
+        '<span class="test-label"><span class="test-id">'+r.id+'</span>'+r.label+'</span>'+
+        '<span class="val expected">'+fmt(r.expected)+'</span>'+
+        '<span class="val actual '+(r.pass?'ok':'bad')+'">'+fmt(r.actual)+'</span>'+
+        '<span class="val delta '+(r.pass?'ok':'bad')+'">'+(r.pass?'—':fmt(r.delta))+'</span>';
+      sec.appendChild(row);
+    });
+    out.appendChild(sec);
+  });
+  if (window.parent !== window) {
+    window.parent.postMessage({ type:'suite-results', file:window.location.pathname.split('/').pop(),
+      total:total, passed:passed, failed:total-passed,
+      results:results.map(function(r){ return {id:r.id,label:r.label,pass:r.pass,actual:r.actual,expected:r.expected,delta:r.delta}; })
+    }, '*');
+  }
+
+})();
+</script>
+</body>
+</html>

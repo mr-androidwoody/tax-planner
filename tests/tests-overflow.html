@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Two-Person Overflow Tests</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 14px; background: #0f1117; color: #e2e8f0;
+      padding: 32px 24px; min-height: 100vh;
+    }
+    h1 { font-size: 20px; font-weight: 600; color: #f8fafc; margin-bottom: 4px; }
+    .subtitle { color: #64748b; font-size: 13px; margin-bottom: 8px; }
+    .note {
+      font-size: 12px; color: #475569; background: #1e293b;
+      border-left: 3px solid #334155; padding: 8px 12px;
+      border-radius: 4px; margin-bottom: 28px; line-height: 1.6;
+    }
+    .note strong { color: #94a3b8; }
+    .summary { display: flex; gap: 16px; margin-bottom: 28px; flex-wrap: wrap; }
+    .summary-pill { padding: 8px 18px; border-radius: 999px; font-size: 13px; font-weight: 600; letter-spacing: 0.02em; }
+    .pill-total { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
+    .pill-pass  { background: #052e16; color: #4ade80; border: 1px solid #166534; }
+    .pill-fail  { background: #2d0a0a; color: #f87171; border: 1px solid #991b1b; }
+    .section-title {
+      font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
+      text-transform: uppercase; color: #475569;
+      margin: 28px 0 10px; padding-bottom: 8px;
+      border-bottom: 1px solid #1e293b;
+    }
+    .test-row {
+      display: grid;
+      grid-template-columns: 24px 1fr 110px 110px 80px;
+      align-items: center; gap: 0 12px;
+      padding: 9px 12px; border-radius: 6px; margin-bottom: 3px;
+    }
+    .test-row:hover { background: #1a2235; }
+    .test-row.pass { border-left: 3px solid #22c55e; }
+    .test-row.fail { border-left: 3px solid #ef4444; background: #1a0f0f; }
+    .test-icon { font-size: 15px; text-align: center; }
+    .test-icon.pass { color: #22c55e; }
+    .test-icon.fail { color: #ef4444; }
+    .test-label { color: #cbd5e1; font-size: 13px; }
+    .test-label .test-id { color: #475569; font-size: 11px; margin-right: 6px; font-weight: 600; }
+    .col-headers {
+      display: grid;
+      grid-template-columns: 24px 1fr 110px 110px 80px;
+      gap: 0 12px; padding: 0 12px 6px; margin-bottom: 2px;
+    }
+    .col-header { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #475569; text-align: right; }
+    .val { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; text-align: right; }
+    .val.expected { color: #64748b; }
+    .val.actual.ok  { color: #86efac; }
+    .val.actual.bad { color: #fca5a5; font-weight: 700; }
+    .val.delta.ok   { color: #475569; }
+    .val.delta.bad  { color: #f87171; }
+  </style>
+</head>
+<body>
+
+<h1>Two-Person Overflow Tests</h1>
+<p class="subtitle">Tax-aware mode · p1 shortfall spills to p2 · p1 empty → p2 covers all · proportional split</p>
+<div class="note">
+  <strong>Tax-aware overflow logic:</strong>
+  Each person draws SIPP up to their PA headroom first, then remaining shortfall is split
+  proportionally (by remaining PA headroom, defaulting to 50/50 if equal).
+  If p1's allocated share exceeds their available non-SIPP balance, the unmet amount spills over
+  to p2 (and vice versa). If both persons' wrapper draws fall short, a final catch-all draws
+  additional SIPP as a last resort. All tests use 2026-27 rules, growth=0, inflation=0.
+  Tolerance £1.00.
+</div>
+
+<div class="summary" id="summary"></div>
+<div id="output"></div>
+
+<script src="../js/data.js"></script>
+<script src="../js/calculator.js"></script>
+<script src="../js/engine.js"></script>
+
+<script>
+(function () {
+
+  const EP = 1.00;
+
+  const results = [];
+  function test(id, label, actual, expected, tol) {
+    tol = tol !== undefined ? tol : EP;
+    const delta = Math.abs((actual || 0) - expected);
+    results.push({ id, label, actual: actual || 0, expected, delta, pass: delta <= tol });
+  }
+
+  function runEngine(overrides) {
+    const inputs = Object.assign({
+      startYear: 2026, endYear: 2027,
+      p1DOB: 1966, p2DOB: 1967,
+      p1name: 'p1', p2name: 'p2',
+      spending: 40000, stepDownPct: 0,
+      p1Salary: 0, p1SalaryStop: null,
+      p2Salary: 0, p2SalaryStop: null,
+      p1SPAge: 99, p1SPAmt: 0,
+      p2SPAge: 99, p2SPAmt: 0,
+      growth: 0, inflation: 0,
+      thresholdMode: 'never', thresholdFromYear: null,
+      bniEnabled: false, bniP1GIA: 0, bniP2GIA: 0,
+      dividendYield: 0,
+      withdrawalMode: 'tax-aware',
+      p1Order: ['ISA', 'GIA', 'SIPP', 'Cash'],
+      p2Order: ['ISA', 'GIA', 'SIPP', 'Cash'],
+      p1Bal: { Cash: 0, GIA: 0, SIPP: 0, ISA: 0 },
+      p2Bal: { Cash: 0, GIA: 0, SIPP: 0, ISA: 0 },
+    }, overrides);
+    const orig = window.alert; window.alert = () => {};
+    const result = window.RetireEngine.runProjection(inputs, []);
+    window.alert = orig;
+    return result ? result.rows[0] : null;
+  }
+
+  // ══════════════════════════════════════════════════════
+  // A. Symmetric baseline: both persons equally funded
+  // ══════════════════════════════════════════════════════
+
+  // OVF01 — p1 ISA=20000, p2 ISA=20000, target=40000
+  // No SIPP, equal weight: p1 draws 20000, p2 draws 20000; no overflow needed
+  ;(function(){
+    const row = runEngine({
+      p1Bal: { Cash:0, GIA:0, SIPP:0, ISA:20000 },
+      p2Bal: { Cash:0, GIA:0, SIPP:0, ISA:20000 },
+    });
+    if (!row) return;
+    test('OVF01a', 'A1 · Symmetric ISA: p1Drawn.ISA = £20,000', row.p1Drawn.ISA, 20000);
+    test('OVF01b', 'A1 · Symmetric ISA: p2Drawn.ISA = £20,000', row.p2Drawn.ISA, 20000);
+    test('OVF01c', 'A1 · Total draw = £40,000', row.p1Drawn.ISA + row.p2Drawn.ISA, 40000);
+    test('OVF01d', 'A1 · No income tax (ISA draws, no SIPP taxable)', row.p1IncomeTax + row.p2IncomeTax, 0);
+  })();
+
+  // ══════════════════════════════════════════════════════
+  // B. p1 partially exhausted → overflow to p2
+  // ══════════════════════════════════════════════════════
+
+  // OVF02 — p1 ISA=5000, p2 ISA=50000, target=40000
+  // No SIPP → p1PAHeadroom=12570, p2PAHeadroom=12570 → weight=50/50
+  // remShortfall=40000; p1 allocated 20000 but only has ISA=5000 → p1Unmet=15000
+  // p2 draws 20000 from ISA (within its 50k); p1Unmet=15000 → p2 draws extra 15000
+  // p1Drawn.ISA=5000; p2Drawn.ISA=35000; total=40000
+  ;(function(){
+    const row = runEngine({
+      p1Bal: { Cash:0, GIA:0, SIPP:0, ISA:5000  },
+      p2Bal: { Cash:0, GIA:0, SIPP:0, ISA:50000 },
+    });
+    if (!row) return;
+    test('OVF02a', 'B1 · p1 partial: p1Drawn.ISA = £5,000',  row.p1Drawn.ISA, 5000);
+    test('OVF02b', 'B1 · Overflow to p2: p2Drawn.ISA = £35,000', row.p2Drawn.ISA, 35000);
+    test('OVF02c', 'B1 · Total draw = £40,000',
+      row.p1Drawn.ISA + row.p2Drawn.ISA, 40000);
+    test('OVF02d', 'B1 · Income tax = £0 (all ISA draws)', row.p1IncomeTax + row.p2IncomeTax, 0);
+  })();
+
+  // OVF03 — p1 GIA=5000 (cost=5000, no gain), p2 GIA=50000, target=40000
+  // Same logic as OVF02 but using GIA (no CGT: gainRatio=0 in year 1)
+  ;(function(){
+    const row = runEngine({
+      p1Bal: { Cash:0, GIA:5000,  SIPP:0, ISA:0 },
+      p2Bal: { Cash:0, GIA:50000, SIPP:0, ISA:0 },
+    });
+    if (!row) return;
+    test('OVF03a', 'B2 · p1 GIA partial: p1Drawn.GIA = £5,000',       row.p1Drawn.GIA, 5000);
+    test('OVF03b', 'B2 · Overflow to p2 GIA: p2Drawn.GIA = £35,000',  row.p2Drawn.GIA, 35000);
+    test('OVF03c', 'B2 · Total draw = £40,000',
+      row.p1Drawn.GIA + row.p2Drawn.GIA, 40000);
+    test('OVF03d', 'B2 · CGT = £0 (cost basis = GIA, year 1)',
+      row.p1CGT + row.p2CGT, 0);
+  })();
+
+  // ══════════════════════════════════════════════════════
+  // C. p1 fully exhausted → p2 covers entire shortfall
+  // ══════════════════════════════════════════════════════
+
+  // OVF04 — p1 all zeros, p2 ISA=60000, target=40000
+  // p1 has nothing; p2 must cover all 40000
+  // Weight is 0/0.5 = 0 for p1, 1.0 for p2 (no SIPP for either)
+  // Wait — p1PAHeadroom=12570, p2PAHeadroom=12570; weight still 50/50
+  // p1 allocated 20000 → draws 0 (nothing) → p1Unmet=20000
+  // p2 draws 20000 from ISA; p1Unmet=20000 → p2 extra=20000
+  // p2Drawn.ISA = 40000; p1Drawn = 0
+  ;(function(){
+    const row = runEngine({
+      p1Bal: { Cash:0, GIA:0, SIPP:0, ISA:0    },
+      p2Bal: { Cash:0, GIA:0, SIPP:0, ISA:60000 },
+    });
+    if (!row) return;
+    const p1Total = (row.p1Drawn.ISA||0) + (row.p1Drawn.GIA||0) + (row.p1Drawn.SIPP||0) + (row.p1Drawn.Cash||0);
+    test('OVF04a', 'C1 · p1 empty: p1 total draw = £0',            p1Total, 0);
+    test('OVF04b', 'C1 · p2 covers all: p2Drawn.ISA = £40,000',   row.p2Drawn.ISA, 40000);
+    test('OVF04c', 'C1 · Total draw = £40,000',
+      p1Total + row.p2Drawn.ISA, 40000);
+  })();
+
+  // OVF05 — p1 has small SIPP (2000), p2 has ISA=50000, target=40000
+  // p1PAHeadroom=12570; p1SippTarget=min(12570/0.75, 2000)=min(16760, 2000)=2000
+  // p1Drawn.SIPP=2000; sippTaxable=1500; p1RemHeadroom=max(0,12570-1500)=11070
+  // p2PAHeadroom=12570; p2SippTarget=0 (no SIPP); p2RemHeadroom=12570
+  // sippDrawTotal=2000; remShortfall=38000
+  // totalHeadroom=11070+12570=23640; p1Weight=11070/23640≈0.4683; p2Weight≈0.5317
+  // p1NonSipp = ISA+GIA → p1 draws 0 (nothing); p1Unmet=38000×0.4683=17794.8
+  // p2 draws ISA: 38000×0.5317=20206.2; p1Unmet=17794.8 → p2 draws extra
+  // p2Drawn.ISA total = 20206.2 + 17794.8 = 38001 ≈ 38000
+  // Total drawn: p1SIPP=2000 + p2ISA≈38000 = 40000
+  ;(function(){
+    const row = runEngine({
+      p1Bal: { Cash:0, GIA:0, SIPP:2000, ISA:0    },
+      p2Bal: { Cash:0, GIA:0, SIPP:0,    ISA:50000 },
+    });
+    if (!row) return;
+    test('OVF05a', 'C2 · p1 small SIPP drawn = £2,000',    row.p1Drawn.SIPP, 2000);
+    test('OVF05b', 'C2 · p2 covers remainder via ISA ≈ £38,000', row.p2Drawn.ISA, 38000);
+    test('OVF05c', 'C2 · Total draw = £40,000',
+      row.p1Drawn.SIPP + row.p2Drawn.ISA, 40000);
+  })();
+
+  // ══════════════════════════════════════════════════════
+  // D. 50/50 mode: mechanical split without tax optimisation
+  // ══════════════════════════════════════════════════════
+
+  // OVF06 — 50/50 mode, p1 ISA=5000, p2 ISA=50000, target=40000
+  // p1 allocated 20000; draws 5000 (exhausted); p1Unmet=15000
+  // p2 allocated 20000+15000=35000; draws 35000 (within 50k)
+  // Same numeric result as tax-aware OVF02 but via different code path
+  ;(function(){
+    const row = runEngine({
+      withdrawalMode: '50/50',
+      p1Bal: { Cash:0, GIA:0, SIPP:0, ISA:5000  },
+      p2Bal: { Cash:0, GIA:0, SIPP:0, ISA:50000 },
+    });
+    if (!row) return;
+    test('OVF06a', 'D1 · 50/50 overflow: p1Drawn.ISA = £5,000',      row.p1Drawn.ISA, 5000);
+    test('OVF06b', 'D1 · 50/50 overflow: p2Drawn.ISA = £35,000',     row.p2Drawn.ISA, 35000);
+    test('OVF06c', 'D1 · 50/50 total draw = £40,000',
+      row.p1Drawn.ISA + row.p2Drawn.ISA, 40000);
+  })();
+
+  // OVF07 — 50/50 mode, p1 entirely empty, p2 ISA=60000, target=40000
+  // p1 half=20000 → draws 0; p1Unmet=20000; p2 gets 20000+20000=40000
+  ;(function(){
+    const row = runEngine({
+      withdrawalMode: '50/50',
+      p1Bal: { Cash:0, GIA:0, SIPP:0, ISA:0    },
+      p2Bal: { Cash:0, GIA:0, SIPP:0, ISA:60000 },
+    });
+    if (!row) return;
+    const p1Total = (row.p1Drawn.ISA||0) + (row.p1Drawn.GIA||0) + (row.p1Drawn.SIPP||0);
+    test('OVF07a', 'D2 · 50/50 p1 empty: p1 total draw = £0',       p1Total, 0);
+    test('OVF07b', 'D2 · 50/50: p2Drawn.ISA = £40,000',             row.p2Drawn.ISA, 40000);
+  })();
+
+  // ══════════════════════════════════════════════════════
+  // E. Tax implications of overflow (income attributed to correct person)
+  // ══════════════════════════════════════════════════════
+
+  // OVF08 — p1 SIPP only (40000), p2 has nothing; target=40000
+  // Tax-aware: p1 draws SIPP to fill PA: 12570/0.75=16760
+  //   sippTaxable=12570; remShortfall=40000-16760=23240
+  //   p1RemHeadroom=0; p2RemHeadroom=12570; p1Weight=0; p2Weight=1
+  //   p1NonSipp→draws 0; p2NonSipp→draws 0 (nothing); p2Unmet=23240
+  //   p2Unmet→p1 extra from p1WrapperOrder incl SIPP: draws SIPP=23240
+  //   p1Drawn.SIPP total=16760+23240=40000; sippTaxable = 40000×0.75=30000
+  //   nsNet=30000-12570=17430; nsTax: 17430×20%=£3,486
+  ;(function(){
+    const row = runEngine({
+      p1Bal: { Cash:0, GIA:0, SIPP:40000, ISA:0 },
+      p2Bal: { Cash:0, GIA:0, SIPP:0,     ISA:0 },
+    });
+    if (!row) return;
+    test('OVF08a', 'E1 · p1 SIPP-only: p1Drawn.SIPP = £40,000',   row.p1Drawn.SIPP, 40000);
+    test('OVF08b', 'E1 · p2 draws nothing',
+      (row.p2Drawn.SIPP||0)+(row.p2Drawn.ISA||0)+(row.p2Drawn.GIA||0), 0);
+    // p1 sippTaxable=30000; p1 IT: nsNet=30000-12570=17430; 17430×20%=3486
+    test('OVF08c', 'E1 · p1IncomeTax = £3,486 (SIPP taxable £30k)', row.p1IncomeTax, 3486, EP);
+    test('OVF08d', 'E1 · p2IncomeTax = £0',                         row.p2IncomeTax, 0);
+  })();
+
+  // OVF09 — Two-person SIPP: p1 SIPP=100000, p2 SIPP=100000, target=40000
+  // Tax-aware: both draw SIPP to fill PA (16760 each = 33520 total)
+  //   sippTaxable each = 12570; both nsNet=0; IT=0
+  //   remShortfall=40000-33520=6480; both remHeadroom=0; weight 0.5/0.5
+  //   Both nonSipp orders empty; no unmet → catch-all: draws 3240 each from SIPP
+  //   p1Drawn.SIPP=16760+3240=20000; p2Drawn.SIPP=20000; total=40000
+  //   p1 sippTaxable=16760×0.75+3240×0.75=(12570+2430)=15000; nsNet=15000-12570=2430
+  //   p1IT=2430×20%=£486; same for p2
+  ;(function(){
+    const row = runEngine({
+      p1Bal: { Cash:0, GIA:0, SIPP:100000, ISA:0 },
+      p2Bal: { Cash:0, GIA:0, SIPP:100000, ISA:0 },
+    });
+    if (!row) return;
+    test('OVF09a', 'E2 · Two-SIPP: p1Drawn.SIPP = £20,000', row.p1Drawn.SIPP, 20000, EP);
+    test('OVF09b', 'E2 · Two-SIPP: p2Drawn.SIPP = £20,000', row.p2Drawn.SIPP, 20000, EP);
+    test('OVF09c', 'E2 · Total SIPP draw = £40,000',
+      row.p1Drawn.SIPP + row.p2Drawn.SIPP, 40000, EP);
+    test('OVF09d', 'E2 · p1IncomeTax = £486', row.p1IncomeTax, 486, EP);
+    test('OVF09e', 'E2 · p2IncomeTax = £486', row.p2IncomeTax, 486, EP);
+  })();
+
+  // ══════════════════════════════════════════════════════
+  // Render
+  // ══════════════════════════════════════════════════════
+  const total  = results.length;
+  const passed = results.filter(r => r.pass).length;
+  const failed = total - passed;
+
+  document.getElementById('summary').innerHTML = `
+    <span class="summary-pill pill-total">${total} assertions</span>
+    <span class="summary-pill pill-pass">✓ ${passed} passed</span>
+    ${failed > 0 ? `<span class="summary-pill pill-fail">✗ ${failed} failed</span>` : ''}
+  `;
+
+  const groups = {
+    'A — Symmetric Baseline (OVF01)':                         results.filter(r => ['OVF01a','OVF01b','OVF01c','OVF01d'].includes(r.id)),
+    'B — p1 Partially Exhausted → Overflow to p2 (OVF02–OVF03)': results.filter(r => ['OVF02a','OVF02b','OVF02c','OVF02d','OVF03a','OVF03b','OVF03c','OVF03d'].includes(r.id)),
+    'C — p1 Fully Empty → p2 Covers All (OVF04–OVF05)':      results.filter(r => ['OVF04a','OVF04b','OVF04c','OVF05a','OVF05b','OVF05c'].includes(r.id)),
+    'D — 50/50 Mode Overflow (OVF06–OVF07)':                  results.filter(r => ['OVF06a','OVF06b','OVF06c','OVF07a','OVF07b'].includes(r.id)),
+    'E — Tax Attribution Under Overflow (OVF08–OVF09)':       results.filter(r => ['OVF08a','OVF08b','OVF08c','OVF08d','OVF09a','OVF09b','OVF09c','OVF09d','OVF09e'].includes(r.id)),
+  };
+
+  function fmt(n) {
+    return '£' + (n || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  const out = document.getElementById('output');
+  for (const [title, rows] of Object.entries(groups)) {
+    if (!rows.length) continue;
+    const sec = document.createElement('div');
+
+    const titleEl = document.createElement('div');
+    titleEl.className = 'section-title';
+    titleEl.textContent = title;
+    sec.appendChild(titleEl);
+
+    const hdrs = document.createElement('div');
+    hdrs.className = 'col-headers';
+    hdrs.innerHTML = `<span></span><span></span>
+      <span class="col-header">Expected</span>
+      <span class="col-header">Actual</span>
+      <span class="col-header">Δ</span>`;
+    sec.appendChild(hdrs);
+
+    rows.forEach(r => {
+      const row = document.createElement('div');
+      row.className = `test-row ${r.pass ? 'pass' : 'fail'}`;
+      row.innerHTML = `
+        <span class="test-icon ${r.pass ? 'pass' : 'fail'}">${r.pass ? '✓' : '✗'}</span>
+        <span class="test-label"><span class="test-id">${r.id}</span>${r.label}</span>
+        <span class="val expected">${fmt(r.expected)}</span>
+        <span class="val actual ${r.pass ? 'ok' : 'bad'}">${fmt(r.actual)}</span>
+        <span class="val delta ${r.pass ? 'ok' : 'bad'}">${r.pass ? '—' : fmt(r.delta)}</span>
+      `;
+      sec.appendChild(row);
+    });
+
+    out.appendChild(sec);
+  }
+
+
+  // ── Report results to parent harness ──
+  if (window.parent !== window) {
+    const total  = results.length;
+    const passed = results.filter(r => r.pass).length;
+    window.parent.postMessage({
+      type: 'suite-results',
+      file: window.location.pathname.split('/').pop(),
+      total,
+      passed,
+      failed: total - passed,
+      results: results.map(r => ({ id: r.id, label: r.label, pass: r.pass, actual: r.actual, expected: r.expected, delta: r.delta })),
+    }, '*');
+  }
+
+})();
+</script>
+</body>
+</html>

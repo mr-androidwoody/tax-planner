@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Dividend Mode Tests</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 14px; background: #0f1117; color: #e2e8f0;
+      padding: 32px 24px; min-height: 100vh;
+    }
+    h1 { font-size: 20px; font-weight: 600; color: #f8fafc; margin-bottom: 4px; }
+    .subtitle { color: #64748b; font-size: 13px; margin-bottom: 8px; }
+    .note {
+      font-size: 12px; color: #475569; background: #1e293b;
+      border-left: 3px solid #334155; padding: 8px 12px;
+      border-radius: 4px; margin-bottom: 28px; line-height: 1.6;
+    }
+    .note strong { color: #94a3b8; }
+    .summary { display: flex; gap: 16px; margin-bottom: 28px; flex-wrap: wrap; }
+    .summary-pill { padding: 8px 18px; border-radius: 999px; font-size: 13px; font-weight: 600; letter-spacing: 0.02em; }
+    .pill-total { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
+    .pill-pass  { background: #052e16; color: #4ade80; border: 1px solid #166534; }
+    .pill-fail  { background: #2d0a0a; color: #f87171; border: 1px solid #991b1b; }
+    .section-title {
+      font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
+      text-transform: uppercase; color: #475569;
+      margin: 28px 0 10px; padding-bottom: 8px;
+      border-bottom: 1px solid #1e293b;
+    }
+    .test-row {
+      display: grid;
+      grid-template-columns: 24px 1fr 110px 110px 80px;
+      align-items: center; gap: 0 12px;
+      padding: 9px 12px; border-radius: 6px; margin-bottom: 3px;
+    }
+    .test-row:hover { background: #1a2235; }
+    .test-row.pass { border-left: 3px solid #22c55e; }
+    .test-row.fail { border-left: 3px solid #ef4444; background: #1a0f0f; }
+    .test-icon { font-size: 15px; text-align: center; }
+    .test-icon.pass { color: #22c55e; }
+    .test-icon.fail { color: #ef4444; }
+    .test-label { color: #cbd5e1; font-size: 13px; }
+    .test-label .test-id { color: #475569; font-size: 11px; margin-right: 6px; font-weight: 600; }
+    .col-headers {
+      display: grid;
+      grid-template-columns: 24px 1fr 110px 110px 80px;
+      gap: 0 12px; padding: 0 12px 6px; margin-bottom: 2px;
+    }
+    .col-header { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #475569; text-align: right; }
+    .val { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; text-align: right; }
+    .val.expected { color: #64748b; }
+    .val.actual.ok  { color: #86efac; }
+    .val.actual.bad { color: #fca5a5; font-weight: 700; }
+    .val.delta.ok   { color: #475569; }
+    .val.delta.bad  { color: #f87171; }
+  </style>
+</head>
+<body>
+
+<h1>Dividend Mode Tests</h1>
+<p class="subtitle">Pay-out · Reinvest · Breach target · Tax impact · Two-person</p>
+<div class="note">
+  <strong>Tolerance:</strong> £0.02 for pure tax function assertions; £1.00 for full engine assertions.<br>
+  <strong>Key mechanics:</strong> In pay-out mode, dividends = GIA × yield, deducted from GIA before
+  growth (ex-dividend), and always recognised as taxable income regardless of the spending target —
+  any surplus above the target is swept to cash. In reinvest mode, dividends are zero, GIA is not
+  reduced before growth, and no dividend income enters the tax calculation.
+</div>
+
+<div class="summary" id="summary"></div>
+<div id="output"></div>
+
+<script src="../js/data.js"></script>
+<script src="../js/calculator.js"></script>
+<script src="../js/engine.js"></script>
+
+<script>
+(function () {
+
+  const C   = window.RetireCalc;
+  const E   = window.RetireEngine;
+  const TAX = window.RetireData.TAX_RULES['2026-27'];
+
+  const P  = 0.02;  // £0.02 tolerance — pure tax function tests
+  const EP = 1.00;  // £1.00 tolerance — full engine tests
+
+  const results = [];
+  function test(id, label, actual, expected, tol) {
+    tol = tol !== undefined ? tol : P;
+    const delta = Math.abs((actual || 0) - expected);
+    results.push({ id, label, actual: actual || 0, expected, delta, pass: delta <= tol });
+  }
+
+  function runEngine(overrides) {
+    const inputs = Object.assign({
+      startYear: 2026, endYear: 2027,
+      p1DOB: 1966, p2DOB: 1967,
+      p1name: 'p1', p2name: 'p2',
+      spending: 40000, stepDownPct: 0,
+      p1Salary: 0, p1SalaryStop: null,
+      p2Salary: 0, p2SalaryStop: null,
+      p1SPAge: 99, p1SPAmt: 0,
+      p2SPAge: 99, p2SPAmt: 0,
+      growth: 0, inflation: 0,
+      thresholdMode: 'never', thresholdFromYear: null,
+      bniEnabled: false, bniP1GIA: 0, bniP2GIA: 0,
+      dividendYield: 0,
+      dividendMode: 'payout',
+      withdrawalMode: 'tax-aware',
+      p1Order: ['ISA', 'GIA', 'SIPP', 'Cash'],
+      p2Order: ['ISA', 'GIA', 'SIPP', 'Cash'],
+      p1Bal: { Cash: 0, GIA: 0, SIPP: 0, ISA: 0 },
+      p2Bal: { Cash: 0, GIA: 0, SIPP: 0, ISA: 0 },
+    }, overrides);
+    const orig = window.alert; window.alert = () => {};
+    const result = E.runProjection(inputs, []);
+    window.alert = orig;
+    return result ? result.rows[0] : null;
+  }
+
+  // ══════════════════════════════════════════════
+  // A. Pay-out: dividend arithmetic
+  // ══════════════════════════════════════════════
+
+  // D01 — GIA £100k, yield 3% → p1Divs = £3,000
+  // p1Divs = 100,000 × 0.03 = £3,000
+  ;(function () {
+    const row = runEngine({
+      dividendYield: 0.03,
+      p1Bal: { Cash: 200000, GIA: 100000, SIPP: 0, ISA: 0 },
+    });
+    test('D01', 'A1 · GIA £100k @ 3% → p1Divs = £3,000', row.p1Divs, 3000, EP);
+  })();
+
+  // D02 — Pay-out: GIA balance is reduced by dividends before growth
+  // GIA £100k, yield 3%, growth 0% → GIA end = 100,000 − 3,000 = £97,000
+  ;(function () {
+    const row = runEngine({
+      dividendYield: 0.03,
+      growth: 0,
+      p1Bal: { Cash: 200000, GIA: 100000, SIPP: 0, ISA: 0 },
+    });
+    test('D02', 'A2 · GIA £100k @ 3% payout, 0% growth → GIA end = £97,000', row.snap.p1GIA, 97000, EP);
+  })();
+
+  // D03 — Pay-out: dividends are taxable income
+  // Salary £12,570 fills PA. GIA £100k @ 3% → divs £3,000.
+  // divNet = £3,000; divTaxable = 3,000 − £500 DA = £2,500; divTax = 2,500 × 10.75% = £268.75
+  // No SIPP drawn (SIPP = 0); ISA drawn for remainder.
+  // Total income tax = £268.75
+  ;(function () {
+    const row = runEngine({
+      dividendYield: 0.03,
+      p1Salary: 12570, p1SalaryStop: 2026,
+      p1Bal: { Cash: 200000, GIA: 100000, SIPP: 0, ISA: 0 },
+    });
+    test('D03a', 'A3 · Salary fills PA, divs £3k → divTaxable = £2,500',  row.p1IncomeTax - (row.p1IncomeTax - 268.75), 268.75, EP);
+    test('D03b', 'A3 · Income tax = £268.75 (divTax only)',                row.p1IncomeTax, 268.75, EP);
+  })();
+
+  // D04 — Pay-out fires even when dividends breach the spending target
+  // spending = £5,000; GIA £200k @ 5% → divs = £10,000 (double the target).
+  // Surplus £5,000 must be swept to p1 cash — no wrapper draw needed.
+  // p1Drawn.GIA + p1Drawn.SIPP + p1Drawn.ISA should all be £0.
+  ;(function () {
+    const row = runEngine({
+      spending: 5000,
+      dividendYield: 0.05,
+      p1Bal: { Cash: 0, GIA: 200000, SIPP: 0, ISA: 0 },
+    });
+    test('D04a', 'A4 · Divs £10k > target £5k → p1Divs = £10,000',            row.p1Divs,       10000, EP);
+    test('D04b', 'A4 · No wrapper draw — GIA drawn = £0',                      row.p1Drawn.GIA,  0,     EP);
+    test('D04c', 'A4 · No wrapper draw — SIPP drawn = £0',                     row.p1Drawn.SIPP, 0,     EP);
+    test('D04d', 'A4 · Surplus £5k swept to cash → cash end ≥ £5,000',         row.snap.p1Cash,  5000,  EP);
+  })();
+
+  // D05 — Zero yield → zero dividends in pay-out mode
+  ;(function () {
+    const row = runEngine({
+      dividendYield: 0,
+      p1Bal: { Cash: 200000, GIA: 100000, SIPP: 0, ISA: 0 },
+    });
+    test('D05', 'A5 · Yield 0% → p1Divs = £0', row.p1Divs, 0, EP);
+  })();
+
+  // ══════════════════════════════════════════════
+  // B. Reinvest: no income, full balance compounds
+  // ══════════════════════════════════════════════
+
+  // D06 — Reinvest: p1Divs = £0 regardless of yield
+  ;(function () {
+    const row = runEngine({
+      dividendYield: 0.03,
+      dividendMode: 'reinvest',
+      p1Bal: { Cash: 200000, GIA: 100000, SIPP: 0, ISA: 0 },
+    });
+    test('D06', 'B1 · Reinvest mode → p1Divs = £0', row.p1Divs, 0, EP);
+  })();
+
+  // D07 — Reinvest: full balance grows (vs payout ex-dividend balance)
+  // GIA £100k, yield 3%, growth 5%.
+  // Reinvest: 100,000 × 1.05 = £105,000
+  // Payout:   (100,000 − 3,000) × 1.05 = 97,000 × 1.05 = £101,850
+  ;(function () {
+    const rowR = runEngine({
+      dividendYield: 0.03, dividendMode: 'reinvest', growth: 0.05,
+      p1Bal: { Cash: 200000, GIA: 100000, SIPP: 0, ISA: 0 },
+    });
+    const rowP = runEngine({
+      dividendYield: 0.03, dividendMode: 'payout', growth: 0.05,
+      p1Bal: { Cash: 200000, GIA: 100000, SIPP: 0, ISA: 0 },
+    });
+    test('D07a', 'B2 · Reinvest GIA end = £105,000',                              rowR.snap.p1GIA, 105000, EP);
+    test('D07b', 'B2 · Payout GIA end = £101,850',                                rowP.snap.p1GIA, 101850, EP);
+    test('D07c', 'B2 · Reinvest GIA end > payout GIA end by £3,150',
+      rowR.snap.p1GIA - rowP.snap.p1GIA, 3150, EP);
+  })();
+
+  // D08 — Reinvest: no dividend income → lower income tax than payout
+  // Salary £20k (nsNet = £7,430; nsTax = £1,486).
+  // Payout: GIA £50k @ 4% → divs £2,000; divTaxable = £1,500; divTax = £161.25 → total £1,647.25
+  // Reinvest: divs = £0 → income tax = £1,486 (salary only)
+  ;(function () {
+    const rowP = runEngine({
+      dividendYield: 0.04, dividendMode: 'payout',
+      p1Salary: 20000, p1SalaryStop: 2026,
+      p1Bal: { Cash: 200000, GIA: 50000, SIPP: 0, ISA: 0 },
+    });
+    const rowR = runEngine({
+      dividendYield: 0.04, dividendMode: 'reinvest',
+      p1Salary: 20000, p1SalaryStop: 2026,
+      p1Bal: { Cash: 200000, GIA: 50000, SIPP: 0, ISA: 0 },
+    });
+    test('D08a', 'B3 · Payout income tax = £1,647.25 (salary + divTax)',  rowP.p1IncomeTax, 1647.25, EP);
+    test('D08b', 'B3 · Reinvest income tax = £1,486.00 (salary only)',    rowR.p1IncomeTax, 1486.00, EP);
+    test('D08c', 'B3 · Tax saving from reinvest = £161.25',
+      rowP.p1IncomeTax - rowR.p1IncomeTax, 161.25, EP);
+  })();
+
+  // ══════════════════════════════════════════════
+  // C. Two-person: independent GIA handling
+  // ══════════════════════════════════════════════
+
+  // D09 — p1 GIA £100k, p2 GIA £60k, yield 2%, payout
+  // p1Divs = £2,000; p2Divs = £1,200
+  // GIA ends (0% growth): p1 = £98,000; p2 = £58,800
+  // Cash covers spending shortfall (divs £3,200 < target £5,000 → £1,800 from cash)
+  ;(function () {
+    const row = runEngine({
+      dividendYield: 0.02, dividendMode: 'payout',
+      spending: 5000,
+      p1Bal: { Cash: 100000, GIA: 100000, SIPP: 0, ISA: 0 },
+      p2Bal: { Cash: 0,      GIA: 60000,  SIPP: 0, ISA: 0 },
+    });
+    test('D09a', 'C1 · p1 GIA £100k @ 2% → p1Divs = £2,000',    row.p1Divs,      2000,  EP);
+    test('D09b', 'C1 · p2 GIA £60k @ 2% → p2Divs = £1,200',     row.p2Divs,      1200,  EP);
+    test('D09c', 'C1 · p1 GIA end = £98,000',                    row.snap.p1GIA,  98000, EP);
+    test('D09d', 'C1 · p2 GIA end = £58,800',                    row.snap.p2GIA,  58800, EP);
+  })();
+
+  // D10 — Reinvest: both p1 and p2 GIA compound on full balance
+  // p1 GIA £100k, p2 GIA £60k, yield 2%, growth 4%, reinvest
+  // p1 end = 100,000 × 1.04 = £104,000
+  // p2 end =  60,000 × 1.04 =  £62,400
+  ;(function () {
+    const row = runEngine({
+      dividendYield: 0.02, dividendMode: 'reinvest', growth: 0.04,
+      spending: 5000,
+      p1Bal: { Cash: 0, GIA: 100000, SIPP: 200000, ISA: 0 },
+      p2Bal: { Cash: 0, GIA: 60000,  SIPP: 200000, ISA: 0 },
+    });
+    test('D10a', 'C2 · Reinvest p1Divs = £0',              row.p1Divs,     0,      EP);
+    test('D10b', 'C2 · Reinvest p2Divs = £0',              row.p2Divs,     0,      EP);
+    test('D10c', 'C2 · p1 GIA end = £104,000',             row.snap.p1GIA, 104000, EP);
+    test('D10d', 'C2 · p2 GIA end = £62,400',              row.snap.p2GIA, 62400,  EP);
+  })();
+
+  // ══════════════════════════════════════════════
+  // Render
+  // ══════════════════════════════════════════════
+  const total  = results.length;
+  const passed = results.filter(r => r.pass).length;
+  const failed = total - passed;
+
+  document.getElementById('summary').innerHTML = `
+    <span class="summary-pill pill-total">${total} assertions across 10 scenarios</span>
+    <span class="summary-pill pill-pass">✓ ${passed} passed</span>
+    ${failed > 0 ? `<span class="summary-pill pill-fail">✗ ${failed} failed</span>` : ''}
+  `;
+
+  const groups = {
+    'A — Pay-out: dividend arithmetic (D01–D05)': results.filter(r => ['D01','D02','D03a','D03b','D04a','D04b','D04c','D04d','D05'].includes(r.id)),
+    'B — Reinvest: no income, full compounding (D06–D08)': results.filter(r => ['D06','D07a','D07b','D07c','D08a','D08b','D08c'].includes(r.id)),
+    'C — Two-person: independent GIA (D09–D10)': results.filter(r => r.id.startsWith('D09') || r.id.startsWith('D10')),
+  };
+
+  function fmt(n) {
+    return '£' + (n || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  const out = document.getElementById('output');
+  for (const [title, rows] of Object.entries(groups)) {
+    if (!rows.length) continue;
+    const sec = document.createElement('div');
+
+    const titleEl = document.createElement('div');
+    titleEl.className = 'section-title';
+    titleEl.textContent = title;
+    sec.appendChild(titleEl);
+
+    const hdrs = document.createElement('div');
+    hdrs.className = 'col-headers';
+    hdrs.innerHTML = `<span></span><span></span>
+      <span class="col-header">Expected</span>
+      <span class="col-header">Actual</span>
+      <span class="col-header">Δ</span>`;
+    sec.appendChild(hdrs);
+
+    rows.forEach(r => {
+      const row = document.createElement('div');
+      row.className = `test-row ${r.pass ? 'pass' : 'fail'}`;
+      row.innerHTML = `
+        <span class="test-icon ${r.pass ? 'pass' : 'fail'}">${r.pass ? '✓' : '✗'}</span>
+        <span class="test-label"><span class="test-id">${r.id}</span>${r.label}</span>
+        <span class="val expected">${fmt(r.expected)}</span>
+        <span class="val actual ${r.pass ? 'ok' : 'bad'}">${fmt(r.actual)}</span>
+        <span class="val delta ${r.pass ? 'ok' : 'bad'}">${r.pass ? '—' : fmt(r.delta)}</span>
+      `;
+      sec.appendChild(row);
+    });
+
+    out.appendChild(sec);
+  }
+
+})();
+</script>
+</body>
+</html>

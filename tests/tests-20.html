@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Tax Validation Tests — 20 Scenarios</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 14px; background: #0f1117; color: #e2e8f0;
+      padding: 32px 24px; min-height: 100vh;
+    }
+    h1 { font-size: 20px; font-weight: 600; color: #f8fafc; margin-bottom: 4px; }
+    .subtitle { color: #64748b; font-size: 13px; margin-bottom: 8px; }
+    .note {
+      font-size: 12px; color: #475569; background: #1e293b;
+      border-left: 3px solid #334155; padding: 8px 12px;
+      border-radius: 4px; margin-bottom: 28px; line-height: 1.6;
+    }
+    .note strong { color: #94a3b8; }
+    .summary { display: flex; gap: 16px; margin-bottom: 28px; flex-wrap: wrap; }
+    .summary-pill { padding: 8px 18px; border-radius: 999px; font-size: 13px; font-weight: 600; letter-spacing: 0.02em; }
+    .pill-total { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
+    .pill-pass  { background: #052e16; color: #4ade80; border: 1px solid #166534; }
+    .pill-fail  { background: #2d0a0a; color: #f87171; border: 1px solid #991b1b; }
+    .section-title {
+      font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
+      text-transform: uppercase; color: #475569;
+      margin: 28px 0 10px; padding-bottom: 8px;
+      border-bottom: 1px solid #1e293b;
+    }
+    .test-row {
+      display: grid;
+      grid-template-columns: 24px 1fr 110px 110px 80px;
+      align-items: center; gap: 0 12px;
+      padding: 9px 12px; border-radius: 6px; margin-bottom: 3px;
+    }
+    .test-row:hover { background: #1a2235; }
+    .test-row.pass { border-left: 3px solid #22c55e; }
+    .test-row.fail { border-left: 3px solid #ef4444; background: #1a0f0f; }
+    .test-icon { font-size: 15px; text-align: center; }
+    .test-icon.pass { color: #22c55e; }
+    .test-icon.fail { color: #ef4444; }
+    .test-label { color: #cbd5e1; font-size: 13px; }
+    .test-label .test-id { color: #475569; font-size: 11px; margin-right: 6px; font-weight: 600; }
+    .col-headers {
+      display: grid;
+      grid-template-columns: 24px 1fr 110px 110px 80px;
+      gap: 0 12px; padding: 0 12px 6px; margin-bottom: 2px;
+    }
+    .col-header { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #475569; text-align: right; }
+    .val { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; text-align: right; }
+    .val.expected { color: #64748b; }
+    .val.actual.ok  { color: #86efac; }
+    .val.actual.bad { color: #fca5a5; font-weight: 700; }
+    .val.delta.ok   { color: #475569; }
+    .val.delta.bad  { color: #f87171; }
+  </style>
+</head>
+<body>
+
+<h1>Tax Validation Tests — 20 Scenarios</h1>
+<p class="subtitle">PA &amp; SIPP · Savings · Dividends · Mixed Income · CGT · Withdrawal Engine</p>
+<div class="note">
+  <strong>Note on scenario adjustments:</strong>
+  T06–T09 and T10–T14 corrected inputs vs original spec — UK PA absorbs interest/dividend income
+  before SRS/PSA, so several "standalone" scenarios must include a salary to consume PA first
+  in order to make the allowances meaningful. T13 correct tax is £207.48 (not £192.50).
+  T14 correct tax is £483.75 (not £392.50). T15 correct tax is £1,255.75 (not £1,392.50).
+  All expected values verified by independent calculation.
+</div>
+
+<div class="summary" id="summary"></div>
+<div id="output"></div>
+
+<script src="../js/data.js"></script>
+<script src="../js/calculator.js"></script>
+<script src="../js/engine.js"></script>
+
+<script>
+(function () {
+
+  const C   = window.RetireCalc;
+  const E   = window.RetireEngine;
+  const TAX = window.RetireData.TAX_RULES['2026-27'];
+
+  const P   = 0.02;   // £0.02 tolerance for pure tax function tests
+  const EP  = 1.00;   // £1.00 tolerance for full engine tests
+
+  const results = [];
+  function test(id, label, actual, expected, tol) {
+    tol = tol !== undefined ? tol : P;
+    const delta = Math.abs((actual || 0) - expected);
+    results.push({ id, label, actual: actual || 0, expected, delta, pass: delta <= tol });
+  }
+
+  function IT(ns, sav, div) {
+    return C.calcIncomeTaxDetailed(ns || 0, sav || 0, div || 0, TAX);
+  }
+
+  function runEngine(overrides) {
+    const inputs = Object.assign({
+      startYear: 2026, endYear: 2027,
+      p1DOB: 1959, p2DOB: 1960,
+      p1name: 'p1', p2name: 'p2',
+      spending: 40000, stepDownPct: 0,
+      p1Salary: 0, p1SalaryStop: null,
+      p2Salary: 0, p2SalaryStop: null,
+      p1SPAge: 99, p1SPAmt: 0,
+      p2SPAge: 99, p2SPAmt: 0,
+      growth: 0, inflation: 0,
+      thresholdMode: 'never', thresholdFromYear: null,
+      bniEnabled: false, bniP1GIA: 0, bniP2GIA: 0,
+      dividendYield: 0,
+      withdrawalMode: 'tax-aware',
+      p1Order: ['ISA', 'GIA', 'SIPP', 'Cash'],
+      p2Order: ['ISA', 'GIA', 'SIPP', 'Cash'],
+      p1Bal: { Cash: 0, GIA: 0, SIPP: 0, ISA: 0 },
+      p2Bal: { Cash: 0, GIA: 0, SIPP: 0, ISA: 0 },
+    }, overrides);
+    const orig = window.alert; window.alert = () => {};
+    const result = E.runProjection(inputs, []);
+    window.alert = orig;
+    return result ? result.rows[0] : null;
+  }
+
+  // ══════════════════════════════════════════════
+  // A. Personal Allowance & SIPP
+  // ══════════════════════════════════════════════
+
+  // T01 — Salary = £12,570 exactly
+  // nsNet = 0; tax = £0
+  ;(function(){
+    const r = IT(12570, 0, 0);
+    test('T01a', 'A1 · Salary = PA exactly (£12,570) → tax = £0',  r.tax,   0);
+    test('T01b', 'A1 · nsNet = £0',                                 r.nsNet, 0);
+  })();
+
+  // T02 — Salary = £12,571 (one above PA)
+  // nsNet = £1; tax = 1 × 20% = £0.20
+  ;(function(){
+    const r = IT(12571, 0, 0);
+    test('T02a', 'A2 · Salary = PA + £1 (£12,571) → tax = £0.20', r.tax,   0.20);
+    test('T02b', 'A2 · nsNet = £1',                                 r.nsNet, 1);
+  })();
+
+  // T03 — SIPP draw = £16,760; taxable portion = £16,760 × 75% = £12,570
+  // nsNet = 0; tax = £0  (PA exactly filled by SIPP taxable)
+  ;(function(){
+    const taxable = Math.round(16760 * 0.75 * 100) / 100; // 12570
+    const r = IT(taxable, 0, 0);
+    test('T03a', 'A3 · SIPP draw £16,760 → taxable = £12,570 → tax = £0', r.tax,   0);
+    test('T03b', 'A3 · nsNet = £0 (PA exactly absorbed)',                   r.nsNet, 0);
+  })();
+
+  // T04 — SIPP draw = £16,761; taxable = £16,761 × 75% = £12,570.75
+  // nsNet = £0.75; tax = £0.75 × 20% = £0.15
+  ;(function(){
+    const taxable = Math.round(16761 * 0.75 * 100) / 100; // 12570.75
+    const r = IT(taxable, 0, 0);
+    test('T04a', 'A4 · SIPP draw £16,761 → taxable = £12,570.75 → tax = £0.15', r.tax,   0.15);
+    test('T04b', 'A4 · nsNet = £0.75',                                            r.nsNet, 0.75);
+  })();
+
+  // T05 — SP = £10,000 + SIPP taxable = £2,570 → total NS = £12,570
+  // nsNet = 0; tax = £0
+  ;(function(){
+    const r = IT(12570, 0, 0); // SP + SIPP taxable combined as nonSavings
+    test('T05', 'A5 · SP £10k + SIPP taxable £2,570 = £12,570 → tax = £0', r.tax, 0);
+  })();
+
+  // ══════════════════════════════════════════════
+  // B. Savings (Interest)
+  // ══════════════════════════════════════════════
+
+  // T06 — Interest £1,000 only
+  // total=1000 < PA → divNet=0 → tax = £0
+  ;(function(){
+    const r = IT(0, 1000, 0);
+    test('T06', 'B1 · Interest £1,000 only → PA absorbs all → tax = £0', r.tax, 0);
+  })();
+
+  // T07 — Interest £6,000 only
+  // total=6000 < PA=12570 → PA absorbs → savNet=0 → tax = £0
+  ;(function(){
+    const r = IT(0, 6000, 0);
+    test('T07', 'B2 · Interest £6,000 only → PA absorbs all → tax = £0', r.tax, 0);
+  })();
+
+  // T08 — Salary £12,570 + interest £8,000
+  // PA consumed by salary → nsNet=0; savNet=8000
+  // srsAvail=5000; srsCover=5000; savAfterSRS=3000
+  // taxableForPSA=8000 ≤ 37700 → PSA=£1,000; savTaxable=2,000
+  // savTax: bLeft=37700; 2000×20% = £400
+  ;(function(){
+    const r = IT(12570, 8000, 0);
+    test('T08a', 'B3 · Sal £12,570 + int £8k → savTaxable = £2,000', r.savTaxable, 2000);
+    test('T08b', 'B3 · Tax = £400 (SRS £5k + PSA £1k applied)',       r.tax,        400);
+  })();
+
+  // T09 — Salary £10,000 + interest £6,000
+  // PA=12570; paRem after sal=2570; savNet=max(0,6000-2570)=3430; nsNet=0
+  // srsAvail=max(0,5000-0)=5000; srsCover=min(3430,5000)=3430 → savAfterSRS=0
+  // PSA covers nothing as savAfterSRS=0; savTaxable=0 → tax=£0
+  ;(function(){
+    const r = IT(10000, 6000, 0);
+    test('T09a', 'B4 · Sal £10k + int £6k → SRS covers all post-PA interest → savTaxable = £0', r.savTaxable, 0);
+    test('T09b', 'B4 · tax = £0',                                                                r.tax,        0);
+  })();
+
+  // ══════════════════════════════════════════════
+  // C. Dividends
+  // ══════════════════════════════════════════════
+
+  // T10 — Dividends £500 only
+  // total=500 < PA → divNet=0 → tax = £0
+  ;(function(){
+    const r = IT(0, 0, 500);
+    test('T10', 'C1 · Dividends £500 only → within PA → tax = £0', r.tax, 0);
+  })();
+
+  // T11 — Salary £12,570 + dividends £10,000
+  // nsNet=0; paRem=0; divNet=10000
+  // divTaxable=max(0,10000-500)=9,500; used=0; bLeft=37700; 9500×10.75%=£1,021.25
+  ;(function(){
+    const r = IT(12570, 0, 10000);
+    test('T11a', 'C2 · Sal £12,570 + div £10k → divTaxable = £9,500', r.divTaxable, 9500);
+    test('T11b', 'C2 · Tax = £1,021.25',                               r.tax,        1021.25);
+  })();
+
+  // T12 — Dividends £12,570 only (exactly PA)
+  // total=12570; PA absorbs all → divNet=0 → tax = £0
+  ;(function(){
+    const r = IT(0, 0, 12570);
+    test('T12', 'C3 · Dividends £12,570 only → PA covers all → tax = £0', r.tax, 0);
+  })();
+
+  // T13 — Salary £10,000 + dividends £5,000
+  // nsNet=0; paRem=2570; divNet=max(0,5000-2570)=2430
+  // divTaxable=max(0,2430-500)=1930; used=0+0=0; bLeft=37700; 1930×10.75%=£207.48
+  ;(function(){
+    const r = IT(10000, 0, 5000);
+    test('T13a', 'C4 · Sal £10k + div £5k → divTaxable = £1,930', r.divTaxable, 1930);
+    test('T13b', 'C4 · Tax = £207.48',                             r.tax,        207.48);
+  })();
+
+  // ══════════════════════════════════════════════
+  // D. Mixed Income (Critical)
+  // ══════════════════════════════════════════════
+
+  // T14 — Salary £10k + interest £5k + dividends £5k (no SIPP)
+  // nsNet=0; paRem=2570; savNet=2430; paRem=0; divNet=5000
+  // srsAvail=5000; srsCover=2430 → savAfterSRS=0; savTaxable=0
+  // divTaxable=max(0,5000-500)=4500; used=0+2430=2430; bLeft=37700-2430=35270
+  // divTax=4500×10.75%=£483.75
+  ;(function(){
+    const r = IT(10000, 5000, 5000);
+    test('T14a', 'D1 · Sal £10k + int £5k + div £5k → savTaxable = £0 (SRS covers)',  r.savTaxable, 0);
+    test('T14b', 'D1 · divTaxable = £4,500',                                            r.divTaxable, 4500);
+    test('T14c', 'D1 · Tax = £483.75',                                                  r.tax,        483.75);
+  })();
+
+  // T15 — NS £15k (sal £10k + SIPP taxable £5k) + interest £5k + dividends £5k
+  // nsNet=15000-12570=2430; srsAvail=max(0,5000-2430)=2570; srsCover=min(5000,2570)=2570
+  // savAfterSRS=5000-2570=2430; taxableForPSA=2430+5000+5000=12430≤37700→PSA=£1,000
+  // psaCover=min(2430,1000)=1000; savTaxable=1430
+  // divTaxable=max(0,5000-500)=4500
+  // nsTax=2430×20%=£486; savTax: bLeft=35270; 1430×20%=£286
+  // divTax: used=2430+5000=7430; bLeft=37700-7430=30270; 4500×10.75%=£483.75
+  // total=£1,255.75
+  ;(function(){
+    const r = IT(15000, 5000, 5000); // nonSavings = salary + SIPP taxable
+    test('T15a', 'D2 · NS £15k + int £5k + div £5k → nsNet = £2,430',     r.nsNet,      2430);
+    test('T15b', 'D2 · savTaxable = £1,430 (SRS+PSA applied)',              r.savTaxable, 1430);
+    test('T15c', 'D2 · divTaxable = £4,500',                                r.divTaxable, 4500);
+    test('T15d', 'D2 · Total tax = £1,255.75',                              r.tax,        1255.75);
+  })();
+
+  // ══════════════════════════════════════════════
+  // E. SIPP Higher Rate
+  // ══════════════════════════════════════════════
+
+  // T16 — SIPP taxable = £60,000
+  // nsNet=60000-12570=47430
+  // 37700×20%=£7,540 + 9730×40%=£3,892 → £11,432
+  ;(function(){
+    const r = IT(60000, 0, 0);
+    test('T16a', 'E1 · SIPP taxable £60k → nsNet = £47,430',           r.nsNet, 47430);
+    test('T16b', 'E1 · Tax = £11,432 (spans basic→higher band)',        r.tax,   11432);
+  })();
+
+  // ══════════════════════════════════════════════
+  // F. CGT
+  // ══════════════════════════════════════════════
+
+  // T17 — GIA £100k, cost = £100k → gain ratio = 0 → CGT = £0
+  // (Engine seeds cost basis = opening balance so no gains in year 1)
+  ;(function(){
+    const cgt = C.calcCGT(0, 0, TAX); // taxableGain=0 after exemption
+    test('T17', 'F1 · Gain = £0 (cost = market value) → CGT = £0', cgt, 0);
+  })();
+
+  // T18 — Raw gain = £2,000; CGT exemption = £3,000
+  // taxableGain = max(0, 2000-3000) = 0 → CGT = £0
+  ;(function(){
+    const rawGain    = 2000;
+    const exempt     = TAX.cgtExempt; // 3000
+    const taxableGain = Math.max(0, rawGain - exempt); // 0
+    const cgt = C.calcCGT(0, taxableGain, TAX);
+    test('T18', 'F2 · Raw gain £2k < exemption £3k → taxableGain = £0 → CGT = £0', cgt, 0);
+  })();
+
+  // T19 — Raw gain = £5,000; taxableGain = 5000-3000 = £2,000; no other income
+  // All in basic band: 2000×18% = £360
+  ;(function(){
+    const rawGain    = 5000;
+    const exempt     = TAX.cgtExempt; // 3000
+    const taxableGain = Math.max(0, rawGain - exempt); // 2000
+    const cgt = C.calcCGT(0, taxableGain, TAX);
+    test('T19a', 'F3 · Raw gain £5k → taxableGain = £2,000',          taxableGain, 2000);
+    test('T19b', 'F3 · CGT = £360 (all in basic band @ 18%)',          cgt,         360);
+  })();
+
+  // ══════════════════════════════════════════════
+  // G. Withdrawal Engine — full cascade
+  // ══════════════════════════════════════════════
+
+  // T20 — Cash £5k, ISA £10k, GIA £10k, SIPP £100k. Target £40k.
+  //
+  // Step 1 (Cash): shortfall=40k; cash=5k → cashDrawn=5k; shortfall=35k.
+  //
+  // Step 2 (Tax-aware wrapper):
+  //   PA headroom = 12570; SIPPtarget = 12570/0.75 = 16760 → SIPP drawn = 16760
+  //   sippTaxable = 12570; remShortfall = 35000-16760 = 18240
+  //   p1RemHeadroom = 0; p2RemHeadroom = 12570; p1Weight = 0/(0+12570) = 0
+  //   p1RemDrawn.ISA = 18240×0 = 0; p2 has nothing → p2Unmet = 18240
+  //   p2Unmet → p1 extra: ISA=min(18240,10000)=10000; rem=8240 → GIA=8240
+  //
+  // Totals: Cash=5000, SIPP=16760, ISA=10000, GIA=8240 → sum=40000 ✓
+  // sippTaxable=12570; IT: nsNet=0 → tax=£0; CGT=£0 (no gains, cost=GIA opening)
+  // End balances: Cash=0, ISA=0, GIA=1760, SIPP=83240 (no growth)
+  ;(function(){
+    const row = runEngine({
+      p1Bal: { Cash: 5000, GIA: 10000, SIPP: 100000, ISA: 10000 },
+      p1Order: ['ISA', 'GIA', 'SIPP', 'Cash'],
+    });
+    test('T20a', 'G1 · Cash drawn = £5,000',               row.p1Drawn.Cash, 5000,  EP);
+    test('T20b', 'G1 · ISA drawn = £10,000 (exhausted)',   row.p1Drawn.ISA,  10000, EP);
+    test('T20c', 'G1 · GIA drawn = £8,240',                row.p1Drawn.GIA,  8240,  EP);
+    test('T20d', 'G1 · SIPP drawn = £16,760',              row.p1Drawn.SIPP, 16760, EP);
+    test('T20e', 'G1 · Total draw = £40,000',
+      row.p1Drawn.Cash + row.p1Drawn.ISA + row.p1Drawn.GIA + row.p1Drawn.SIPP, 40000, EP);
+    test('T20f', 'G1 · Income tax = £0 (SIPP taxable fills PA exactly)', row.p1IncomeTax, 0,     EP);
+    test('T20g', 'G1 · ISA end balance = £0',                            row.snap.p1ISA,  0,     EP);
+    test('T20h', 'G1 · GIA end balance = £1,760',                        row.snap.p1GIA,  1760,  EP);
+    test('T20i', 'G1 · SIPP end balance = £83,240',                      row.snap.p1SIPP, 83240, EP);
+  })();
+
+  // ══════════════════════════════════════════════
+  // Render
+  // ══════════════════════════════════════════════
+  const total  = results.length;
+  const passed = results.filter(r => r.pass).length;
+  const failed = total - passed;
+
+  document.getElementById('summary').innerHTML = `
+    <span class="summary-pill pill-total">${total} assertions across 20 scenarios</span>
+    <span class="summary-pill pill-pass">✓ ${passed} passed</span>
+    ${failed > 0 ? `<span class="summary-pill pill-fail">✗ ${failed} failed</span>` : ''}
+  `;
+
+  const groups = {
+    'A — Personal Allowance & SIPP (T01–T05)':   results.filter(r => ['T01a','T01b','T02a','T02b','T03a','T03b','T04a','T04b','T05'].includes(r.id)),
+    'B — Savings / Interest (T06–T09)':           results.filter(r => ['T06','T07','T08a','T08b','T09a','T09b'].includes(r.id)),
+    'C — Dividends (T10–T13)':                    results.filter(r => ['T10','T11a','T11b','T12','T13a','T13b'].includes(r.id)),
+    'D — Mixed Income Stacking (T14–T15)':        results.filter(r => ['T14a','T14b','T14c','T15a','T15b','T15c','T15d'].includes(r.id)),
+    'E — SIPP Higher Rate (T16)':                 results.filter(r => ['T16a','T16b'].includes(r.id)),
+    'F — CGT (T17–T19)':                          results.filter(r => ['T17','T18','T19a','T19b'].includes(r.id)),
+    'G — Withdrawal Engine / Cascade (T20)':      results.filter(r => r.id.startsWith('T20')),
+  };
+
+  function fmt(n) {
+    return '£' + (n || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  const out = document.getElementById('output');
+  for (const [title, rows] of Object.entries(groups)) {
+    if (!rows.length) continue;
+    const sec = document.createElement('div');
+
+    const titleEl = document.createElement('div');
+    titleEl.className = 'section-title';
+    titleEl.textContent = title;
+    sec.appendChild(titleEl);
+
+    const hdrs = document.createElement('div');
+    hdrs.className = 'col-headers';
+    hdrs.innerHTML = `<span></span><span></span>
+      <span class="col-header">Expected</span>
+      <span class="col-header">Actual</span>
+      <span class="col-header">Δ</span>`;
+    sec.appendChild(hdrs);
+
+    rows.forEach(r => {
+      const row = document.createElement('div');
+      row.className = `test-row ${r.pass ? 'pass' : 'fail'}`;
+      row.innerHTML = `
+        <span class="test-icon ${r.pass ? 'pass' : 'fail'}">${r.pass ? '✓' : '✗'}</span>
+        <span class="test-label"><span class="test-id">${r.id}</span>${r.label}</span>
+        <span class="val expected">${fmt(r.expected)}</span>
+        <span class="val actual ${r.pass ? 'ok' : 'bad'}">${fmt(r.actual)}</span>
+        <span class="val delta ${r.pass ? 'ok' : 'bad'}">${r.pass ? '—' : fmt(r.delta)}</span>
+      `;
+      sec.appendChild(row);
+    });
+
+    out.appendChild(sec);
+  }
+
+
+  // ── Report results to parent harness ──
+  if (window.parent !== window) {
+    const total  = results.length;
+    const passed = results.filter(r => r.pass).length;
+    window.parent.postMessage({
+      type: 'suite-results',
+      file: window.location.pathname.split('/').pop(),
+      total,
+      passed,
+      failed: total - passed,
+      results: results.map(r => ({ id: r.id, label: r.label, pass: r.pass, actual: r.actual, expected: r.expected, delta: r.delta })),
+    }, '*');
+  }
+
+})();
+</script>
+</body>
+</html>

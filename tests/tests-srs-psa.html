@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>SRS &amp; PSA Tests</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 14px; background: #0f1117; color: #e2e8f0; padding: 32px 24px; min-height: 100vh; }
+    h1 { font-size: 20px; font-weight: 600; color: #f8fafc; margin-bottom: 4px; }
+    .subtitle { color: #64748b; font-size: 13px; margin-bottom: 8px; }
+    .note { font-size: 12px; color: #94a3b8; background: #1e3a5f; border-left: 3px solid #3b82f6;
+      padding: 8px 12px; border-radius: 4px; margin-bottom: 28px; line-height: 1.6; }
+    .note strong { color: #bfdbfe; }
+    .note.bug { background: #2d1a0a; border-left-color: #f97316; color: #fed7aa; }
+    .note.bug strong { color: #fb923c; }
+    .summary { display: flex; gap: 16px; margin-bottom: 28px; flex-wrap: wrap; }
+    .summary-pill { padding: 8px 18px; border-radius: 999px; font-size: 13px; font-weight: 600; letter-spacing: 0.02em; }
+    .pill-total { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
+    .pill-pass  { background: #052e16; color: #4ade80; border: 1px solid #166534; }
+    .pill-fail  { background: #2d0a0a; color: #f87171; border: 1px solid #991b1b; }
+    .pill-bug   { background: #431407; color: #fb923c; border: 1px solid #9a3412; }
+    .section-title { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+      color: #475569; margin: 28px 0 10px; padding-bottom: 8px; border-bottom: 1px solid #1e293b; }
+    .test-row { display: grid; grid-template-columns: 24px 1fr 110px 110px 80px;
+      align-items: center; gap: 0 12px; padding: 9px 12px; border-radius: 6px; margin-bottom: 3px; }
+    .test-row:hover { background: #1a2235; }
+    .test-row.pass { border-left: 3px solid #22c55e; }
+    .test-row.fail { border-left: 3px solid #ef4444; background: #1a0f0f; }
+    .test-row.known-bug { border-left: 3px solid #f97316; background: #1c1008; }
+    .test-icon { font-size: 15px; text-align: center; }
+    .test-icon.pass { color: #22c55e; } .test-icon.fail { color: #ef4444; } .test-icon.bug  { color: #f97316; }
+    .test-label { color: #cbd5e1; font-size: 13px; }
+    .test-label .test-id { color: #475569; font-size: 11px; margin-right: 6px; font-weight: 600; }
+    .col-headers { display: grid; grid-template-columns: 24px 1fr 110px 110px 80px;
+      gap: 0 12px; padding: 0 12px 6px; margin-bottom: 2px; }
+    .col-header { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+      color: #475569; text-align: right; }
+    .val { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; text-align: right; }
+    .val.expected { color: #64748b; }
+    .val.actual.ok  { color: #86efac; } .val.actual.bad { color: #fca5a5; font-weight: 700; }
+    .val.actual.bug-val { color: #fdba74; font-weight: 700; }
+    .val.delta.ok { color: #475569; } .val.delta.bad { color: #f87171; } .val.delta.bug-val { color: #f97316; }
+  </style>
+</head>
+<body>
+<h1>SRS &amp; PSA Tests</h1>
+<p class="subtitle">Savings Rate Band (£5k @ 0%) phaseout · PSA tier boundaries · Dividend / PSA interaction</p>
+<div class="note">
+  <strong>HMRC rules (2026-27):</strong> SRS allows up to £5,000 savings at 0%, reduced £1-for-£1 by non-savings income above PA. SRS=0 when non-savings >= £17,570. PSA: £1,000 basic rate, £500 higher rate, £0 additional. Income ordering: non-savings then savings then dividends. <strong>Tolerance:</strong> £0.02 pure function.
+</div>
+<div class="note bug">
+  <strong>KNOWN BUG - PSA tier determination (calculator.js):</strong>
+  The engine computes <code>taxableForPSA = nsNet + savNet + divNet</code> and compares against the basic band (£37,700). This incorrectly includes dividend income. HMRC determines PSA tier by whether savings income sits within the basic band - dividends stacked above should not influence this. Result: a basic-rate taxpayer with significant dividends gets the £500 higher-rate PSA instead of £1,000, causing a <strong>£100/year overcharge</strong> per affected person. Tests marked with a warning symbol document the engine's current (wrong) output.
+</div>
+<div class="summary" id="summary"></div>
+<div id="output"></div>
+<script src="../js/data.js"></script>
+<script src="../js/calculator.js"></script>
+<script src="../js/engine.js"></script>
+<script>
+(function () {
+  const C   = window.RetireCalc;
+  const E   = window.RetireEngine;
+  const TAX = window.RetireData.TAX_RULES['2026-27'];
+
+  const P  = 0.02;
+  const EP = 1.00;
+
+  const results = [];
+  function test(id, label, actual, expected, tol, knownBug) {
+    tol = tol !== undefined ? tol : P;
+    const delta = Math.abs((actual || 0) - expected);
+    results.push({ id, label, actual: actual || 0, expected, delta, pass: delta <= tol, knownBug: !!knownBug });
+  }
+
+  function IT(ns, sav, div) {
+    return C.calcIncomeTaxDetailed(ns || 0, sav || 0, div || 0, TAX);
+  }
+
+  // SRS01 — ns=£5k, sav=£5k: remaining PA covers all savings → savNet=0, tax=0
+  ;(function () {
+    const r = IT(5000, 5000, 0);
+    test('SRS01a', 'A1 · ns=£5k,sav=£5k — savings absorbed by remaining PA; savNet=0', r.savNet, 0);
+    test('SRS01b', 'A1 · srsCover=£0 (savNet=0, nothing to shelter)',                    r.srsCover, 0);
+    test('SRS01c', 'A1 · Total tax=£0',                                                   r.tax, 0);
+  })();
+
+  // SRS02 — ns=£12,570 (=PA), sav=£5k: full SRS available
+  // nsNet=0; savNet=5000; srsAvail=5000; srsCover=5000; savTaxable=0; tax=0
+  ;(function () {
+    const r = IT(12570, 5000, 0);
+    test('SRS02a', 'B1 · ns=PA=£12,570 — nsNet=0, full SRS available',      r.nsNet, 0);
+    test('SRS02b', 'B1 · srsCover=£5,000 (full SRS covers all savings)',     r.srsCover, 5000);
+    test('SRS02c', 'B1 · savTaxable=£0',                                     r.savTaxable, 0);
+    test('SRS02d', 'B1 · Total tax=£0',                                      r.tax, 0);
+  })();
+
+  // SRS03 — ns=£13,570 (+£1k above PA), sav=£5k: SRS partially used
+  // nsNet=1000; srsAvail=4000; srsCover=4000; savAfterSRS=1000
+  // PSA=1000 (basic); psaCover=1000; savTaxable=0
+  // nsTax=200; savTax=0; total=200
+  ;(function () {
+    const r = IT(13570, 5000, 0);
+    test('SRS03a', 'C1 · ns=£13,570 — srsAvail=£4,000; srsCover=£4,000',    r.srsCover, 4000);
+    test('SRS03b', 'C1 · PSA £1,000 covers savAfterSRS → savTaxable=£0',    r.savTaxable, 0);
+    test('SRS03c', 'C1 · nsTax=£200; savTax=£0; total=£200',                r.tax, 200);
+  })();
+
+  // SRS04 — ns=£17,570 (SRS exhausted), sav=£5k
+  // nsNet=5000; srsAvail=0; PSA=1000; savTaxable=4000
+  // nsTax=1000; savTax=4000*20%=800; total=1800
+  ;(function () {
+    const r = IT(17570, 5000, 0);
+    test('SRS04a', 'C2 · ns=£17,570 — SRS exhausted; srsCover=0',           r.srsCover, 0);
+    test('SRS04b', 'C2 · PSA=£1,000; savTaxable=£4,000',                    r.savTaxable, 4000);
+    test('SRS04c', 'C2 · nsTax=£1,000+savTax=£800=total £1,800',           r.tax, 1800);
+  })();
+
+  // SRS05 — ns=£17,571 (+£1): srsAvail still 0; nsTax=1000.20; total=1800.20
+  ;(function () {
+    const r = IT(17571, 5000, 0);
+    test('SRS05a', 'C3 · ns=£17,571 (+£1) — srsAvail still 0',             r.srsCover, 0);
+    test('SRS05b', 'C3 · total=£1,800.20',                                   r.tax, 1800.20);
+  })();
+
+  // SRS06 — ns=£49,270, sav=£2k: taxableForPSA=36700+2000=38700>37700 → PSA=£500
+  // savTaxable=1500; bLeft=1000; savTax=1000*20%+500*40%=200+200=400
+  // nsTax=36700*20%=7340; total=7740
+  ;(function () {
+    const r = IT(49270, 2000, 0);
+    test('SRS06a', 'D1 · ns=£49,270+sav=£2k — PSA=£500 (higher-rate)',     r.psa, 500);
+    test('SRS06b', 'D1 · savTaxable=£1,500',                                 r.savTaxable, 1500);
+    test('SRS06c', 'D1 · savTax=£400 (£1k@20%+£500@40%)',                  r.savTax, 400);
+    test('SRS06d', 'D1 · Total tax=£7,740',                                  r.tax, 7740);
+  })();
+
+  // SRS07 — ns=£48,270, sav=£2k: taxableForPSA=35700+2000=37700 exactly → PSA=£1,000
+  // savTaxable=1000; bLeft=2000; savTax=1000*20%=200; nsTax=7140; total=7340
+  ;(function () {
+    const r = IT(48270, 2000, 0);
+    test('SRS07a', 'D2 · taxableForPSA=£37,700 exactly — PSA=£1,000',      r.psa, 1000);
+    test('SRS07b', 'D2 · savTaxable=£1,000; savTax=£200 (basic)',           r.savTax, 200);
+    test('SRS07c', 'D2 · Total tax=£7,340',                                  r.tax, 7340);
+  })();
+
+  // SRS08 — KNOWN BUG: ns=£44k, sav=£1k, div=£10k
+  // Engine: taxableForPSA=31430+1000+10000=42430>37700 → PSA=500 (WRONG)
+  // Correct: taxableForPSA should exclude divNet → 32430≤37700 → PSA=1000
+  // Bug causes savTax=£100 overcharge per person
+  ;(function () {
+    const r = IT(44000, 1000, 10000);
+    test('SRS08a', 'E1 KNOWN BUG · PSA=£500 engine (HMRC correct: £1,000)', r.psa,        500, P, true);
+    test('SRS08b', 'E1 KNOWN BUG · savTaxable=£500 (correct: £0)',           r.savTaxable, 500, P, true);
+    test('SRS08c', 'E1 KNOWN BUG · savTax=£100 overcharge (correct: £0)',    r.savTax,     100, P, true);
+  })();
+
+  // SRS09 — control: same ns+sav, div=0 → no bug; PSA=£1,000 correct
+  ;(function () {
+    const r = IT(44000, 1000, 0);
+    test('SRS09a', 'E2 · Control div=0 → PSA=£1,000 (no bug)',  r.psa, 1000);
+    test('SRS09b', 'E2 · savTaxable=£0',                         r.savTaxable, 0);
+    test('SRS09c', 'E2 · savTax=£0',                             r.savTax, 0);
+  })();
+
+  // SRS10 — KNOWN BUG total tax: ns=£44k,sav=£1k,div=£10k
+  // Engine total=£8,464.75 (PSA=500); correct=£8,364.75 (PSA=1000)
+  ;(function () {
+    const r = IT(44000, 1000, 10000);
+    test('SRS10a', 'E3 KNOWN BUG · Total tax=£8,464.75 (correct: £8,364.75)', r.tax, 8464.75, P, true);
+  })();
+
+  // Groups for rendering
+  var groups = [
+  { title: "A - SRS: savings absorbed by remaining PA (SRS01)", ids: ["SRS01"] },
+  { title: "B - SRS: non-savings = PA, full SRS available (SRS02)", ids: ["SRS02"] },
+  { title: "C - SRS phaseout: partial to exhausted to beyond (SRS03-SRS05)", ids: ["SRS03", "SRS04", "SRS05"] },
+  { title: "D - PSA tier: basic/higher boundary (SRS06-SRS07)", ids: ["SRS06", "SRS07"] },
+  { title: "E - KNOWN BUG: Dividends inflate PSA check (SRS08-SRS10)", ids: ["SRS08", "SRS09", "SRS10"] },
+];
+
+  var total    = results.length;
+  var passed   = results.filter(function(r){ return r.pass; }).length;
+  var failed   = total - passed;
+  var bugCount = results.filter(function(r){ return r.knownBug; }).length;
+
+  document.getElementById('summary').innerHTML =
+    '<span class="summary-pill pill-total">' + total + ' assertions</span>' +
+    '<span class="summary-pill pill-pass">&#x2713; ' + passed + ' passed</span>' +
+    (failed - bugCount > 0 ? '<span class="summary-pill pill-fail">&#x2717; ' + (failed - bugCount) + ' failed</span>' : '') +
+    (bugCount > 0 ? '<span class="summary-pill pill-bug">&#x26A0; ' + bugCount + ' known bugs</span>' : '');
+
+  function fmt(n) {
+    return '£' + (n || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  var out = document.getElementById('output');
+  groups.forEach(function(g) {
+    var rows = results.filter(function(r){
+      return g.ids.some(function(id){ return r.id.startsWith(id); });
+    });
+    if (!rows.length) return;
+    var sec = document.createElement('div');
+    var titleEl = document.createElement('div');
+    titleEl.className = 'section-title';
+    titleEl.textContent = g.title;
+    sec.appendChild(titleEl);
+    var hdrs = document.createElement('div');
+    hdrs.className = 'col-headers';
+    hdrs.innerHTML = '<span></span><span></span><span class="col-header">Expected</span><span class="col-header">Actual</span><span class="col-header">&#x394;</span>';
+    sec.appendChild(hdrs);
+    rows.forEach(function(r) {
+      var row = document.createElement('div');
+      var cls = r.knownBug ? 'known-bug' : (r.pass ? 'pass' : 'fail');
+      row.className = 'test-row ' + cls;
+      var iconCls = r.knownBug ? 'bug' : (r.pass ? 'pass' : 'fail');
+      var icon    = r.knownBug ? '&#x26A0;' : (r.pass ? '&#x2713;' : '&#x2717;');
+      var actCls  = r.knownBug ? 'bug-val' : (r.pass ? 'ok' : 'bad');
+      row.innerHTML =
+        '<span class="test-icon ' + iconCls + '">' + icon + '</span>' +
+        '<span class="test-label"><span class="test-id">' + r.id + '</span>' + r.label + '</span>' +
+        '<span class="val expected">' + fmt(r.expected) + '</span>' +
+        '<span class="val actual ' + actCls + '">' + fmt(r.actual) + '</span>' +
+        '<span class="val delta ' + actCls + '">' + (r.pass ? '—' : fmt(r.delta)) + '</span>';
+      sec.appendChild(row);
+    });
+    out.appendChild(sec);
+  });
+
+  if (window.parent !== window) {
+    window.parent.postMessage({
+      type: 'suite-results',
+      file: window.location.pathname.split('/').pop(),
+      total: total, passed: passed, failed: total - passed,
+      results: results.map(function(r){ return { id: r.id, label: r.label, pass: r.pass, actual: r.actual, expected: r.expected, delta: r.delta }; }),
+    }, '*');
+  }
+
+})();
+</script>
+</body>
+</html>

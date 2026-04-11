@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Tax Calculation Tests</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 14px;
+      background: #0f1117;
+      color: #e2e8f0;
+      padding: 32px 24px;
+      min-height: 100vh;
+    }
+
+    h1 {
+      font-size: 20px;
+      font-weight: 600;
+      color: #f8fafc;
+      margin-bottom: 4px;
+    }
+
+    .subtitle {
+      color: #64748b;
+      font-size: 13px;
+      margin-bottom: 32px;
+    }
+
+    /* Summary bar */
+    .summary {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 28px;
+      flex-wrap: wrap;
+    }
+
+    .summary-pill {
+      padding: 8px 18px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+
+    .pill-total  { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
+    .pill-pass   { background: #052e16; color: #4ade80; border: 1px solid #166534; }
+    .pill-fail   { background: #2d0a0a; color: #f87171; border: 1px solid #991b1b; }
+
+    /* Section headers */
+    .section-title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #475569;
+      margin: 28px 0 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #1e293b;
+    }
+
+    /* Test rows */
+    .test-row {
+      display: grid;
+      grid-template-columns: 24px 1fr 90px 90px 90px;
+      align-items: center;
+      gap: 0 12px;
+      padding: 9px 12px;
+      border-radius: 6px;
+      margin-bottom: 3px;
+      transition: background 0.1s;
+    }
+
+    .test-row:hover { background: #1a2235; }
+
+    .test-row.pass { border-left: 3px solid #22c55e; }
+    .test-row.fail { border-left: 3px solid #ef4444; background: #1a0f0f; }
+
+    .test-icon { font-size: 15px; text-align: center; }
+    .test-icon.pass { color: #22c55e; }
+    .test-icon.fail { color: #ef4444; }
+
+    .test-label { color: #cbd5e1; font-size: 13px; }
+    .test-label .test-id { color: #475569; font-size: 11px; margin-right: 6px; font-weight: 600; }
+
+    .col-header {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #475569;
+      text-align: right;
+    }
+
+    .val { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; text-align: right; }
+    .val.expected { color: #64748b; }
+    .val.actual.ok  { color: #86efac; }
+    .val.actual.bad { color: #fca5a5; font-weight: 700; }
+    .val.delta.ok   { color: #475569; }
+    .val.delta.bad  { color: #f87171; }
+
+    .col-headers {
+      display: grid;
+      grid-template-columns: 24px 1fr 90px 90px 90px;
+      gap: 0 12px;
+      padding: 0 12px 6px;
+      margin-bottom: 2px;
+    }
+
+    .no-tests { color: #475569; font-style: italic; padding: 12px; }
+  </style>
+</head>
+<body>
+
+<h1>Tax Calculation Tests</h1>
+<p class="subtitle">2026-27 rules &nbsp;·&nbsp; calcIncomeTaxDetailed · calcCGT · calcEmployeeNI</p>
+
+<div class="summary" id="summary"></div>
+<div id="output"></div>
+
+<!-- Dependencies: data.js must load before calculator.js -->
+<script src="../js/data.js"></script>
+<script src="../js/calculator.js"></script>
+
+<script>
+(function () {
+
+  // ─────────────────────────────────────────────
+  // Resolve functions from window.RetireCalc
+  // ─────────────────────────────────────────────
+  const C = window.RetireCalc;
+  const TAX_2026 = window.RetireData.TAX_RULES['2026-27'];
+
+  // Tolerance for floating point comparisons (pence)
+  const EPSILON = 0.02;
+
+  // ─────────────────────────────────────────────
+  // Test runner
+  // ─────────────────────────────────────────────
+  const results = [];
+
+  function test(id, label, actual, expected) {
+    const delta   = Math.abs(actual - expected);
+    const pass    = delta <= EPSILON;
+    results.push({ id, label, actual, expected, delta, pass });
+  }
+
+  // ─────────────────────────────────────────────
+  // Helper: shorthand for the income tax call
+  // ─────────────────────────────────────────────
+  function IT(ns, sav, div, rules) {
+    return C.calcIncomeTaxDetailed(ns, sav, div, rules || TAX_2026);
+  }
+
+  // ─────────────────────────────────────────────
+  // ── INCOME TAX: basic rate ───────────────────
+  // ─────────────────────────────────────────────
+
+  // S01 — Entirely below PA
+  // £8,000 salary; PA=£12,570; nothing taxable → £0
+  ;(function () {
+    const r = IT(8000, 0, 0);
+    test('S01', 'Salary below PA (£8,000)', r.tax, 0);
+  })();
+
+  // S02 — Salary only, basic rate
+  // £30,000 − £12,570 PA = £17,430 @ 20% = £3,486
+  ;(function () {
+    const r = IT(30000, 0, 0);
+    test('S02', 'Salary basic rate (£30,000)', r.tax, 3486);
+  })();
+
+  // S03 — Salary spanning basic → higher band
+  // £60,000 − £12,570 = £47,430 taxable
+  // £37,700 @ 20% = £7,540  +  £9,730 @ 40% = £3,892  →  £11,432
+  ;(function () {
+    const r = IT(60000, 0, 0);
+    test('S03', 'Salary spanning basic→higher (£60,000)', r.tax, 11432);
+  })();
+
+  // ─────────────────────────────────────────────
+  // ── INCOME TAX: savings / PSA / SRS ─────────
+  // ─────────────────────────────────────────────
+
+  // S04 — Basic-rate taxpayer; PSA = £1,000; interest partially taxable
+  // Salary £20,000: nsNet = £7,430.  Interest £1,500: savNet = £1,500
+  // SRS: nsNet > srsLimit (7430>5000) → srsAvail=0; savAfterSRS=1500
+  // taxableForPSA = 7430+1500 = £8,930 < basicBand (£37,700) → PSA=£1,000
+  // psaCover=min(1500,1000)=1000; savTaxable=500
+  // nsTax = 7430×20% = £1,486
+  // savTax = 500×20% = £100  (basic band has £30,270 room remaining)
+  // Total = £1,586
+  ;(function () {
+    const r = IT(20000, 1500, 0);
+    test('S04', 'Basic rate + interest, PSA=£1,000 (£20k sal, £1.5k int)', r.tax, 1586);
+    test('S04b', '  └ savTaxable = £500', r.savTaxable, 500);
+  })();
+
+  // S05 — Higher-rate taxpayer; PSA = £500
+  // Salary £51,000: nsNet = £38,430 (crosses into higher band)
+  // taxableForPSA = 38430 > 37700 → PSA = £500
+  // Interest £800: savNet=800; srsAvail=0; savAfterSRS=800
+  // psaCover=min(800,500)=500; savTaxable=300
+  // nsTax: 37700×20% + 730×40% = £7,540 + £292 = £7,832
+  // savTax: bLeft=max(0,37700−38430)=0 → all 300@40% = £120
+  // Total = £7,952
+  ;(function () {
+    const r = IT(51000, 800, 0);
+    test('S05', 'Higher rate + interest, PSA=£500 (£51k sal, £800 int)', r.tax, 7952);
+    test('S05b', '  └ PSA correctly £500 (not £1,000)', r.savTaxable, 300);
+  })();
+
+  // S06 — SRS absorbs all interest (low salary, meaningful savings)
+  // Salary £5,000: all covered by PA → nsNet=0; paRem=7570
+  // Interest £8,000: savNet = max(0, 8000−7570) = £430
+  // srsAvail = max(0, 5000−0) = 5000; srsCover = min(430,5000) = 430 → savAfterSRS=0
+  // taxableForPSA=430 → PSA=£1,000; psaCover=min(0,1000)=0; savTaxable=0
+  // Total = £0
+  ;(function () {
+    const r = IT(5000, 8000, 0);
+    test('S06', 'SRS absorbs all post-PA interest (£5k sal, £8k int)', r.tax, 0);
+    // srsCover not returned directly; verify via savNet=£430 and savTaxable=£0
+    test('S06b', '  └ savNet = £430 (post-PA interest, all covered by SRS)', r.savNet, 430);
+    test('S06c', '  └ savTaxable = £0 (SRS absorbed all)', r.savTaxable, 0);
+  })();
+
+  // S07 — SRS partially used, PSA covers remainder
+  // Salary £10,000: all covered by PA → nsNet=0; paRem=2570
+  // Interest £8,000: savNet = max(0,8000−2570) = £5,430
+  // srsAvail=5000; srsCover=5000; savAfterSRS=430
+  // taxableForPSA=5430 < 37700 → PSA=1000; psaCover=min(430,1000)=430; savTaxable=0
+  // Total = £0
+  ;(function () {
+    const r = IT(10000, 8000, 0);
+    test('S07', 'SRS + PSA together cover all interest (£10k sal, £8k int)', r.tax, 0);
+    test('S07b', '  └ savTaxable = £0', r.savTaxable, 0);
+  })();
+
+  // ─────────────────────────────────────────────
+  // ── INCOME TAX: dividends ────────────────────
+  // ─────────────────────────────────────────────
+
+  // S08 — Dividends within £500 allowance
+  // div=£400; divNet=400 (no PA needed); divTaxable=max(0,400−500)=0 → £0
+  ;(function () {
+    const r = IT(0, 0, 400);
+    test('S08', 'Dividends within £500 allowance (£400)', r.tax, 0);
+  })();
+
+  // S09 — Dividends above allowance, basic rate
+  // Salary £20,000: nsNet=£7,430.  Dividends £3,000: divNet=£3,000
+  // divTaxable = max(0,3000−500) = £2,500
+  // used = nsNet+savNet = 7430; bLeft = 37700−7430 = 30270; 2500×10.75% = £268.75
+  // nsTax = 7430×20% = £1,486
+  // Total = £1,754.75
+  ;(function () {
+    const r = IT(20000, 0, 3000);
+    test('S09', 'Dividends above allowance, basic rate (£20k sal, £3k div)', r.tax, 1754.75);
+    test('S09b', '  └ divTaxable = £2,500', r.divTaxable, 2500);
+  })();
+
+  // ─────────────────────────────────────────────
+  // ── INCOME TAX: PA taper ─────────────────────
+  // ─────────────────────────────────────────────
+
+  // S10 — PA tapers (income = £110,000)
+  // pa = 12570 − floor((110000−100000)/2) = 12570−5000 = £7,570
+  // nsNet = 110000−7570 = £102,430
+  // 37700×20% = £7,540  +  (102430−37700)×40% = 64730×40% = £25,892  →  £33,432
+  ;(function () {
+    const r = IT(110000, 0, 0);
+    test('S10', 'PA taper at £110,000', r.tax, 33432);
+  })();
+
+  // S11 — Additional rate; PA fully withdrawn (income = £130,000)
+  // pa = max(0, 12570 − floor((130000−100000)/2)) = max(0, 12570−15000) = £0
+  // nsNet = £130,000
+  // 37700×20%=£7,540 + 74870×40%=£29,948 + 17430×45%=£7,843.50 → £45,331.50
+  ;(function () {
+    const r = IT(130000, 0, 0);
+    test('S11', 'Additional rate, PA=£0 (£130,000)', r.tax, 45331.50);
+  })();
+
+  // ─────────────────────────────────────────────
+  // ── CGT ──────────────────────────────────────
+  // ─────────────────────────────────────────────
+
+  // C01 — All gain within basic band
+  // taxableAfterPA=£10,000; gain=£5,000
+  // basicBand=37700; basicUsed=10000; basicRem=27700; atBasic=5000 → 5000×18% = £900
+  ;(function () {
+    const r = C.calcCGT(10000, 5000, TAX_2026);
+    test('C01', 'CGT all in basic band (income £10k, gain £5k)', r, 900);
+  })();
+
+  // C02 — Gain straddles basic/higher band
+  // taxableAfterPA=£35,000; gain=£5,000
+  // basicRem=37700−35000=2700; atBasic=2700×18%=£486; atHigher=2300×24%=£552 → £1,038
+  ;(function () {
+    const r = C.calcCGT(35000, 5000, TAX_2026);
+    test('C02', 'CGT straddles bands (income £35k, gain £5k)', r, 1038);
+  })();
+
+  // C03 — All gain at higher rate (income already fills basic band)
+  // taxableAfterPA=£40,000; basicUsed=37700; basicRem=0; all at 24% → 5000×24% = £1,200
+  ;(function () {
+    const r = C.calcCGT(40000, 5000, TAX_2026);
+    test('C03', 'CGT all at higher rate (income £40k, gain £5k)', r, 1200);
+  })();
+
+  // C04 — Zero gain
+  ;(function () {
+    const r = C.calcCGT(20000, 0, TAX_2026);
+    test('C04', 'CGT zero gain', r, 0);
+  })();
+
+  // ─────────────────────────────────────────────
+  // ── NI ───────────────────────────────────────
+  // ─────────────────────────────────────────────
+
+  // N01 — Below primary threshold
+  ;(function () {
+    const r = C.calcEmployeeNI(10000, TAX_2026, false);
+    test('N01', 'NI below PT (£10,000)', r, 0);
+  })();
+
+  // N02 — Between PT and UEL
+  // (30000−12570) × 8% = 17430 × 8% = £1,394.40
+  ;(function () {
+    const r = C.calcEmployeeNI(30000, TAX_2026, false);
+    test('N02', 'NI between PT and UEL (£30,000)', r, 1394.40);
+  })();
+
+  // N03 — Above UEL
+  // (50270−12570)×8% + (60000−50270)×2% = 37700×8% + 9730×2% = £3,016 + £194.60 = £3,210.60
+  ;(function () {
+    const r = C.calcEmployeeNI(60000, TAX_2026, false);
+    test('N03', 'NI above UEL (£60,000)', r, 3210.60);
+  })();
+
+  // N04 — At or above State Pension Age → always £0
+  ;(function () {
+    const r = C.calcEmployeeNI(60000, TAX_2026, true);
+    test('N04', 'NI exempt at SPA (£60,000, aboveSPA=true)', r, 0);
+  })();
+
+  // ─────────────────────────────────────────────
+  // Render
+  // ─────────────────────────────────────────────
+
+  const total  = results.length;
+  const passed = results.filter(r => r.pass).length;
+  const failed = total - passed;
+
+  // Summary pills
+  const summaryEl = document.getElementById('summary');
+  summaryEl.innerHTML = `
+    <span class="summary-pill pill-total">${total} tests</span>
+    <span class="summary-pill pill-pass">✓ ${passed} passed</span>
+    ${failed > 0 ? `<span class="summary-pill pill-fail">✗ ${failed} failed</span>` : ''}
+  `;
+
+  // Group by section prefix
+  const sections = [
+    { key: 'S0', title: 'Income Tax — Basic Rate' },
+    { key: 'S0[4-7]', title: 'Income Tax — Savings & SRS' },
+    { key: 'S0[89]', title: 'Income Tax — Dividends' },
+    { key: 'S1', title: 'Income Tax — PA Taper & Additional Rate' },
+    { key: 'C', title: 'Capital Gains Tax' },
+    { key: 'N', title: 'National Insurance' },
+  ];
+
+  // Simple grouping by first character of id
+  const groups = {
+    'Income Tax — Basic Rate':                    results.filter(r => ['S01','S02','S03'].includes(r.id)),
+    'Income Tax — Savings, SRS & PSA':            results.filter(r => ['S04','S04b','S05','S05b','S06','S06b','S06c','S07','S07b'].includes(r.id)),
+    'Income Tax — Dividends':                     results.filter(r => ['S08','S09','S09b'].includes(r.id)),
+    'Income Tax — PA Taper & Additional Rate':    results.filter(r => ['S10','S11'].includes(r.id)),
+    'Capital Gains Tax':                          results.filter(r => r.id.startsWith('C')),
+    'National Insurance':                         results.filter(r => r.id.startsWith('N')),
+  };
+
+  function fmt(n) {
+    if (n === null || n === undefined) return '—';
+    return '£' + n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  const out = document.getElementById('output');
+
+  for (const [title, rows] of Object.entries(groups)) {
+    if (!rows.length) continue;
+
+    const sectionDiv = document.createElement('div');
+
+    const titleEl = document.createElement('div');
+    titleEl.className = 'section-title';
+    titleEl.textContent = title;
+    sectionDiv.appendChild(titleEl);
+
+    // Column headers
+    const hdrs = document.createElement('div');
+    hdrs.className = 'col-headers';
+    hdrs.innerHTML = `<span></span><span></span>
+      <span class="col-header">Expected</span>
+      <span class="col-header">Actual</span>
+      <span class="col-header">Δ</span>`;
+    sectionDiv.appendChild(hdrs);
+
+    rows.forEach(r => {
+      const row = document.createElement('div');
+      row.className = `test-row ${r.pass ? 'pass' : 'fail'}`;
+
+      const deltaStr = r.delta < 0.005 ? '—' : fmt(r.delta);
+      row.innerHTML = `
+        <span class="test-icon ${r.pass ? 'pass' : 'fail'}">${r.pass ? '✓' : '✗'}</span>
+        <span class="test-label"><span class="test-id">${r.id}</span>${r.label}</span>
+        <span class="val expected">${fmt(r.expected)}</span>
+        <span class="val actual ${r.pass ? 'ok' : 'bad'}">${fmt(r.actual)}</span>
+        <span class="val delta ${r.pass ? 'ok' : 'bad'}">${r.pass ? '—' : deltaStr}</span>
+      `;
+      sectionDiv.appendChild(row);
+    });
+
+    out.appendChild(sectionDiv);
+  }
+
+
+  // ── Report results to parent harness ──
+  if (window.parent !== window) {
+    const total  = results.length;
+    const passed = results.filter(r => r.pass).length;
+    window.parent.postMessage({
+      type: 'suite-results',
+      file: window.location.pathname.split('/').pop(),
+      total,
+      passed,
+      failed: total - passed,
+      results: results.map(r => ({ id: r.id, label: r.label, pass: r.pass, actual: r.actual, expected: r.expected, delta: r.delta })),
+    }, '*');
+  }
+
+})();
+</script>
+</body>
+</html>

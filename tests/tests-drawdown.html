@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Drawdown Engine Tests</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 14px;
+      background: #0f1117;
+      color: #e2e8f0;
+      padding: 32px 24px;
+      min-height: 100vh;
+    }
+
+    h1 { font-size: 20px; font-weight: 600; color: #f8fafc; margin-bottom: 4px; }
+    .subtitle { color: #64748b; font-size: 13px; margin-bottom: 32px; }
+
+    .summary { display: flex; gap: 16px; margin-bottom: 28px; flex-wrap: wrap; }
+    .summary-pill { padding: 8px 18px; border-radius: 999px; font-size: 13px; font-weight: 600; letter-spacing: 0.02em; }
+    .pill-total { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
+    .pill-pass  { background: #052e16; color: #4ade80; border: 1px solid #166534; }
+    .pill-fail  { background: #2d0a0a; color: #f87171; border: 1px solid #991b1b; }
+
+    .section-title {
+      font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
+      text-transform: uppercase; color: #475569;
+      margin: 28px 0 10px; padding-bottom: 8px;
+      border-bottom: 1px solid #1e293b;
+    }
+
+    .scenario-label {
+      font-size: 12px; color: #94a3b8; font-style: italic;
+      margin: 14px 0 6px 12px;
+    }
+
+    .test-row {
+      display: grid;
+      grid-template-columns: 24px 1fr 100px 100px 80px;
+      align-items: center; gap: 0 12px;
+      padding: 9px 12px; border-radius: 6px; margin-bottom: 3px;
+    }
+    .test-row:hover { background: #1a2235; }
+    .test-row.pass { border-left: 3px solid #22c55e; }
+    .test-row.fail { border-left: 3px solid #ef4444; background: #1a0f0f; }
+
+    .test-icon { font-size: 15px; text-align: center; }
+    .test-icon.pass { color: #22c55e; }
+    .test-icon.fail { color: #ef4444; }
+
+    .test-label { color: #cbd5e1; font-size: 13px; }
+    .test-label .test-id { color: #475569; font-size: 11px; margin-right: 6px; font-weight: 600; }
+
+    .col-headers {
+      display: grid;
+      grid-template-columns: 24px 1fr 100px 100px 80px;
+      gap: 0 12px; padding: 0 12px 6px; margin-bottom: 2px;
+    }
+    .col-header { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #475569; text-align: right; }
+
+    .val { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; text-align: right; }
+    .val.expected { color: #64748b; }
+    .val.actual.ok  { color: #86efac; }
+    .val.actual.bad { color: #fca5a5; font-weight: 700; }
+    .val.delta.ok   { color: #475569; }
+    .val.delta.bad  { color: #f87171; }
+  </style>
+</head>
+<body>
+
+<h1>Drawdown Engine Tests</h1>
+<p class="subtitle">Tax-aware mode · runProjection · withdrawal sequencing, income tax, CGT</p>
+
+<div class="summary" id="summary"></div>
+<div id="output"></div>
+
+<script src="../js/data.js"></script>
+<script src="../js/calculator.js"></script>
+<script src="../js/engine.js"></script>
+
+<script>
+(function () {
+
+  const E = window.RetireEngine;
+  const EPSILON = 1.0; // £1 tolerance for engine rounding across multiple steps
+
+  const results = [];
+  function test(id, label, actual, expected) {
+    const delta = Math.abs((actual||0) - expected);
+    const pass  = delta <= EPSILON;
+    results.push({ id, label, actual: actual||0, expected, delta, pass });
+  }
+
+  // ─────────────────────────────────────────────
+  // Base inputs factory — clean slate, override per scenario
+  // ─────────────────────────────────────────────
+  function baseInputs(overrides) {
+    return Object.assign({
+      startYear: 2026, endYear: 2027,         // engine requires endYear > startYear; rows[0] = 2026
+      p1DOB: 1959, p2DOB: 1960,               // ages 67 and 66
+      p1name: 'p1', p2name: 'p2',
+      spending: 40000, stepDownPct: 0,
+      p1Salary: 0, p1SalaryStop: null,
+      p2Salary: 0, p2SalaryStop: null,
+      p1SPAge: 99, p1SPAmt: 0,                // SP disabled by default
+      p2SPAge: 99, p2SPAmt: 0,
+      growth: 0, inflation: 0,
+      thresholdMode: 'never', thresholdFromYear: null,
+      bniEnabled: false, bniP1GIA: 0, bniP2GIA: 0,
+      dividendYield: 0,
+      withdrawalMode: 'tax-aware',
+      p1Order: ['ISA','GIA','SIPP','Cash'],
+      p2Order: ['ISA','GIA','SIPP','Cash'],
+      p1Bal: { Cash: 0, GIA: 0, SIPP: 0, ISA: 0 },
+      p2Bal: { Cash: 0, GIA: 0, SIPP: 0, ISA: 0 },
+    }, overrides);
+  }
+
+  function run(overrides) {
+    const inputs = baseInputs(overrides);
+    // Suppress alert() for invalid years during testing
+    const origAlert = window.alert;
+    window.alert = () => {};
+    const result = E.runProjection(inputs, []);
+    window.alert = origAlert;
+    return result;
+  }
+
+  // ─────────────────────────────────────────────
+  // ── D1: SIPP-only draw, single year ──────────
+  // ─────────────────────────────────────────────
+  // p1 SIPP=500k, target=40k, no other assets.
+  // Tax-aware: SIPP drawn to fill PA (12570/0.75=16,760), then catch-all
+  // draws remaining 23,240 split across SIPP until shortfall met.
+  // Total SIPP drawn=40k; sippTaxable=30k.
+  // IT: nsNet=30k-12570=17430 @ 20% = £3,486. CGT=0, NI=0.
+  // householdNetCashflow = 40000-3486 = 36514; cashflowShortfall = 3486.
+  // Snap: SIPP = 500000-40000 = 460000 (growth=0).
+  ;(function(){
+    const r = run({ p1Bal: { Cash:0, GIA:0, SIPP:500000, ISA:0 } });
+    const row = r.rows[0];
+    test('D01a', 'D1 · p1 income tax = £3,486',         row.p1IncomeTax,          3486);
+    test('D01b', 'D1 · household net cashflow = £36,514', row.householdNetCashflow, 36514);
+    test('D01c', 'D1 · cashflow shortfall = £3,486',     row.cashflowShortfall,    3486);
+    test('D01d', 'D1 · SIPP drawn = £40,000',            row.p1Drawn.SIPP,         40000);
+    test('D01e', 'D1 · SIPP balance after = £460,000',   row.snap.p1SIPP,          460000);
+  })();
+
+  // ─────────────────────────────────────────────
+  // ── D2: ISA-only draw — zero tax ─────────────
+  // ─────────────────────────────────────────────
+  // p1 ISA=300k, target=40k, no SIPP. ISA draws are tax-free.
+  // Tax-aware: PA headroom=12570 but no SIPP to fill it.
+  // Entire shortfall funded from ISA. IT=0, CGT=0, NI=0.
+  // householdNetCashflow=40000; cashflowShortfall=0.
+  ;(function(){
+    const r = run({ p1Bal: { Cash:0, GIA:0, SIPP:0, ISA:300000 } });
+    const row = r.rows[0];
+    test('D02a', 'D2 · income tax = £0 (ISA draw)',            row.p1IncomeTax,          0);
+    test('D02b', 'D2 · household net cashflow = £40,000',      row.householdNetCashflow, 40000);
+    test('D02c', 'D2 · cashflow shortfall = £0',               row.cashflowShortfall,    0);
+    test('D02d', 'D2 · ISA drawn = £40,000',                   row.p1Drawn.ISA,          40000);
+    test('D02e', 'D2 · ISA balance after = £260,000',          row.snap.p1ISA,           260000);
+  })();
+
+  // ─────────────────────────────────────────────
+  // ── D3: GIA draw with CGT (2 years, 10% growth)
+  // ─────────────────────────────────────────────
+  // Engine seeds cost basis = opening GIA balance, so gainRatio=0 in Y1.
+  // With 10% growth, Y2 has real gains to crystallise.
+  //
+  // Y1: GIA=200k, cost=200k, gainRatio=0, CGT=0.
+  //     After draw+growth: GIA=(200k-40k)x1.10=176,000; cost=160,000.
+  // Y2: GIA=176k, cost=160k, gainRatio=16k/176k=0.0909.
+  //     GIA drawn=40k; rawGain=3,636; taxableGain=636; CGT=636x18%=114.54.
+  //     householdNetCashflow=40000-114.54=39885.46.
+  ;(function(){
+    const r = run({
+      endYear: 2027,   // 2 years: rows[0]=2026 (Y1), rows[1]=2027 (Y2)
+      growth: 0.10,
+      p1Bal: { Cash:0, GIA:200000, SIPP:0, ISA:0 },
+    });
+    const y1 = r.rows[0], y2 = r.rows[1];
+    test('D03a', 'D3 Y1 · CGT = 0 (cost basis = opening balance)',  y1.p1CGT,                0);
+    test('D03b', 'D3 Y1 · GIA balance after = 176,000',            y1.snap.p1GIA,           176000);
+    test('D03c', 'D3 Y2 · CGT = 114.54 (gain after exemption)',    y2.p1CGT,                114.54);
+    test('D03d', 'D3 Y2 · income tax = 0',                         y2.p1IncomeTax,          0);
+    test('D03e', 'D3 Y2 · net cashflow = 39,885.46',               y2.householdNetCashflow, 39885.46);
+  })();
+
+  // ─────────────────────────────────────────────
+  // ── D4: Two-person SIPP+ISA, PA exactly used ─
+  // ─────────────────────────────────────────────
+  // p1: SIPP=300k, ISA=200k. p2: SIPP=200k, ISA=150k. Target=45k.
+  // Tax-aware: each draws SIPP to fill PA exactly (16,760 each → sippTaxable=12570 each).
+  // Total SIPP=33,520; rem=11,480 split 50/50 from ISA.
+  // Both have nonSavings=12570 → nsNet=0 → IT=0 each.
+  // householdTax=0; householdNetCashflow=45000; shortfall=0.
+  ;(function(){
+    const r = run({
+      spending: 45000,
+      p1Bal: { Cash:0, GIA:0, SIPP:300000, ISA:200000 },
+      p2Bal: { Cash:0, GIA:0, SIPP:200000, ISA:150000 },
+    });
+    const row = r.rows[0];
+    test('D04a', 'D4 · p1 income tax = £0 (PA exactly filled)', row.p1IncomeTax,          0);
+    test('D04b', 'D4 · p2 income tax = £0 (PA exactly filled)', row.p2IncomeTax,          0);
+    test('D04c', 'D4 · household tax = £0',                     row.householdTax,          0);
+    test('D04d', 'D4 · household net cashflow = £45,000',       row.householdNetCashflow, 45000);
+    test('D04e', 'D4 · cashflow shortfall = £0',                row.cashflowShortfall,    0);
+  })();
+
+  // ─────────────────────────────────────────────
+  // ── D5: State pension + SIPP top-up ──────────
+  // ─────────────────────────────────────────────
+  // p1 SP=11500, p2 SP=9000. p1 SIPP=400k, p2 SIPP=300k, both have ISA.
+  // Target=45k. Guaranteed=20500; shortfall=24500.
+  // p1 PA headroom=1070; p1 SIPP draw=1427 (1070/0.75); sippTaxable=1070.
+  // p2 PA headroom=3570; p2 SIPP draw=4760; sippTaxable=3570.
+  // Rem shortfall=18313 split 50/50 from ISA.
+  // p1 nonSavings=11500+1070=12570 → IT=0; p2=9000+3570=12570 → IT=0.
+  // householdTax=0; netCashflow=45000; shortfall=0.
+  ;(function(){
+    const r = run({
+      spending: 45000,
+      p1SPAge: 67, p1SPAmt: 11500,
+      p2SPAge: 66, p2SPAmt: 9000,
+      p1Bal: { Cash:0, GIA:0, SIPP:400000, ISA:300000 },
+      p2Bal: { Cash:0, GIA:0, SIPP:300000, ISA:200000 },
+      p1DOB: 1959, p2DOB: 1960,   // p1 age 67, p2 age 66 in 2026
+    });
+    const row = r.rows[0];
+    test('D05a', 'D5 · p1 income tax = £0 (SP+SIPP fills PA)',  row.p1IncomeTax,          0);
+    test('D05b', 'D5 · p2 income tax = £0 (SP+SIPP fills PA)',  row.p2IncomeTax,          0);
+    test('D05c', 'D5 · household tax = £0',                     row.householdTax,          0);
+    test('D05d', 'D5 · cashflow shortfall = £0',                row.cashflowShortfall,    0);
+    test('D05e', 'D5 · household net cashflow = £45,000',       row.householdNetCashflow, 45000);
+  })();
+
+  // ─────────────────────────────────────────────
+  // ── D6: Multi-year SIPP, 3 years, 5% growth ──
+  // ─────────────────────────────────────────────
+  // p1 SIPP=500k, target=40k, growth=5%, inflation=0.
+  // Each year draws 40k SIPP; sippTaxable=30k; IT=3486 each year.
+  // SIPP balance: Y1 end=460k×? wait — engine grows AFTER draw.
+  // Y1: SIPP start=500k, draw=40k → bal=460k → ×1.05 = 483000.
+  // Y2: SIPP start=483k, draw=40k → bal=443k → ×1.05 = 465150.
+  // Y3: SIPP start=465150, draw=40k → bal=425150 → ×1.05 = 446407.50.
+  ;(function(){
+    const r = run({
+      endYear: 2028,    // 3 years: 2026, 2027, 2028
+      growth: 0.05,
+      p1Bal: { Cash:0, GIA:0, SIPP:500000, ISA:0 },
+    });
+    const [y1, y2, y3] = r.rows;
+    // Year 1
+    test('D06a', 'D6 Y1 · income tax = £3,486',         y1.p1IncomeTax,  3486);
+    test('D06b', 'D6 Y1 · SIPP balance = £483,000',     y1.snap.p1SIPP,  483000);
+    // Year 2
+    test('D06c', 'D6 Y2 · income tax = £3,486',         y2.p1IncomeTax,  3486);
+    test('D06d', 'D6 Y2 · SIPP balance = £465,150',     y2.snap.p1SIPP,  465150);
+    // Year 3
+    test('D06e', 'D6 Y3 · income tax = £3,486',         y3.p1IncomeTax,  3486);
+    test('D06f', 'D6 Y3 · SIPP balance = £446,407.50',  y3.snap.p1SIPP,  446407.50);
+  })();
+
+  // ─────────────────────────────────────────────
+  // ── D7: Large SIPP draw into higher rate ─────
+  // ─────────────────────────────────────────────
+  // p1 SIPP=500k only, target=80k. No ISA/GIA to supplement.
+  // Total SIPP drawn=80k; sippTaxable=60k.
+  // IT: nsNet=60k-12570=47430; 37700@20%=7540 + 9730@40%=3892 = £11,432.
+  // householdNetCashflow=80000-11432=68568; cashflowShortfall=11432.
+  ;(function(){
+    const r = run({
+      spending: 80000,
+      p1Bal: { Cash:0, GIA:0, SIPP:500000, ISA:0 },
+    });
+    const row = r.rows[0];
+    test('D07a', 'D7 · income tax = £11,432 (higher rate breach)',  row.p1IncomeTax,          11432);
+    test('D07b', 'D7 · SIPP drawn = £80,000',                      row.p1Drawn.SIPP,          80000);
+    test('D07c', 'D7 · cashflow shortfall = £11,432',              row.cashflowShortfall,     11432);
+    test('D07d', 'D7 · household net cashflow = £68,568',          row.householdNetCashflow,  68568);
+  })();
+
+  // ─────────────────────────────────────────────
+  // ── D8: GIA with dividends + CGT (3 years, 20% growth)
+  // ─────────────────────────────────────────────
+  // Cost basis=opening GIA so gainRatio=0 in Y1. Need 20% growth
+  // over 3 years for gains to exceed the 3k CGT exemption.
+  //
+  // Y1: GIA=200k; divs=6k; giaPostDiv=194k; gainRatio=0; CGT=0.
+  //     GIA_end=(194k-24k)*1.20=204,000; cost=175,257.73.
+  // Y2: GIA=204k; divs=6,120; giaPostDiv=197,880; gainRatio=0.11.
+  //     drawn=23,880; rawGain=2,730; taxableGain=0 (under exemption); CGT=0.
+  // Y3: GIA=208,800; divs=6,264; giaPostDiv=202,536; gainRatio=0.24.
+  //     drawn=23,736; rawGain=5,675.50; taxableGain=2,675.50; CGT=481.59.
+  //     IT: divs=6,264; PA=12,570 absorbs all divs → IT=0.
+  //     netCashflow=30000-481.59=29518.41.
+  ;(function(){
+    const r = run({
+      endYear: 2028,   // 3 years: rows[0]=2026, rows[1]=2027, rows[2]=2028
+      spending: 30000,
+      growth: 0.20,
+      dividendYield: 0.03,
+      p1Bal: { Cash:0, GIA:200000, SIPP:0, ISA:0 },
+    });
+    const y1 = r.rows[0], y2 = r.rows[1], y3 = r.rows[2];
+    test('D08a', 'D8 Y1 · CGT = 0 (no gains yet)',                  y1.p1CGT,                0);
+    test('D08b', 'D8 Y2 · CGT = 0 (gain under exemption)',          y2.p1CGT,                0);
+    test('D08c', 'D8 Y3 · CGT = 481.59 (gain above exemption)',     y3.p1CGT,                481.59);
+    test('D08d', 'D8 Y3 · income tax = 0 (divs within PA)',         y3.p1IncomeTax,          0);
+    test('D08e', 'D8 Y3 · net cashflow = 29,518.41',                y3.householdNetCashflow, 29518.41);
+  })();
+
+  // ─────────────────────────────────────────────
+  // Render
+  // ─────────────────────────────────────────────
+  const total  = results.length;
+  const passed = results.filter(r => r.pass).length;
+  const failed = total - passed;
+
+  document.getElementById('summary').innerHTML = `
+    <span class="summary-pill pill-total">${total} tests</span>
+    <span class="summary-pill pill-pass">✓ ${passed} passed</span>
+    ${failed > 0 ? `<span class="summary-pill pill-fail">✗ ${failed} failed</span>` : ''}
+  `;
+
+  const groups = {
+    'D1 · SIPP-only draw (1 year)':                   results.filter(r => r.id.startsWith('D01')),
+    'D2 · ISA-only draw — zero tax (1 year)':         results.filter(r => r.id.startsWith('D02')),
+    'D3 · GIA draw with CGT (2 years, 10% growth)':                results.filter(r => r.id.startsWith('D03')),
+    'D4 · Two-person SIPP+ISA, PA exactly used':      results.filter(r => r.id.startsWith('D04')),
+    'D5 · State pension + SIPP top-up':               results.filter(r => r.id.startsWith('D05')),
+    'D6 · Multi-year SIPP with 5% growth (3 years)':  results.filter(r => r.id.startsWith('D06')),
+    'D7 · Large SIPP draw into higher rate':          results.filter(r => r.id.startsWith('D07')),
+    'D8 · GIA dividends + CGT band stacking (3 years, 20% growth)':         results.filter(r => r.id.startsWith('D08')),
+  };
+
+  function fmt(n) {
+    return '£' + (n||0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  const out = document.getElementById('output');
+
+  for (const [title, rows] of Object.entries(groups)) {
+    if (!rows.length) continue;
+    const sec = document.createElement('div');
+
+    const titleEl = document.createElement('div');
+    titleEl.className = 'section-title';
+    titleEl.textContent = title;
+    sec.appendChild(titleEl);
+
+    const hdrs = document.createElement('div');
+    hdrs.className = 'col-headers';
+    hdrs.innerHTML = `<span></span><span></span>
+      <span class="col-header">Expected</span>
+      <span class="col-header">Actual</span>
+      <span class="col-header">Δ</span>`;
+    sec.appendChild(hdrs);
+
+    rows.forEach(r => {
+      const row = document.createElement('div');
+      row.className = `test-row ${r.pass ? 'pass' : 'fail'}`;
+      row.innerHTML = `
+        <span class="test-icon ${r.pass ? 'pass' : 'fail'}">${r.pass ? '✓' : '✗'}</span>
+        <span class="test-label"><span class="test-id">${r.id}</span>${r.label}</span>
+        <span class="val expected">${fmt(r.expected)}</span>
+        <span class="val actual ${r.pass ? 'ok' : 'bad'}">${fmt(r.actual)}</span>
+        <span class="val delta ${r.pass ? 'ok' : 'bad'}">${r.pass ? '—' : fmt(r.delta)}</span>
+      `;
+      sec.appendChild(row);
+    });
+
+    out.appendChild(sec);
+  }
+
+
+  // ── Report results to parent harness ──
+  if (window.parent !== window) {
+    const total  = results.length;
+    const passed = results.filter(r => r.pass).length;
+    window.parent.postMessage({
+      type: 'suite-results',
+      file: window.location.pathname.split('/').pop(),
+      total,
+      passed,
+      failed: total - passed,
+      results: results.map(r => ({ id: r.id, label: r.label, pass: r.pass, actual: r.actual, expected: r.expected, delta: r.delta })),
+    }, '*');
+  }
+
+})();
+</script>
+</body>
+</html>

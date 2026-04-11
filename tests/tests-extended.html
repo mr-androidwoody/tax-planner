@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Extended Engine Tests — Inflation · B&amp;I · Overflow · SRS</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 14px; background: #0f1117; color: #e2e8f0;
+      padding: 32px 24px; min-height: 100vh;
+    }
+    h1 { font-size: 20px; font-weight: 600; color: #f8fafc; margin-bottom: 4px; }
+    .subtitle { color: #64748b; font-size: 13px; margin-bottom: 28px; }
+    .summary { display: flex; gap: 16px; margin-bottom: 28px; flex-wrap: wrap; }
+    .summary-pill { padding: 8px 18px; border-radius: 999px; font-size: 13px; font-weight: 600; letter-spacing: 0.02em; }
+    .pill-total { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
+    .pill-pass  { background: #052e16; color: #4ade80; border: 1px solid #166534; }
+    .pill-fail  { background: #2d0a0a; color: #f87171; border: 1px solid #991b1b; }
+    .section-title {
+      font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
+      text-transform: uppercase; color: #475569;
+      margin: 28px 0 10px; padding-bottom: 8px;
+      border-bottom: 1px solid #1e293b;
+    }
+    .test-row {
+      display: grid;
+      grid-template-columns: 24px 1fr 110px 110px 80px;
+      align-items: center; gap: 0 12px;
+      padding: 9px 12px; border-radius: 6px; margin-bottom: 3px;
+    }
+    .test-row:hover { background: #1a2235; }
+    .test-row.pass { border-left: 3px solid #22c55e; }
+    .test-row.fail { border-left: 3px solid #ef4444; background: #1a0f0f; }
+    .test-icon { font-size: 15px; text-align: center; }
+    .test-icon.pass { color: #22c55e; }
+    .test-icon.fail { color: #ef4444; }
+    .test-label { color: #cbd5e1; font-size: 13px; }
+    .test-label .test-id { color: #475569; font-size: 11px; margin-right: 6px; font-weight: 600; }
+    .col-headers {
+      display: grid;
+      grid-template-columns: 24px 1fr 110px 110px 80px;
+      gap: 0 12px; padding: 0 12px 6px; margin-bottom: 2px;
+    }
+    .col-header { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #475569; text-align: right; }
+    .val { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; text-align: right; }
+    .val.expected { color: #64748b; }
+    .val.actual.ok  { color: #86efac; }
+    .val.actual.bad { color: #fca5a5; font-weight: 700; }
+    .val.delta.ok   { color: #475569; }
+    .val.delta.bad  { color: #f87171; }
+  </style>
+</head>
+<body>
+
+<h1>Extended Engine Tests</h1>
+<p class="subtitle">Inflation uprating · Bed-and-ISA CGT · Two-person overflow · SRS/PSA diagnostic (T09 · T13 · T14 · T15)</p>
+
+<div class="summary" id="summary"></div>
+<div id="output"></div>
+
+<script src="../js/data.js"></script>
+<script src="../js/calculator.js"></script>
+<script src="../js/engine.js"></script>
+
+<script>
+(function () {
+
+  const C   = window.RetireCalc;
+  const TAX = window.RetireData.TAX_RULES['2026-27'];
+
+  const P  = 0.02;  // pure tax function tolerance
+  const EP = 1.00;  // engine projection tolerance
+
+  const results = [];
+  function test(id, label, actual, expected, tol) {
+    tol = tol !== undefined ? tol : EP;
+    const delta = Math.abs((actual || 0) - expected);
+    results.push({ id, label, actual: actual || 0, expected, delta, pass: delta <= tol });
+  }
+
+  function IT(ns, sav, div) {
+    return C.calcIncomeTaxDetailed(ns || 0, sav || 0, div || 0, TAX);
+  }
+
+  // Single-year engine runner (returns rows[0])
+  function runEngine(overrides) {
+    const inputs = Object.assign({
+      startYear: 2026, endYear: 2027,
+      p1DOB: 1966, p2DOB: 1967,
+      p1name: 'p1', p2name: 'p2',
+      spending: 40000, stepDownPct: 0,
+      p1Salary: 0, p1SalaryStop: null,
+      p2Salary: 0, p2SalaryStop: null,
+      p1SPAge: 99, p1SPAmt: 0,
+      p2SPAge: 99, p2SPAmt: 0,
+      growth: 0, inflation: 0,
+      thresholdMode: 'never', thresholdFromYear: null,
+      bniEnabled: false, bniP1GIA: 0, bniP2GIA: 0,
+      dividendYield: 0,
+      withdrawalMode: 'tax-aware',
+      p1Order: ['ISA', 'GIA', 'SIPP', 'Cash'],
+      p2Order: ['ISA', 'GIA', 'SIPP', 'Cash'],
+      p1Bal: { Cash: 0, GIA: 0, SIPP: 0, ISA: 0 },
+      p2Bal: { Cash: 0, GIA: 0, SIPP: 0, ISA: 0 },
+    }, overrides);
+    const orig = window.alert; window.alert = () => {};
+    const result = window.RetireEngine.runProjection(inputs, []);
+    window.alert = orig;
+    return result ? result : null;
+  }
+
+  // ══════════════════════════════════════════════════════
+  // A. INFLATION UPRATING
+  // cumInfl starts at 1 and advances AFTER each row is written.
+  // rows[0] always uses cumInfl=1. Spending = spending × cumInfl.
+  // ══════════════════════════════════════════════════════
+
+  // INF01 — 3% inflation: spending target compounds correctly
+  // rows[0] target = 40000×1.000 = £40,000
+  // rows[1] target = 40000×1.030 = £41,200
+  // rows[2] target = 40000×1.0609= £42,436
+  ;(function(){
+    const r = runEngine({ endYear: 2029, inflation: 0.03, p1Bal: { Cash:500000, GIA:0, SIPP:0, ISA:0 } });
+    if (!r) return;
+    test('INF01a', 'Inflation · rows[0].target = £40,000',  r.rows[0].target, 40000);
+    test('INF01b', 'Inflation · rows[1].target = £41,200',  r.rows[1].target, 41200);
+    test('INF01c', 'Inflation · rows[2].target = £42,436',  r.rows[2].target, 42436);
+  })();
+
+  // INF02 — cumInfl values are recorded correctly (before the annual advance)
+  ;(function(){
+    const r = runEngine({ endYear: 2029, inflation: 0.03, p1Bal: { Cash:500000, GIA:0, SIPP:0, ISA:0 } });
+    if (!r) return;
+    test('INF02a', 'Inflation · rows[0].cumInfl = 1.000',  r.rows[0].cumInfl, 1.000,   0.0001);
+    test('INF02b', 'Inflation · rows[1].cumInfl = 1.030',  r.rows[1].cumInfl, 1.030,   0.0001);
+    test('INF02c', 'Inflation · rows[2].cumInfl = 1.0609', r.rows[2].cumInfl, 1.0609,  0.0001);
+  })();
+
+  // INF03 — State pension uprates with inflation
+  // p1SPAge=60 (always active), p1SPAmt=11502
+  // rows[0]: p1SP = 11502×1.000 = £11,502
+  // rows[1]: p1SP = 11502×1.030 = £11,847.06
+  ;(function(){
+    const r = runEngine({
+      endYear: 2028, inflation: 0.03,
+      p1SPAge: 60, p1SPAmt: 11502,
+      p1Bal: { Cash:500000, GIA:0, SIPP:0, ISA:0 },
+    });
+    if (!r) return;
+    test('INF03a', 'SP uprating · rows[0].p1SP = £11,502',    r.rows[0].p1SP, 11502);
+    test('INF03b', 'SP uprating · rows[1].p1SP = £11,847.06', r.rows[1].p1SP, 11502 * 1.03, EP);
+  })();
+
+  // INF04 — thresholdMode='never': PA stays nominal; inflated salary creates taxable income
+  // rows[0] (2026): p1SalInc = 12570×1 = 12570; PA=12570 → tax=£0
+  // rows[1] (2027): p1SalInc = 12570×1.03 = 12947.10; PA still 12570; nsNet=377.10; tax=£75.42
+  ;(function(){
+    const r = runEngine({
+      endYear: 2028, inflation: 0.03, thresholdMode: 'never',
+      p1Salary: 12570, p1SalaryStop: 99,
+      p1Bal: { Cash:200000, GIA:0, SIPP:0, ISA:0 },
+    });
+    if (!r) return;
+    test('INF04a', 'Threshold=never · rows[0] p1IncomeTax = £0',        r.rows[0].p1IncomeTax, 0);
+    test('INF04b', 'Threshold=never · rows[1] p1IncomeTax = £75.42 (PA frozen)', r.rows[1].p1IncomeTax, (12570 * 1.03 - 12570) * 0.20, EP);
+  })();
+
+  // INF05 — thresholdMode='always': PA uprates with inflation; same salary stays tax-free
+  ;(function(){
+    const r = runEngine({
+      endYear: 2028, inflation: 0.03, thresholdMode: 'always',
+      p1Salary: 12570, p1SalaryStop: 99,
+      p1Bal: { Cash:200000, GIA:0, SIPP:0, ISA:0 },
+    });
+    if (!r) return;
+    test('INF05a', 'Threshold=always · rows[0] p1IncomeTax = £0', r.rows[0].p1IncomeTax, 0);
+    test('INF05b', 'Threshold=always · rows[1] p1IncomeTax = £0 (PA uprated)', r.rows[1].p1IncomeTax, 0, EP);
+  })();
+
+  // INF06 — Step-down at age 75 with inflation
+  // p1DOB=1951 → p1Age=75 from rows[0]; stepDownPct=20; inflation=3%
+  // rows[0]: 40000×1.000×0.80 = £32,000
+  // rows[1]: 40000×1.030×0.80 = £32,960
+  ;(function(){
+    const r = runEngine({
+      p1DOB: 1951, stepDownPct: 20, endYear: 2028, inflation: 0.03,
+      p1Bal: { Cash:200000, GIA:0, SIPP:0, ISA:0 },
+    });
+    if (!r) return;
+    test('INF06a', 'Step-down+inflation · rows[0].target = £32,000', r.rows[0].target, 32000);
+    test('INF06b', 'Step-down+inflation · rows[1].target = £32,960', r.rows[1].target, 32960, EP);
+  })();
+
+  // INF07 — SP switches on mid-projection
+  // p1DOB=1960, p1SPAge=67 → age=66 in 2026, 67 in 2027
+  // rows[0].p1SP = 0; rows[1].p1SP = 11502
+  ;(function(){
+    const r = runEngine({
+      p1DOB: 1960, p1SPAge: 67, p1SPAmt: 11502, endYear: 2028,
+      p1Bal: { Cash:200000, GIA:0, SIPP:0, ISA:0 },
+    });
+    if (!r) return;
+    test('INF07a', 'SP trigger · rows[0].p1SP = £0 (age 66 < 67)',    r.rows[0].p1SP, 0);
+    test('INF07b', 'SP trigger · rows[1].p1SP = £11,502 (age 67)',    r.rows[1].p1SP, 11502);
+  })();
+
+  // ══════════════════════════════════════════════════════
+  // B. BED-AND-ISA CGT
+  // Cost basis seeded = GIA opening → gainRatio = 0 in year 1.
+  // Gain ratio emerges only after growth pushes GIA above cost.
+  // CGT exempt = £3,000; rates 18% basic / 24% higher.
+  // ══════════════════════════════════════════════════════
+
+  // BNI01 — Year-1 B&I: gainRatio=0 → no CGT regardless of transfer size
+  // GIA=100000, cost=100000, bniP1GIA=20000; gains=0; GIA→80000, ISA→20000
+  // spending=0 so no wrapper draws occur — snap reflects only the B&I transfer
+  ;(function(){
+    const r = runEngine({ spending: 0, bniEnabled: true, bniP1GIA: 20000, p1Bal: { Cash:0, GIA:100000, SIPP:0, ISA:0 } });
+    if (!r) return;
+    test('BNI01a', 'B&I year-1 · p1CGT = £0 (gainRatio=0)',  r.rows[0].p1CGT, 0);
+    test('BNI01b', 'B&I year-1 · GIA end = £80,000',         r.rows[0].snap.p1GIA, 80000);
+    test('BNI01c', 'B&I year-1 · ISA end = £20,000',         r.rows[0].snap.p1ISA, 20000);
+  })();
+
+  // BNI02 — ISA_ALLOWANCE cap: bniP1GIA=50000 capped at £20,000
+  // spending=0 so snap reflects only the B&I transfer
+  ;(function(){
+    const r = runEngine({ spending: 0, bniEnabled: true, bniP1GIA: 50000, p1Bal: { Cash:0, GIA:100000, SIPP:0, ISA:0 } });
+    if (!r) return;
+    test('BNI02a', 'B&I cap · transfer capped at £20k: GIA = £80,000', r.rows[0].snap.p1GIA, 80000);
+    test('BNI02b', 'B&I cap · ISA = £20,000',                          r.rows[0].snap.p1ISA, 20000);
+  })();
+
+  // BNI03 — Two-year run; 20% growth; gains exceed £3k exemption in year 2
+  // Year 1: GIA=200000, cost=200000; gainRatio=0; B&I=20000; newCost=180000; GIA→180000×1.2=216000
+  // Year 2: GIA=216000, cost=180000; gainRatio=36000/216000=1/6
+  //   gains=20000×(1/6)=3333.33; taxable=333.33; CGT=333.33×18%=£60.00
+  ;(function(){
+    const r = runEngine({
+      startYear: 2026, endYear: 2028, growth: 0.20,
+      bniEnabled: true, bniP1GIA: 20000,
+      p1Bal: { Cash:100000, GIA:200000, SIPP:0, ISA:0 },
+    });
+    if (!r) return;
+    test('BNI03a', 'B&I multi-year · year 1: p1CGT = £0',                    r.rows[0].p1CGT, 0);
+    test('BNI03b', 'B&I multi-year · year 2: p1AnnualGains ≈ £3,333.33',    r.rows[1].p1AnnualGains, 3333.33, EP);
+    test('BNI03c', 'B&I multi-year · year 2: p1CGT = £60.00 (333.33 × 18%)',r.rows[1].p1CGT, 60.00, EP);
+  })();
+
+  // BNI04 — CGT at higher rate: salary fills basic band; gain taxed at 24%
+  // Same GIA/growth as BNI03 but p1Salary=60000 pushes all of basic band into use
+  // taxableIncomeAfterPA=47430; basicBand=37700; basicUsed=37700; basicRemaining=0
+  // taxableGain=333.33; all at 24%: CGT=333.33×24%=£80.00
+  ;(function(){
+    const r = runEngine({
+      startYear: 2026, endYear: 2028, growth: 0.20,
+      p1Salary: 60000, p1SalaryStop: 99,
+      bniEnabled: true, bniP1GIA: 20000,
+      p1Bal: { Cash:100000, GIA:200000, SIPP:0, ISA:0 },
+    });
+    if (!r) return;
+    test('BNI04', 'B&I higher-rate · year 2: p1CGT = £80.00 (333.33 × 24%)', r.rows[1].p1CGT, 80.00, EP);
+  })();
+
+  // ══════════════════════════════════════════════════════
+  // C. TWO-PERSON OVERFLOW
+  // Tax-aware: each person draws SIPP to fill PA, then remaining
+  // shortfall split 50/50. Unmet share spills to the other person.
+  // ══════════════════════════════════════════════════════
+
+  // OVF01 — Symmetric: p1 ISA=20k, p2 ISA=20k → 20k each, no overflow
+  ;(function(){
+    const row = runEngine({
+      p1Bal: { Cash:0, GIA:0, SIPP:0, ISA:20000 },
+      p2Bal: { Cash:0, GIA:0, SIPP:0, ISA:20000 },
+    });
+    if (!row) return;
+    test('OVF01a', 'Overflow · symmetric: p1Drawn.ISA = £20,000', row.rows[0].p1Drawn.ISA, 20000);
+    test('OVF01b', 'Overflow · symmetric: p2Drawn.ISA = £20,000', row.rows[0].p2Drawn.ISA, 20000);
+  })();
+
+  // OVF02 — p1 ISA=5000, p2 ISA=50000, target=40000
+  // p1 allocated 20000 but only has 5000 → p1Unmet=15000 spills to p2
+  // p2Drawn.ISA = 20000 + 15000 = £35,000
+  ;(function(){
+    const row = runEngine({
+      p1Bal: { Cash:0, GIA:0, SIPP:0, ISA:5000  },
+      p2Bal: { Cash:0, GIA:0, SIPP:0, ISA:50000 },
+    });
+    if (!row) return;
+    test('OVF02a', 'Overflow · p1 partial: p1Drawn.ISA = £5,000',         row.rows[0].p1Drawn.ISA, 5000);
+    test('OVF02b', 'Overflow · p2 absorbs unmet: p2Drawn.ISA = £35,000',  row.rows[0].p2Drawn.ISA, 35000);
+    test('OVF02c', 'Overflow · total draw = £40,000',
+      row.rows[0].p1Drawn.ISA + row.rows[0].p2Drawn.ISA, 40000);
+  })();
+
+  // OVF03 — p1 fully empty, p2 ISA=60000; p2 must cover all £40,000
+  ;(function(){
+    const row = runEngine({
+      p1Bal: { Cash:0, GIA:0, SIPP:0, ISA:0    },
+      p2Bal: { Cash:0, GIA:0, SIPP:0, ISA:60000 },
+    });
+    if (!row) return;
+    const p1Total = (row.rows[0].p1Drawn.ISA||0) + (row.rows[0].p1Drawn.GIA||0)
+                  + (row.rows[0].p1Drawn.SIPP||0) + (row.rows[0].p1Drawn.Cash||0);
+    test('OVF03a', 'Overflow · p1 empty: p1 total draw = £0',          p1Total, 0);
+    test('OVF03b', 'Overflow · p2 covers all: p2Drawn.ISA = £40,000', row.rows[0].p2Drawn.ISA, 40000);
+  })();
+
+  // OVF04 — p1 SIPP=40000 only; p2 has nothing; target=40000
+  // p1 draws SIPP to fill PA: 16760; sippTaxable=12570; remShortfall=23240
+  // p2 has nothing; p2Unmet spills back to p1 SIPP
+  // p1Drawn.SIPP total=40000; sippTaxable=30000; nsNet=17430; IT=17430×20%=£3,486
+  ;(function(){
+    const row = runEngine({
+      p1Bal: { Cash:0, GIA:0, SIPP:40000, ISA:0 },
+      p2Bal: { Cash:0, GIA:0, SIPP:0,     ISA:0 },
+    });
+    if (!row) return;
+    test('OVF04a', 'Overflow · p1 SIPP-only: p1Drawn.SIPP = £40,000', row.rows[0].p1Drawn.SIPP, 40000);
+    test('OVF04b', 'Overflow · p2 draws nothing',
+      (row.rows[0].p2Drawn.SIPP||0)+(row.rows[0].p2Drawn.ISA||0)+(row.rows[0].p2Drawn.GIA||0), 0);
+    test('OVF04c', 'Overflow · p1IncomeTax = £3,486 (SIPP taxable £30k)', row.rows[0].p1IncomeTax, 3486, EP);
+  })();
+
+  // OVF05 — 50/50 mode: same overflow logic, different code path
+  // p1 ISA=5000, p2 ISA=50000; p1 gets 20000 but only has 5000
+  // p1Unmet=15000 → p2 draws 20000+15000=35000
+  ;(function(){
+    const row = runEngine({
+      withdrawalMode: '50/50',
+      p1Bal: { Cash:0, GIA:0, SIPP:0, ISA:5000  },
+      p2Bal: { Cash:0, GIA:0, SIPP:0, ISA:50000 },
+    });
+    if (!row) return;
+    test('OVF05a', '50/50 overflow · p1Drawn.ISA = £5,000',  row.rows[0].p1Drawn.ISA, 5000);
+    test('OVF05b', '50/50 overflow · p2Drawn.ISA = £35,000', row.rows[0].p2Drawn.ISA, 35000);
+  })();
+
+  // ══════════════════════════════════════════════════════
+  // D. SRS / PSA DIAGNOSTIC — T09, T13, T14, T15
+  // Pure calcIncomeTaxDetailed calls. Tolerance £0.02.
+  // srsAvail = max(0, £5,000 − nsNet). PSA tier from taxableForPSA vs band widths.
+  // ══════════════════════════════════════════════════════
+
+  // T09 — Salary £10,000 + interest £6,000
+  // nsNet=0; paRem=2570; savNet=3430; srsAvail=5000; srsCover=3430
+  // savAfterSRS=0 → savTaxable=0; tax=£0
+  ;(function(){
+    const r = IT(10000, 6000, 0);
+    test('T09a', 'T09 · Sal £10k + int £6k → savNet = £3,430',      r.savNet,      3430, P);
+    test('T09b', 'T09 · SRS covers all post-PA interest → savTaxable = £0', r.savTaxable, 0,    P);
+    test('T09c', 'T09 · Tax = £0',                                   r.tax,         0,    P);
+  })();
+
+  // T13 — Salary £10,000 + dividends £5,000
+  // nsNet=0; paRem=2570; divNet=2430; divTaxable=1930; tax=1930×10.75%=£207.475
+  ;(function(){
+    const r = IT(10000, 0, 5000);
+    test('T13a', 'T13 · Sal £10k + div £5k → divNet = £2,430',         r.divNet,     2430,    P);
+    test('T13b', 'T13 · divTaxable = £1,930 (2430 − DA 500)',           r.divTaxable, 1930,    P);
+    test('T13c', 'T13 · Tax = £207.475',                                r.tax,        207.475, P);
+  })();
+
+  // T14 — Salary £10,000 + interest £5,000 + dividends £5,000
+  // nsNet=0; paRem=2570; savNet=2430; srsAvail=5000; srsCover=2430 → savAfterSRS=0
+  // divNet=5000; divTaxable=4500; tax=4500×10.75%=£483.75
+  ;(function(){
+    const r = IT(10000, 5000, 5000);
+    test('T14a', 'T14 · Sal £10k + int £5k + div £5k → savTaxable = £0 (SRS covers)', r.savTaxable, 0,      P);
+    test('T14b', 'T14 · divTaxable = £4,500',                                          r.divTaxable, 4500,   P);
+    test('T14c', 'T14 · Tax = £483.75',                                                r.tax,        483.75, P);
+  })();
+
+  // T15 — NS £15,000 + interest £5,000 + dividends £5,000
+  // nsNet=2430; srsAvail=2570; srsCover=2570; savAfterSRS=2430; PSA=1000; savTaxable=1430
+  // divTaxable=4500; nsTax=486; savTax=286; divTax=483.75; total=£1,255.75
+  ;(function(){
+    const r = IT(15000, 5000, 5000);
+    test('T15a', 'T15 · NS £15k + int £5k + div £5k → nsNet = £2,430',    r.nsNet,      2430,    P);
+    test('T15b', 'T15 · savTaxable = £1,430 (SRS £2,570 + PSA £1,000)',   r.savTaxable, 1430,    P);
+    test('T15c', 'T15 · divTaxable = £4,500',                              r.divTaxable, 4500,    P);
+    test('T15d', 'T15 · Tax = £1,255.75',                                  r.tax,        1255.75, P);
+  })();
+
+  // ══════════════════════════════════════════════════════
+  // Render
+  // ══════════════════════════════════════════════════════
+  const total  = results.length;
+  const passed = results.filter(r => r.pass).length;
+  const failed = total - passed;
+
+  document.getElementById('summary').innerHTML = `
+    <span class="summary-pill pill-total">${total} assertions</span>
+    <span class="summary-pill pill-pass">✓ ${passed} passed</span>
+    ${failed > 0 ? `<span class="summary-pill pill-fail">✗ ${failed} failed</span>` : ''}
+  `;
+
+  const groups = {
+    'A — Inflation Uprating (INF01–INF07)': results.filter(r => r.id.startsWith('INF')),
+    'B — Bed-and-ISA CGT (BNI01–BNI04)':   results.filter(r => r.id.startsWith('BNI')),
+    'C — Two-Person Overflow (OVF01–OVF05)': results.filter(r => r.id.startsWith('OVF')),
+    'D — SRS/PSA Diagnostic (T09 · T13 · T14 · T15)': results.filter(r => /^T(09|13|14|15)/.test(r.id)),
+  };
+
+  function fmt(n) {
+    return '£' + (n || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  const out = document.getElementById('output');
+  for (const [title, rows] of Object.entries(groups)) {
+    if (!rows.length) continue;
+    const sec = document.createElement('div');
+
+    const titleEl = document.createElement('div');
+    titleEl.className = 'section-title';
+    titleEl.textContent = title;
+    sec.appendChild(titleEl);
+
+    const hdrs = document.createElement('div');
+    hdrs.className = 'col-headers';
+    hdrs.innerHTML = `<span></span><span></span>
+      <span class="col-header">Expected</span>
+      <span class="col-header">Actual</span>
+      <span class="col-header">Δ</span>`;
+    sec.appendChild(hdrs);
+
+    rows.forEach(r => {
+      const row = document.createElement('div');
+      row.className = `test-row ${r.pass ? 'pass' : 'fail'}`;
+      row.innerHTML = `
+        <span class="test-icon ${r.pass ? 'pass' : 'fail'}">${r.pass ? '✓' : '✗'}</span>
+        <span class="test-label"><span class="test-id">${r.id}</span>${r.label}</span>
+        <span class="val expected">${fmt(r.expected)}</span>
+        <span class="val actual ${r.pass ? 'ok' : 'bad'}">${fmt(r.actual)}</span>
+        <span class="val delta ${r.pass ? 'ok' : 'bad'}">${r.pass ? '—' : fmt(r.delta)}</span>
+      `;
+      sec.appendChild(row);
+    });
+
+    out.appendChild(sec);
+  }
+
+
+  // ── Report results to parent harness ──
+  if (window.parent !== window) {
+    const total  = results.length;
+    const passed = results.filter(r => r.pass).length;
+    window.parent.postMessage({
+      type: 'suite-results',
+      file: window.location.pathname.split('/').pop(),
+      total,
+      passed,
+      failed: total - passed,
+      results: results.map(r => ({ id: r.id, label: r.label, pass: r.pass, actual: r.actual, expected: r.expected, delta: r.delta })),
+    }, '*');
+  }
+
+})();
+</script>
+</body>
+</html>

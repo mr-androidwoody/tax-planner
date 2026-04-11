@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Inflation Uprating Tests</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 14px; background: #0f1117; color: #e2e8f0;
+      padding: 32px 24px; min-height: 100vh;
+    }
+    h1 { font-size: 20px; font-weight: 600; color: #f8fafc; margin-bottom: 4px; }
+    .subtitle { color: #64748b; font-size: 13px; margin-bottom: 8px; }
+    .note {
+      font-size: 12px; color: #475569; background: #1e293b;
+      border-left: 3px solid #334155; padding: 8px 12px;
+      border-radius: 4px; margin-bottom: 28px; line-height: 1.6;
+    }
+    .note strong { color: #94a3b8; }
+    .summary { display: flex; gap: 16px; margin-bottom: 28px; flex-wrap: wrap; }
+    .summary-pill { padding: 8px 18px; border-radius: 999px; font-size: 13px; font-weight: 600; letter-spacing: 0.02em; }
+    .pill-total { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
+    .pill-pass  { background: #052e16; color: #4ade80; border: 1px solid #166534; }
+    .pill-fail  { background: #2d0a0a; color: #f87171; border: 1px solid #991b1b; }
+    .section-title {
+      font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
+      text-transform: uppercase; color: #475569;
+      margin: 28px 0 10px; padding-bottom: 8px;
+      border-bottom: 1px solid #1e293b;
+    }
+    .scenario-label {
+      font-size: 12px; color: #94a3b8; font-style: italic;
+      margin: 14px 0 6px 12px;
+    }
+    .test-row {
+      display: grid;
+      grid-template-columns: 24px 1fr 110px 110px 80px;
+      align-items: center; gap: 0 12px;
+      padding: 9px 12px; border-radius: 6px; margin-bottom: 3px;
+    }
+    .test-row:hover { background: #1a2235; }
+    .test-row.pass { border-left: 3px solid #22c55e; }
+    .test-row.fail { border-left: 3px solid #ef4444; background: #1a0f0f; }
+    .test-icon { font-size: 15px; text-align: center; }
+    .test-icon.pass { color: #22c55e; }
+    .test-icon.fail { color: #ef4444; }
+    .test-label { color: #cbd5e1; font-size: 13px; }
+    .test-label .test-id { color: #475569; font-size: 11px; margin-right: 6px; font-weight: 600; }
+    .col-headers {
+      display: grid;
+      grid-template-columns: 24px 1fr 110px 110px 80px;
+      gap: 0 12px; padding: 0 12px 6px; margin-bottom: 2px;
+    }
+    .col-header { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #475569; text-align: right; }
+    .val { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; text-align: right; }
+    .val.expected { color: #64748b; }
+    .val.actual.ok  { color: #86efac; }
+    .val.actual.bad { color: #fca5a5; font-weight: 700; }
+    .val.delta.ok   { color: #475569; }
+    .val.delta.bad  { color: #f87171; }
+  </style>
+</head>
+<body>
+
+<h1>Inflation Uprating Tests</h1>
+<p class="subtitle">Spending target · cumInfl · threshold uprating · step-down spending</p>
+<div class="note">
+  <strong>Key engine facts:</strong>
+  cumInfl starts at 1 and advances AFTER each year's row is recorded, so rows[0] always uses
+  cumInfl=1.0. Spending target = spending × cumInfl (× step-down factor if p1Age ≥ 75).
+  Tax thresholds uprate only when thresholdMode='always' (uprateFactor=cumInfl) or
+  'fromYear' (uprateFactor=cumInfl / (1+inf)^(fromYear-startYear)). All expected values
+  hand-verified in Node. Tolerance £1.00 for all engine tests.
+</div>
+
+<div class="summary" id="summary"></div>
+<div id="output"></div>
+
+<script src="../js/data.js"></script>
+<script src="../js/calculator.js"></script>
+<script src="../js/engine.js"></script>
+
+<script>
+(function () {
+
+  const EP = 1.00; // £1.00 tolerance for engine tests
+
+  const results = [];
+  function test(id, label, actual, expected, tol) {
+    tol = tol !== undefined ? tol : EP;
+    const delta = Math.abs((actual || 0) - expected);
+    results.push({ id, label, actual: actual || 0, expected, delta, pass: delta <= tol });
+  }
+
+  function runEngine(overrides) {
+    const inputs = Object.assign({
+      startYear: 2026, endYear: 2027,
+      p1DOB: 1966, p2DOB: 1967,
+      p1name: 'p1', p2name: 'p2',
+      spending: 40000, stepDownPct: 0,
+      p1Salary: 0, p1SalaryStop: null,
+      p2Salary: 0, p2SalaryStop: null,
+      p1SPAge: 99, p1SPAmt: 0,
+      p2SPAge: 99, p2SPAmt: 0,
+      growth: 0, inflation: 0,
+      thresholdMode: 'never', thresholdFromYear: null,
+      bniEnabled: false, bniP1GIA: 0, bniP2GIA: 0,
+      dividendYield: 0,
+      withdrawalMode: 'tax-aware',
+      p1Order: ['ISA', 'GIA', 'SIPP', 'Cash'],
+      p2Order: ['ISA', 'GIA', 'SIPP', 'Cash'],
+      p1Bal: { Cash: 0, GIA: 0, SIPP: 0, ISA: 0 },
+      p2Bal: { Cash: 0, GIA: 0, SIPP: 0, ISA: 0 },
+    }, overrides);
+    const orig = window.alert; window.alert = () => {};
+    const result = window.RetireEngine.runProjection(inputs, []);
+    window.alert = orig;
+    return result ? result : null;
+  }
+
+  // ══════════════════════════════════════════════════════
+  // A. Spending target uprates correctly with inflation
+  // ══════════════════════════════════════════════════════
+
+  // INF01 — Zero inflation: target stays flat across 3 years
+  // startYear=2026, endYear=2029 → rows[0..2]
+  // All rows: target = 40000 × 1 = £40,000
+  ;(function(){
+    const r = runEngine({ endYear: 2029, inflation: 0, p1Bal: { Cash:200000, GIA:0, SIPP:0, ISA:0 } });
+    if (!r) return;
+    test('INF01a', 'A1 · Zero inflation: rows[0].target = £40,000', r.rows[0].target, 40000);
+    test('INF01b', 'A1 · Zero inflation: rows[1].target = £40,000', r.rows[1].target, 40000);
+    test('INF01c', 'A1 · Zero inflation: rows[2].target = £40,000', r.rows[2].target, 40000);
+  })();
+
+  // INF02 — 3% inflation: target compounds each year
+  // cumInfl advances AFTER row is written.
+  // rows[0] (2026): cumInfl=1.000 → target = 40000 × 1.000 = £40,000
+  // rows[1] (2027): cumInfl=1.030 → target = 40000 × 1.030 = £41,200
+  // rows[2] (2028): cumInfl=1.0609→ target = 40000 × 1.0609 = £42,436
+  ;(function(){
+    const r = runEngine({ endYear: 2029, inflation: 0.03, p1Bal: { Cash:500000, GIA:0, SIPP:0, ISA:0 } });
+    if (!r) return;
+    test('INF02a', 'A2 · 3% inflation: rows[0].target = £40,000',   r.rows[0].target, 40000);
+    test('INF02b', 'A2 · 3% inflation: rows[1].target = £41,200',   r.rows[1].target, 41200);
+    test('INF02c', 'A2 · 3% inflation: rows[2].target = £42,436',   r.rows[2].target, 42436);
+  })();
+
+  // INF03 — cumInfl values match inflation compounding
+  // rows[0].cumInfl = 1.000 (before first advance)
+  // rows[1].cumInfl = 1.030
+  // rows[2].cumInfl = 1.0609
+  ;(function(){
+    const r = runEngine({ endYear: 2029, inflation: 0.03, p1Bal: { Cash:500000, GIA:0, SIPP:0, ISA:0 } });
+    if (!r) return;
+    test('INF03a', 'A3 · cumInfl rows[0] = 1.000', r.rows[0].cumInfl, 1.000,   0.0001);
+    test('INF03b', 'A3 · cumInfl rows[1] = 1.030', r.rows[1].cumInfl, 1.030,   0.0001);
+    test('INF03c', 'A3 · cumInfl rows[2] = 1.0609',r.rows[2].cumInfl, 1.0609,  0.0001);
+  })();
+
+  // INF04 — State pension uprates with inflation
+  // p1SPAge=60 (always active), p1SPAmt=11502
+  // rows[0]: p1SP = 11502 × 1.000 = £11,502
+  // rows[1]: p1SP = 11502 × 1.030 = £11,847.06
+  // rows[2]: p1SP = 11502 × 1.0609 = £12,202.47
+  ;(function(){
+    const r = runEngine({
+      endYear: 2029, inflation: 0.03,
+      p1SPAge: 60, p1SPAmt: 11502,
+      p1Bal: { Cash:500000, GIA:0, SIPP:0, ISA:0 },
+    });
+    if (!r) return;
+    test('INF04a', 'A4 · SP uprates: rows[0].p1SP = £11,502',     r.rows[0].p1SP, 11502);
+    test('INF04b', 'A4 · SP uprates: rows[1].p1SP = £11,847.06',  r.rows[1].p1SP, 11502 * 1.03,    EP);
+    test('INF04c', 'A4 · SP uprates: rows[2].p1SP = £12,202.47',  r.rows[2].p1SP, 11502 * 1.0609,  EP);
+  })();
+
+  // ══════════════════════════════════════════════════════
+  // B. Tax threshold uprating (thresholdMode)
+  // ══════════════════════════════════════════════════════
+
+  // INF05 — thresholdMode='never': thresholds stay nominal
+  // Year 2027 (rows[1], cumInfl=1.03): uprateFactor=1 → PA still £12,570
+  // A salary of £12,570 should produce zero income tax in rows[1].
+  // Engine does not expose effThresholds directly, so we infer via p1IncomeTax.
+  // p1SalInc in rows[1] = 12570 × 1.03 = £12,947.10 (salary uprates with inflation)
+  // With nominal PA=12570: nsNet = 12947.10-12570 = 377.10 → tax = 377.10×20% = £75.42
+  // So if PA is NOT uprated, tax > 0.
+  ;(function(){
+    const r = runEngine({
+      endYear: 2028,
+      inflation: 0.03,
+      thresholdMode: 'never',
+      p1Salary: 12570, p1SalaryStop: 99,
+      p1Bal: { Cash:200000, GIA:0, SIPP:0, ISA:0 },
+    });
+    if (!r) return;
+    // rows[0] (2026): salary = 12570×1 = 12570; PA=12570; tax=0
+    test('INF05a', 'B1 · thresholdMode=never: rows[0] p1IncomeTax = £0', r.rows[0].p1IncomeTax, 0);
+    // rows[1] (2027): salary = 12570×1.03 = 12947.10; PA still 12570; nsNet=377.10; tax=75.42
+    const expected_tax = (12570 * 1.03 - 12570) * 0.20; // 75.42
+    test('INF05b', 'B1 · thresholdMode=never: rows[1] p1IncomeTax > £0 (threshold not uprated)', r.rows[1].p1IncomeTax, expected_tax, EP);
+  })();
+
+  // INF06 — thresholdMode='always': PA uprates with cumInfl
+  // rows[1] (2027): cumInfl=1.03 → PA = 12570×1.03 = 12947.10
+  // p1SalInc = 12570×1.03 = 12947.10; nsNet = 12947.10-12947.10 = 0 → tax = £0
+  ;(function(){
+    const r = runEngine({
+      endYear: 2028,
+      inflation: 0.03,
+      thresholdMode: 'always',
+      p1Salary: 12570, p1SalaryStop: 99,
+      p1Bal: { Cash:200000, GIA:0, SIPP:0, ISA:0 },
+    });
+    if (!r) return;
+    test('INF06a', 'B2 · thresholdMode=always: rows[0] p1IncomeTax = £0', r.rows[0].p1IncomeTax, 0);
+    test('INF06b', 'B2 · thresholdMode=always: rows[1] p1IncomeTax = £0 (PA uprated with inflation)', r.rows[1].p1IncomeTax, 0, EP);
+  })();
+
+  // ══════════════════════════════════════════════════════
+  // C. Step-down spending at age 75
+  // ══════════════════════════════════════════════════════
+
+  // INF07 — p1 turns 75 in year 1 of projection
+  // p1DOB=1951, startYear=2026 → p1Age = 2026-1951 = 75 at rows[0]
+  // stepDownPct=20 → target = 40000×(1-0.20) = £32,000 immediately
+  ;(function(){
+    const r = runEngine({
+      p1DOB: 1951,
+      stepDownPct: 20,
+      p1Bal: { Cash:200000, GIA:0, SIPP:0, ISA:0 },
+    });
+    if (!r) return;
+    test('INF07', 'C1 · Step-down: p1Age=75 in year 0 → target = £32,000', r.rows[0].target, 32000);
+  })();
+
+  // INF08 — p1 turns 75 in year 2 of projection (rows[1])
+  // p1DOB=1952, startYear=2026 → p1Age=74 in rows[0], 75 in rows[1]
+  // rows[0]: target = 40000 (no step-down); rows[1]: target = 40000×0.80 = £32,000
+  ;(function(){
+    const r = runEngine({
+      p1DOB: 1952,
+      stepDownPct: 20,
+      endYear: 2028,
+      p1Bal: { Cash:200000, GIA:0, SIPP:0, ISA:0 },
+    });
+    if (!r) return;
+    test('INF08a', 'C2 · Step-down: p1Age=74 in rows[0] → target = £40,000', r.rows[0].target, 40000);
+    test('INF08b', 'C2 · Step-down: p1Age=75 in rows[1] → target = £32,000', r.rows[1].target, 32000);
+  })();
+
+  // INF09 — Step-down with inflation: both adjustments compound
+  // p1DOB=1951 (age=75 from rows[0]), stepDownPct=20, inflation=3%
+  // rows[0]: target = 40000 × 1.000 × 0.80 = £32,000
+  // rows[1]: target = 40000 × 1.030 × 0.80 = £32,960
+  // rows[2]: target = 40000 × 1.0609 × 0.80 = £33,948.80
+  ;(function(){
+    const r = runEngine({
+      p1DOB: 1951,
+      stepDownPct: 20,
+      endYear: 2029,
+      inflation: 0.03,
+      p1Bal: { Cash:200000, GIA:0, SIPP:0, ISA:0 },
+    });
+    if (!r) return;
+    test('INF09a', 'C3 · Step-down + inflation: rows[0].target = £32,000',   r.rows[0].target, 40000 * 1.000 * 0.80);
+    test('INF09b', 'C3 · Step-down + inflation: rows[1].target = £32,960',   r.rows[1].target, 40000 * 1.030 * 0.80, EP);
+    test('INF09c', 'C3 · Step-down + inflation: rows[2].target = £33,948.80',r.rows[2].target, 40000 * 1.0609 * 0.80, EP);
+  })();
+
+  // INF10 — Step-down does NOT apply before age 75
+  // p1DOB=1953 → p1Age=73 in rows[0]; stepDownPct=20
+  // target should remain £40,000 — step-down not active yet
+  ;(function(){
+    const r = runEngine({
+      p1DOB: 1953,
+      stepDownPct: 20,
+      p1Bal: { Cash:200000, GIA:0, SIPP:0, ISA:0 },
+    });
+    if (!r) return;
+    test('INF10', 'C4 · Step-down NOT active below age 75 → target = £40,000', r.rows[0].target, 40000);
+  })();
+
+  // ══════════════════════════════════════════════════════
+  // D. State pension switches on mid-projection (age trigger)
+  // ══════════════════════════════════════════════════════
+
+  // INF11 — SP age trigger: p1SPAge=67, p1DOB=1959 → p1Age=67 in 2026 (rows[0])
+  // SP active from rows[0]: p1SP = 11502
+  ;(function(){
+    const r = runEngine({
+      p1DOB: 1959,
+      p1SPAge: 67, p1SPAmt: 11502,
+      p1Bal: { Cash:200000, GIA:0, SIPP:0, ISA:0 },
+    });
+    if (!r) return;
+    test('INF11', 'D1 · SP active from row[0] (age=67 ≥ SPAge=67) → p1SP = £11,502', r.rows[0].p1SP, 11502);
+  })();
+
+  // INF12 — SP switches on in rows[1] (age just missed in rows[0])
+  // p1DOB=1960, startYear=2026 → p1Age=66 in rows[0]; p1SPAge=67
+  // rows[0]: p1SP = 0 (age 66 < 67)
+  // rows[1]: p1SP = 11502 (age 67 ≥ 67), uprated: 11502×1.0 (inflation=0)
+  ;(function(){
+    const r = runEngine({
+      p1DOB: 1960,
+      p1SPAge: 67, p1SPAmt: 11502,
+      endYear: 2028,
+      p1Bal: { Cash:200000, GIA:0, SIPP:0, ISA:0 },
+    });
+    if (!r) return;
+    test('INF12a', 'D2 · SP not yet active: rows[0].p1SP = £0 (age 66 < SPAge 67)', r.rows[0].p1SP, 0);
+    test('INF12b', 'D2 · SP switches on:   rows[1].p1SP = £11,502 (age 67)',         r.rows[1].p1SP, 11502);
+  })();
+
+  // INF13 — SP switches on with inflation already accumulated
+  // p1DOB=1960, p1SPAge=67, inflation=3%, SP switches on in rows[1]
+  // rows[1]: cumInfl=1.03 → p1SP = 11502×1.03 = £11,847.06
+  ;(function(){
+    const r = runEngine({
+      p1DOB: 1960,
+      p1SPAge: 67, p1SPAmt: 11502,
+      endYear: 2028,
+      inflation: 0.03,
+      p1Bal: { Cash:200000, GIA:0, SIPP:0, ISA:0 },
+    });
+    if (!r) return;
+    test('INF13a', 'D3 · SP+inflation: rows[0].p1SP = £0 (not yet active)',         r.rows[0].p1SP, 0);
+    test('INF13b', 'D3 · SP+inflation: rows[1].p1SP = £11,847.06 (uprated at 3%)', r.rows[1].p1SP, 11502 * 1.03, EP);
+  })();
+
+  // ══════════════════════════════════════════════════════
+  // Render
+  // ══════════════════════════════════════════════════════
+  const total  = results.length;
+  const passed = results.filter(r => r.pass).length;
+  const failed = total - passed;
+
+  document.getElementById('summary').innerHTML = `
+    <span class="summary-pill pill-total">${total} assertions</span>
+    <span class="summary-pill pill-pass">✓ ${passed} passed</span>
+    ${failed > 0 ? `<span class="summary-pill pill-fail">✗ ${failed} failed</span>` : ''}
+  `;
+
+  const groups = {
+    'A — Spending Target Uprating (INF01–INF04)': results.filter(r => ['INF01a','INF01b','INF01c','INF02a','INF02b','INF02c','INF03a','INF03b','INF03c','INF04a','INF04b','INF04c'].includes(r.id)),
+    'B — Tax Threshold Uprating (INF05–INF06)':  results.filter(r => ['INF05a','INF05b','INF06a','INF06b'].includes(r.id)),
+    'C — Step-Down Spending at Age 75 (INF07–INF10)': results.filter(r => ['INF07','INF08a','INF08b','INF09a','INF09b','INF09c','INF10'].includes(r.id)),
+    'D — State Pension Age Trigger (INF11–INF13)': results.filter(r => ['INF11','INF12a','INF12b','INF13a','INF13b'].includes(r.id)),
+  };
+
+  function fmt(n) {
+    return '£' + (n || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  const out = document.getElementById('output');
+  for (const [title, rows] of Object.entries(groups)) {
+    if (!rows.length) continue;
+    const sec = document.createElement('div');
+
+    const titleEl = document.createElement('div');
+    titleEl.className = 'section-title';
+    titleEl.textContent = title;
+    sec.appendChild(titleEl);
+
+    const hdrs = document.createElement('div');
+    hdrs.className = 'col-headers';
+    hdrs.innerHTML = `<span></span><span></span>
+      <span class="col-header">Expected</span>
+      <span class="col-header">Actual</span>
+      <span class="col-header">Δ</span>`;
+    sec.appendChild(hdrs);
+
+    rows.forEach(r => {
+      const row = document.createElement('div');
+      row.className = `test-row ${r.pass ? 'pass' : 'fail'}`;
+      row.innerHTML = `
+        <span class="test-icon ${r.pass ? 'pass' : 'fail'}">${r.pass ? '✓' : '✗'}</span>
+        <span class="test-label"><span class="test-id">${r.id}</span>${r.label}</span>
+        <span class="val expected">${fmt(r.expected)}</span>
+        <span class="val actual ${r.pass ? 'ok' : 'bad'}">${fmt(r.actual)}</span>
+        <span class="val delta ${r.pass ? 'ok' : 'bad'}">${r.pass ? '—' : fmt(r.delta)}</span>
+      `;
+      sec.appendChild(row);
+    });
+
+    out.appendChild(sec);
+  }
+
+
+  // ── Report results to parent harness ──
+  if (window.parent !== window) {
+    const total  = results.length;
+    const passed = results.filter(r => r.pass).length;
+    window.parent.postMessage({
+      type: 'suite-results',
+      file: window.location.pathname.split('/').pop(),
+      total,
+      passed,
+      failed: total - passed,
+      results: results.map(r => ({ id: r.id, label: r.label, pass: r.pass, actual: r.actual, expected: r.expected, delta: r.delta })),
+    }, '*');
+  }
+
+})();
+</script>
+</body>
+</html>

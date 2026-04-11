@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>SRS / PSA Diagnostic Tests</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 14px; background: #0f1117; color: #e2e8f0;
+      padding: 32px 24px; min-height: 100vh;
+    }
+    h1 { font-size: 20px; font-weight: 600; color: #f8fafc; margin-bottom: 4px; }
+    .subtitle { color: #64748b; font-size: 13px; margin-bottom: 8px; }
+    .note {
+      font-size: 12px; color: #475569; background: #1e293b;
+      border-left: 3px solid #334155; padding: 8px 12px;
+      border-radius: 4px; margin-bottom: 28px; line-height: 1.6;
+    }
+    .note strong { color: #94a3b8; }
+    .note code { font-family: 'SF Mono', 'Fira Code', monospace; background: #0f1117; padding: 1px 4px; border-radius: 3px; color: #93c5fd; }
+    .summary { display: flex; gap: 16px; margin-bottom: 28px; flex-wrap: wrap; }
+    .summary-pill { padding: 8px 18px; border-radius: 999px; font-size: 13px; font-weight: 600; letter-spacing: 0.02em; }
+    .pill-total { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
+    .pill-pass  { background: #052e16; color: #4ade80; border: 1px solid #166534; }
+    .pill-fail  { background: #2d0a0a; color: #f87171; border: 1px solid #991b1b; }
+    .section-title {
+      font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
+      text-transform: uppercase; color: #475569;
+      margin: 28px 0 10px; padding-bottom: 8px;
+      border-bottom: 1px solid #1e293b;
+    }
+    .section-desc {
+      font-size: 12px; color: #64748b; margin: 0 0 12px 0; line-height: 1.6;
+    }
+    .section-desc code { font-family: 'SF Mono', 'Fira Code', monospace; background: #1e293b; padding: 1px 4px; border-radius: 3px; color: #93c5fd; }
+    .test-row {
+      display: grid;
+      grid-template-columns: 24px 1fr 110px 110px 80px;
+      align-items: center; gap: 0 12px;
+      padding: 9px 12px; border-radius: 6px; margin-bottom: 3px;
+    }
+    .test-row:hover { background: #1a2235; }
+    .test-row.pass { border-left: 3px solid #22c55e; }
+    .test-row.fail { border-left: 3px solid #ef4444; background: #1a0f0f; }
+    .test-icon { font-size: 15px; text-align: center; }
+    .test-icon.pass { color: #22c55e; }
+    .test-icon.fail { color: #ef4444; }
+    .test-label { color: #cbd5e1; font-size: 13px; }
+    .test-label .test-id { color: #475569; font-size: 11px; margin-right: 6px; font-weight: 600; }
+    .col-headers {
+      display: grid;
+      grid-template-columns: 24px 1fr 110px 110px 80px;
+      gap: 0 12px; padding: 0 12px 6px; margin-bottom: 2px;
+    }
+    .col-header { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #475569; text-align: right; }
+    .val { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; text-align: right; }
+    .val.expected { color: #64748b; }
+    .val.actual.ok  { color: #86efac; }
+    .val.actual.bad { color: #fca5a5; font-weight: 700; }
+    .val.delta.ok   { color: #475569; }
+    .val.delta.bad  { color: #f87171; }
+  </style>
+</head>
+<body>
+
+<h1>SRS / PSA Diagnostic Tests</h1>
+<p class="subtitle">Investigating T09 · T13 · T14 · T15 — Starter Rate for Savings &amp; PSA interaction with PA</p>
+<div class="note">
+  <strong>Purpose:</strong> These tests systematically probe the SRS and PSA logic in
+  <code>calcIncomeTaxDetailed</code> to confirm or refute the hand-calculated expected values
+  for the four disputed scenarios from the previous session. Tests are written so that a failure
+  points to the exact sub-expression that differs from the spec. All expected values are from
+  independent Node.js calculation, not from the original (possibly wrong) spec sheet.
+  <br><br>
+  <strong>SRS rule:</strong> <code>srsAvail = max(0, srsLimit(£5,000) − nsNet)</code>.
+  SRS covers savings income after PA, up to the available headroom. PSA tier is then determined
+  by <code>taxableForPSA = nsNet + savNet + divNet</code> vs band widths (£37,700 / £112,570).
+  <br><br>
+  <strong>Tolerance:</strong> £0.02 for all pure tax function tests.
+</div>
+
+<div class="summary" id="summary"></div>
+<div id="output"></div>
+
+<script src="../js/data.js"></script>
+<script src="../js/calculator.js"></script>
+<script src="../js/engine.js"></script>
+
+<script>
+(function () {
+
+  const C   = window.RetireCalc;
+  const TAX = window.RetireData.TAX_RULES['2026-27'];
+  const P   = 0.02; // pure tax function tolerance
+
+  const results = [];
+  function test(id, label, actual, expected, tol) {
+    tol = tol !== undefined ? tol : P;
+    const delta = Math.abs((actual || 0) - expected);
+    results.push({ id, label, actual: actual || 0, expected, delta, pass: delta <= tol });
+  }
+
+  function IT(ns, sav, div) {
+    return C.calcIncomeTaxDetailed(ns || 0, sav || 0, div || 0, TAX);
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // SECTION 1 — SRS AVAILABILITY LADDER
+  // Confirms: srsAvail = max(0, 5000 − nsNet)
+  // As nsNet rises from 0 → 5000 → above, srsAvail falls to zero.
+  // ══════════════════════════════════════════════════════════════════
+
+  // SRS-L1: nsNet=0 → srsAvail=5000
+  // Salary=£12,570; interest=£1,000 → savNet=1000 (PA consumed by salary)
+  // srsAvail=5000; srsCover=min(1000,5000)=1000 → savAfterSRS=0 → savTaxable=0 → tax=£0
+  ;(function(){
+    const r = IT(12570, 1000, 0);
+    test('SRS-L1a', 'SRS Ladder · nsNet=0 (sal=12570): savTaxable=0 (SRS covers £1k interest)', r.savTaxable, 0);
+    test('SRS-L1b', 'SRS Ladder · nsNet=0: tax = £0',                                           r.tax, 0);
+  })();
+
+  // SRS-L2: nsNet=2430 → srsAvail=2570
+  // Salary=£15,000; interest=£5,000
+  // nsNet=15000-12570=2430; savNet=5000 (paRem=0)
+  // srsAvail=max(0,5000-2430)=2570; srsCover=min(5000,2570)=2570 → savAfterSRS=2430
+  // taxableForPSA=2430+5000=7430 ≤ 37700 → PSA=1000; psaCover=min(2430,1000)=1000
+  // savTaxable=1430; savTax=1430×20%=£286; nsTax=2430×20%=£486; total=£772
+  ;(function(){
+    const r = IT(15000, 5000, 0);
+    test('SRS-L2a', 'SRS Ladder · nsNet=2430 (sal=15k): srsAvail=2570 → savTaxable=£1,430', r.savTaxable, 1430);
+    test('SRS-L2b', 'SRS Ladder · Tax = £772 (nsTax 486 + savTax 286)',                      r.tax, 772);
+  })();
+
+  // SRS-L3: nsNet=5000 → srsAvail=0
+  // Salary=£17,570; interest=£5,000
+  // nsNet=17570-12570=5000; savNet=5000; srsAvail=max(0,5000-5000)=0
+  // savAfterSRS=5000; taxableForPSA=5000+5000=10000 ≤ 37700 → PSA=1000
+  // psaCover=1000; savTaxable=4000; savTax=4000×20%=£800; nsTax=5000×20%=£1000; total=£1800
+  ;(function(){
+    const r = IT(17570, 5000, 0);
+    test('SRS-L3a', 'SRS Ladder · nsNet=5000 (sal=17570): srsAvail=0 → savTaxable=£4,000', r.savTaxable, 4000);
+    test('SRS-L3b', 'SRS Ladder · Tax = £1,800',                                             r.tax, 1800);
+  })();
+
+  // SRS-L4: nsNet=7430 → srsAvail=0 (SRS fully blocked)
+  // Salary=£20,000; interest=£5,000
+  // nsNet=20000-12570=7430; savNet=5000; srsAvail=0; savAfterSRS=5000
+  // PSA=1000; savTaxable=4000; savTax=£800; nsTax=7430×20%=£1486; total=£2286
+  ;(function(){
+    const r = IT(20000, 5000, 0);
+    test('SRS-L4a', 'SRS Ladder · nsNet=7430 (sal=20k): srsAvail=0 → savTaxable=£4,000', r.savTaxable, 4000);
+    test('SRS-L4b', 'SRS Ladder · Tax = £2,286',                                           r.tax, 2286);
+  })();
+
+  // ══════════════════════════════════════════════════════════════════
+  // SECTION 2 — T09 SPECIFIC (the disputed scenario)
+  // Salary £10,000 + interest £6,000 (no dividends)
+  // Hand calc: nsNet=0; paRem=2570; savNet=3430; srsAvail=5000; srsCover=3430
+  //   savAfterSRS=0; PSA moot; savTaxable=0; tax=£0
+  // OLD (wrong) spec: expected tax=£207.48 — this was the pre-SRS-fix expected value
+  // ══════════════════════════════════════════════════════════════════
+
+  ;(function(){
+    const r = IT(10000, 6000, 0);
+    // Intermediate values — any failure here pinpoints the bug
+    test('T09-D1', 'T09 · nsNet = £0 (sal 10k < PA 12570)',        r.nsNet, 0);
+    test('T09-D2', 'T09 · savNet = £3,430 (6000 − paRem 2570)',    r.savNet, 3430);
+    test('T09-D3', 'T09 · savTaxable = £0 (SRS covers all 3430)',  r.savTaxable, 0);
+    test('T09-D4', 'T09 · divTaxable = £0',                        r.divTaxable, 0);
+    test('T09-D5', 'T09 · Total tax = £0',                         r.tax, 0);
+    // Disprove old spec value — if this PASSES the calc is returning the OLD wrong answer
+    const OLD_SPEC = 207.48;
+    const oldSpecDelta = Math.abs(r.tax - OLD_SPEC);
+    results.push({
+      id: 'T09-DIAG',
+      label: 'T09 · DIAGNOSTIC: tax ≠ £207.48 (old wrong spec) — should FAIL if bug present',
+      actual: r.tax,
+      expected: 0, // correct value
+      delta: Math.abs(r.tax - 0),
+      pass: Math.abs(r.tax - 0) <= P,
+    });
+  })();
+
+  // ══════════════════════════════════════════════════════════════════
+  // SECTION 3 — T13 SPECIFIC
+  // Salary £10,000 + dividends £5,000 (no interest)
+  // nsNet=0; paRem=2570; divNet=2430; divTaxable=1930; tax=1930×10.75%=£207.475
+  // ══════════════════════════════════════════════════════════════════
+
+  ;(function(){
+    const r = IT(10000, 0, 5000);
+    test('T13-D1', 'T13 · nsNet = £0',                           r.nsNet, 0);
+    test('T13-D2', 'T13 · divNet = £2,430 (5000 − paRem 2570)', r.divNet, 2430);
+    test('T13-D3', 'T13 · divTaxable = £1,930 (2430 − DA 500)', r.divTaxable, 1930);
+    test('T13-D4', 'T13 · savTaxable = £0 (no interest)',        r.savTaxable, 0);
+    test('T13-D5', 'T13 · Tax = £207.475 (1930 × 10.75%)',       r.tax, 207.475);
+  })();
+
+  // ══════════════════════════════════════════════════════════════════
+  // SECTION 4 — T14 SPECIFIC
+  // Salary £10,000 + interest £5,000 + dividends £5,000
+  // nsNet=0; paRem=2570; savNet=2430; paRem→0; divNet=5000
+  // srsAvail=5000; srsCover=2430 → savAfterSRS=0; PSA moot; savTaxable=0
+  // divTaxable=4500; divTax=4500×10.75%=£483.75
+  // ══════════════════════════════════════════════════════════════════
+
+  ;(function(){
+    const r = IT(10000, 5000, 5000);
+    test('T14-D1', 'T14 · nsNet = £0',                                  r.nsNet, 0);
+    test('T14-D2', 'T14 · savNet = £2,430 (5000 − paRem 2570)',        r.savNet, 2430);
+    test('T14-D3', 'T14 · savAfterSRS: srsCover=2430 → savAfterSRS=0 → savTaxable=£0', r.savTaxable, 0);
+    test('T14-D4', 'T14 · divNet = £5,000 (paRem exhausted)',           r.divNet, 5000);
+    test('T14-D5', 'T14 · divTaxable = £4,500 (5000 − DA 500)',        r.divTaxable, 4500);
+    test('T14-D6', 'T14 · Tax = £483.75 (4500 × 10.75%)',              r.tax, 483.75);
+  })();
+
+  // ══════════════════════════════════════════════════════════════════
+  // SECTION 5 — T15 SPECIFIC
+  // NS £15,000 (sal £10k + SIPP taxable £5k) + interest £5,000 + dividends £5,000
+  // nsNet=2430; paRem→0; savNet=5000; divNet=5000
+  // srsAvail=max(0,5000−2430)=2570; srsCover=2570 → savAfterSRS=2430
+  // taxableForPSA=2430+5000+5000=12430 ≤ 37700 → PSA=1000
+  // savTaxable=1430; divTaxable=4500
+  // nsTax=2430×20%=£486; savTax=1430×20%=£286; divTax=4500×10.75%=£483.75
+  // Total = £1,255.75
+  // ══════════════════════════════════════════════════════════════════
+
+  ;(function(){
+    const r = IT(15000, 5000, 5000);
+    test('T15-D1', 'T15 · nsNet = £2,430 (15000 − PA 12570)',          r.nsNet, 2430);
+    test('T15-D2', 'T15 · savNet = £5,000 (paRem=0)',                  r.savNet, 5000);
+    test('T15-D3', 'T15 · srsAvail = £2,570 (5000 − nsNet 2430); srsCover = 2570 → savAfterSRS = £2,430', r.savTaxable, 1430);
+    test('T15-D4', 'T15 · divNet = £5,000',                            r.divNet, 5000);
+    test('T15-D5', 'T15 · divTaxable = £4,500',                        r.divTaxable, 4500);
+    test('T15-D6', 'T15 · nsTax = £486 (2430 × 20%)',                  r.tax - (1430*0.20) - (4500*0.1075), 486);
+    test('T15-D7', 'T15 · Total tax = £1,255.75',                      r.tax, 1255.75);
+  })();
+
+  // ══════════════════════════════════════════════════════════════════
+  // SECTION 6 — BOUNDARY: SRS exhausted by nsNet exactly at £5,000
+  // ══════════════════════════════════════════════════════════════════
+
+  // SRS-B1: nsNet exactly = srsLimit (5000) → srsAvail = 0
+  // Salary=17570; interest=3000; savNet=3000; srsAvail=0
+  // PSA=1000; savTaxable=2000; savTax=2000×20%=£400; nsTax=5000×20%=£1000; total=£1400
+  ;(function(){
+    const r = IT(17570, 3000, 0);
+    test('SRS-B1a', 'SRS Boundary · nsNet=5000: srsAvail=0 → savTaxable=£2,000 (PSA covers 1k)', r.savTaxable, 2000);
+    test('SRS-B1b', 'SRS Boundary · Tax = £1,400',                                                r.tax, 1400);
+  })();
+
+  // SRS-B2: nsNet=4999 → srsAvail=1 (one pound of SRS left)
+  // Salary=17569; interest=3000; savNet=3000; srsAvail=1; srsCover=1 → savAfterSRS=2999
+  // PSA=1000; psaCover=1000; savTaxable=1999; savTax=1999×20%=£399.80
+  // nsTax=4999×20%=£999.80; total=£1399.60
+  ;(function(){
+    const r = IT(17569, 3000, 0);
+    test('SRS-B2a', 'SRS Boundary · nsNet=4999: srsAvail=1 → savTaxable=£1,999', r.savTaxable, 1999);
+    test('SRS-B2b', 'SRS Boundary · Tax = £1,399.60',                             r.tax, 1399.60);
+  })();
+
+  // SRS-B3: SRS partially used, exactly 0 remaining for savings
+  // Salary=15000+int=2570 (PA exactly consumed by sal+int together)
+  // sal=15000; int=2570; nsNet=2430; paRem=0; savNet=2570; paRem=0
+  // srsAvail=max(0,5000-2430)=2570; srsCover=min(2570,2570)=2570 → savAfterSRS=0 → savTaxable=0
+  // divTaxable=0; nsTax=2430×20%=£486; total=£486
+  ;(function(){
+    const r = IT(15000, 2570, 0);
+    test('SRS-B3a', 'SRS Boundary · srsCover exactly = savNet (no leftover) → savTaxable=£0', r.savTaxable, 0);
+    test('SRS-B3b', 'SRS Boundary · Tax = £486 (only nsTax)',                                  r.tax, 486);
+  })();
+
+  // ══════════════════════════════════════════════════════════════════
+  // SECTION 7 — PSA TIER SELECTION
+  // PSA tier is determined by (nsNet + savNet + divNet) vs band widths
+  // ══════════════════════════════════════════════════════════════════
+
+  // PSA-T1: Basic rate taxpayer → PSA = £1,000
+  // taxableForPSA ≤ 37700: salary=£20,000; nsNet=7430; savNet=1000; PSA=1000 → savTaxable=0
+  ;(function(){
+    const r = IT(20000, 1000, 0);
+    // srsAvail=max(0,5000-7430)=0; savAfterSRS=1000; PSA=1000; psaCover=1000; savTaxable=0
+    test('PSA-T1', 'PSA Tier · taxableForPSA≤37700 → PSA=£1000 → savTaxable=£0', r.savTaxable, 0);
+  })();
+
+  // PSA-T2: Higher rate taxpayer → PSA = £500
+  // Salary=£55,000; nsNet=42430; taxableForPSA=42430+5000=47430 > 37700 ≤ 112570 → PSA=500
+  // srsAvail=0 (nsNet > 5000); savAfterSRS=5000; psaCover=500; savTaxable=4500
+  // nsTax: 37700×20%+4730×40%=7540+1892=9432; savTax: 4500×40%=1800; total=11232
+  ;(function(){
+    const r = IT(55000, 5000, 0);
+    test('PSA-T2a', 'PSA Tier · taxableForPSA>37700 → PSA=£500 → savTaxable=£4,500', r.savTaxable, 4500);
+    test('PSA-T2b', 'PSA Tier · Tax = £11,232',                                        r.tax, 11232);
+  })();
+
+  // PSA-T3: Additional rate taxpayer → PSA = £0
+  // Salary=£130,000 (above taper); nsNet=130000-0=117430 (taper reduces PA)
+  // PA taper: totalIncome=135000>100000; taper=(135000-100000)/2=17500; PA=12570-17500<0→PA=0
+  // Actually: income=130000+5000=135000; PA=max(0,12570-(135000-100000)/2)=max(0,12570-17500)=0
+  // nsNet=130000; taxableForPSA=130000+5000=135000>112570 → PSA=0
+  // srsAvail=0; savAfterSRS=5000; psaCover=0; savTaxable=5000
+  ;(function(){
+    const r = IT(130000, 5000, 0);
+    test('PSA-T3a', 'PSA Tier · additional rate (PA=0) → PSA=£0 → savTaxable=£5,000', r.savTaxable, 5000);
+    // Tax calculation is complex here; just confirm PSA tier via savTaxable
+  })();
+
+  // ══════════════════════════════════════════════════════════════════
+  // Render
+  // ══════════════════════════════════════════════════════════════════
+  const total  = results.length;
+  const passed = results.filter(r => r.pass).length;
+  const failed = total - passed;
+
+  document.getElementById('summary').innerHTML = `
+    <span class="summary-pill pill-total">${total} assertions</span>
+    <span class="summary-pill pill-pass">✓ ${passed} passed</span>
+    ${failed > 0 ? `<span class="summary-pill pill-fail">✗ ${failed} failed</span>` : ''}
+  `;
+
+  const groups = {
+    '1 — SRS Availability Ladder (SRS-L1 to L4)':     results.filter(r => r.id.startsWith('SRS-L')),
+    '2 — T09 Diagnostic (sal £10k + int £6k)':        results.filter(r => r.id.startsWith('T09-')),
+    '3 — T13 Diagnostic (sal £10k + div £5k)':        results.filter(r => r.id.startsWith('T13-')),
+    '4 — T14 Diagnostic (sal £10k + int £5k + div £5k)': results.filter(r => r.id.startsWith('T14-')),
+    '5 — T15 Diagnostic (ns £15k + int £5k + div £5k)': results.filter(r => r.id.startsWith('T15-')),
+    '6 — SRS Boundary: Exact Exhaustion (SRS-B1–B3)': results.filter(r => r.id.startsWith('SRS-B')),
+    '7 — PSA Tier Selection (PSA-T1–T3)':             results.filter(r => r.id.startsWith('PSA-T')),
+  };
+
+  function fmt(n) {
+    return '£' + (n || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  const out = document.getElementById('output');
+  for (const [title, rows] of Object.entries(groups)) {
+    if (!rows.length) continue;
+    const sec = document.createElement('div');
+
+    const titleEl = document.createElement('div');
+    titleEl.className = 'section-title';
+    titleEl.textContent = title;
+    sec.appendChild(titleEl);
+
+    const hdrs = document.createElement('div');
+    hdrs.className = 'col-headers';
+    hdrs.innerHTML = `<span></span><span></span>
+      <span class="col-header">Expected</span>
+      <span class="col-header">Actual</span>
+      <span class="col-header">Δ</span>`;
+    sec.appendChild(hdrs);
+
+    rows.forEach(r => {
+      const row = document.createElement('div');
+      row.className = `test-row ${r.pass ? 'pass' : 'fail'}`;
+      row.innerHTML = `
+        <span class="test-icon ${r.pass ? 'pass' : 'fail'}">${r.pass ? '✓' : '✗'}</span>
+        <span class="test-label"><span class="test-id">${r.id}</span>${r.label}</span>
+        <span class="val expected">${fmt(r.expected)}</span>
+        <span class="val actual ${r.pass ? 'ok' : 'bad'}">${fmt(r.actual)}</span>
+        <span class="val delta ${r.pass ? 'ok' : 'bad'}">${r.pass ? '—' : fmt(r.delta)}</span>
+      `;
+      sec.appendChild(row);
+    });
+
+    out.appendChild(sec);
+  }
+
+
+  // ── Report results to parent harness ──
+  if (window.parent !== window) {
+    const total  = results.length;
+    const passed = results.filter(r => r.pass).length;
+    window.parent.postMessage({
+      type: 'suite-results',
+      file: window.location.pathname.split('/').pop(),
+      total,
+      passed,
+      failed: total - passed,
+      results: results.map(r => ({ id: r.id, label: r.label, pass: r.pass, actual: r.actual, expected: r.expected, delta: r.delta })),
+    }, '*');
+  }
+
+})();
+</script>
+</body>
+</html>

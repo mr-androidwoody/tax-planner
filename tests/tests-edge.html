@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Edge Case Tests</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 14px; background: #0f1117; color: #e2e8f0;
+      padding: 32px 24px; min-height: 100vh;
+    }
+    h1 { font-size: 20px; font-weight: 600; color: #f8fafc; margin-bottom: 4px; }
+    .subtitle { color: #64748b; font-size: 13px; margin-bottom: 32px; }
+    .summary { display: flex; gap: 16px; margin-bottom: 28px; flex-wrap: wrap; }
+    .summary-pill { padding: 8px 18px; border-radius: 999px; font-size: 13px; font-weight: 600; letter-spacing: 0.02em; }
+    .pill-total { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
+    .pill-pass  { background: #052e16; color: #4ade80; border: 1px solid #166534; }
+    .pill-fail  { background: #2d0a0a; color: #f87171; border: 1px solid #991b1b; }
+    .section-title {
+      font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
+      text-transform: uppercase; color: #475569;
+      margin: 28px 0 10px; padding-bottom: 8px;
+      border-bottom: 1px solid #1e293b;
+    }
+    .test-row {
+      display: grid;
+      grid-template-columns: 24px 1fr 110px 110px 80px;
+      align-items: center; gap: 0 12px;
+      padding: 9px 12px; border-radius: 6px; margin-bottom: 3px;
+    }
+    .test-row:hover { background: #1a2235; }
+    .test-row.pass { border-left: 3px solid #22c55e; }
+    .test-row.fail { border-left: 3px solid #ef4444; background: #1a0f0f; }
+    .test-icon { font-size: 15px; text-align: center; }
+    .test-icon.pass { color: #22c55e; }
+    .test-icon.fail { color: #ef4444; }
+    .test-label { color: #cbd5e1; font-size: 13px; }
+    .test-label .test-id { color: #475569; font-size: 11px; margin-right: 6px; font-weight: 600; }
+    .col-headers {
+      display: grid;
+      grid-template-columns: 24px 1fr 110px 110px 80px;
+      gap: 0 12px; padding: 0 12px 6px; margin-bottom: 2px;
+    }
+    .col-header { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #475569; text-align: right; }
+    .val { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; text-align: right; }
+    .val.expected { color: #64748b; }
+    .val.actual.ok  { color: #86efac; }
+    .val.actual.bad { color: #fca5a5; font-weight: 700; }
+    .val.delta.ok   { color: #475569; }
+    .val.delta.bad  { color: #f87171; }
+  </style>
+</head>
+<body>
+
+<h1>Edge Case Tests</h1>
+<p class="subtitle">Boundary edges · Mixed income stacking · Depletion · Zero income · NI thresholds</p>
+
+<div class="summary" id="summary"></div>
+<div id="output"></div>
+
+<script src="../js/data.js"></script>
+<script src="../js/calculator.js"></script>
+<script src="../js/engine.js"></script>
+
+<script>
+(function () {
+
+  const C = window.RetireCalc;
+  const E = window.RetireEngine;
+  const TAX = window.RetireData.TAX_RULES['2026-27'];
+
+  const IT_EPSILON  = 0.02;   // pence — for pure tax function tests
+  const ENG_EPSILON = 1.00;   // £1   — for full engine projection tests
+
+  const results = [];
+  function test(id, label, actual, expected, epsilon) {
+    epsilon = epsilon !== undefined ? epsilon : IT_EPSILON;
+    const delta = Math.abs((actual || 0) - expected);
+    const pass  = delta <= epsilon;
+    results.push({ id, label, actual: actual || 0, expected, delta, pass });
+  }
+
+  function IT(ns, sav, div) {
+    return C.calcIncomeTaxDetailed(ns || 0, sav || 0, div || 0, TAX);
+  }
+
+  // Engine runner — single year by default (2026→2027, read rows[0])
+  function run(overrides) {
+    const inputs = Object.assign({
+      startYear: 2026, endYear: 2027,
+      p1DOB: 1959, p2DOB: 1960,
+      p1name: 'p1', p2name: 'p2',
+      spending: 40000, stepDownPct: 0,
+      p1Salary: 0, p1SalaryStop: null,
+      p2Salary: 0, p2SalaryStop: null,
+      p1SPAge: 99, p1SPAmt: 0,
+      p2SPAge: 99, p2SPAmt: 0,
+      growth: 0, inflation: 0,
+      thresholdMode: 'never', thresholdFromYear: null,
+      bniEnabled: false, bniP1GIA: 0, bniP2GIA: 0,
+      dividendYield: 0,
+      withdrawalMode: 'tax-aware',
+      p1Order: ['ISA', 'GIA', 'SIPP', 'Cash'],
+      p2Order: ['ISA', 'GIA', 'SIPP', 'Cash'],
+      p1Bal: { Cash: 0, GIA: 0, SIPP: 0, ISA: 0 },
+      p2Bal: { Cash: 0, GIA: 0, SIPP: 0, ISA: 0 },
+    }, overrides);
+    const orig = window.alert; window.alert = () => {};
+    const result = E.runProjection(inputs, []);
+    window.alert = orig;
+    return result;
+  }
+
+  // ─────────────────────────────────────────────
+  // ── BLOCK 1: Personal Allowance boundary ─────
+  // ─────────────────────────────────────────────
+
+  // E01 — income exactly at PA (£12,570) → tax = £0, nsNet = 0
+  ;(function(){
+    const r = IT(12570, 0, 0);
+    test('E01a', 'PA edge · salary = £12,570 exactly → tax = £0',   r.tax,   0);
+    test('E01b', 'PA edge · nsNet = £0',                             r.nsNet, 0);
+  })();
+
+  // E02 — income one pound above PA (£12,571) → tax = £0.20, nsNet = 1
+  ;(function(){
+    const r = IT(12571, 0, 0);
+    test('E02a', 'PA edge · salary = £12,571 → tax = £0.20',  r.tax,   0.20);
+    test('E02b', 'PA edge · nsNet = £1',                       r.nsNet, 1);
+  })();
+
+  // E03 — income one pound below PA (£12,569) → tax = £0
+  ;(function(){
+    const r = IT(12569, 0, 0);
+    test('E03',  'PA edge · salary = £12,569 → tax = £0',     r.tax, 0);
+  })();
+
+  // ─────────────────────────────────────────────
+  // ── BLOCK 2: Higher rate threshold boundary ──
+  // ─────────────────────────────────────────────
+
+  // E04 — salary exactly at basicLimit (£50,270)
+  // nsNet = 37,700; all basic band → 37,700 × 20% = £7,540
+  ;(function(){
+    const r = IT(50270, 0, 0);
+    test('E04a', 'Higher rate edge · salary = £50,270 → tax = £7,540', r.tax,   7540);
+    test('E04b', 'Higher rate edge · nsNet = £37,700',                  r.nsNet, 37700);
+  })();
+
+  // E05 — salary one above basicLimit (£50,271)
+  // nsNet = 37,701; 37,700 × 20% + 1 × 40% = £7,540.40
+  ;(function(){
+    const r = IT(50271, 0, 0);
+    test('E05a', 'Higher rate edge · salary = £50,271 → tax = £7,540.40', r.tax,   7540.40);
+    test('E05b', 'Higher rate edge · nsNet = £37,701',                     r.nsNet, 37701);
+  })();
+
+  // E06 — salary one below basicLimit (£50,269) → 37,699 × 20% = £7,539.80
+  ;(function(){
+    const r = IT(50269, 0, 0);
+    test('E06',  'Higher rate edge · salary = £50,269 → tax = £7,539.80', r.tax, 7539.80);
+  })();
+
+  // ─────────────────────────────────────────────
+  // ── BLOCK 3: PSA tier transitions ────────────
+  // ─────────────────────────────────────────────
+
+  // E07 — PSA = £1,000 (basic rate taxpayer)
+  // sal=£20,000 (nsNet=7,430), int=£5,000 (savNet=5,000)
+  // taxableForPSA=12,430 ≤ 37,700 → PSA=£1,000
+  // SRS: nsNet=7430 > srsLimit=5000 → srsAvail=0; savAfterSRS=5000
+  // psaCover=min(5000,1000)=1000; savTaxable=4,000
+  // nsTax=7,430×20%=£1,486; savTax=4,000×20%=£800 → total £2,286
+  ;(function(){
+    const r = IT(20000, 5000, 0);
+    test('E07a', 'PSA £1,000 · sal=£20k, int=£5k → tax = £2,286',   r.tax,        2286);
+    test('E07b', 'PSA £1,000 · savTaxable = £4,000',                 r.savTaxable, 4000);
+  })();
+
+  // E08 — PSA = £500 (higher rate taxpayer)
+  // sal=£50,270 (nsNet=37,700), int=£2,000 (savNet=2,000)
+  // taxableForPSA=39,700 > 37,700 → PSA=£500
+  // savTaxable=max(0,2000-500)=1,500
+  // nsTax=37,700×20%=£7,540; savTax: bLeft=0 → all higher: 1,500×40%=£600 → total £8,140
+  ;(function(){
+    const r = IT(50270, 2000, 0);
+    test('E08a', 'PSA £500 · sal=£50,270, int=£2k → tax = £8,140',  r.tax,        8140);
+    test('E08b', 'PSA £500 · savTaxable = £1,500',                   r.savTaxable, 1500);
+  })();
+
+  // E09 — PSA = £0 (additional rate taxpayer, PA tapered to zero)
+  // sal=£125,140 (PA=0, nsNet=125,140), int=£1,000 (savNet=1,000)
+  // taxableForPSA=126,140 > 112,570 → PSA=£0; savTaxable=1,000
+  // nsTax: 37,700×20%=7,540 + 74,870×40%=29,948 + 12,570×45%=5,656.50 = £43,144.50
+  // savTax: all additional: 1,000×45%=£450 → total £43,594.50
+  ;(function(){
+    const r = IT(125140, 1000, 0);
+    test('E09a', 'PSA £0 · sal=£125,140, int=£1k → tax = £43,594.50', r.tax,        43594.50);
+    test('E09b', 'PSA £0 · savTaxable = £1,000 (no PSA relief)',       r.savTaxable, 1000);
+  })();
+
+  // ─────────────────────────────────────────────
+  // ── BLOCK 4: Mixed income stacking ───────────
+  // ─────────────────────────────────────────────
+
+  // E10 — salary + interest + dividends + SIPP taxable in same year
+  // nonSavings = salary £10,000 + SIPP taxable £10,000 = £20,000
+  // interest = £5,000; dividends = £5,000
+  // PA=12,570: nsNet=7,430; savNet=5,000; divNet=5,000
+  // SRS: nsNet=7430>srsLimit → srsAvail=0; savAfterSRS=5,000
+  // taxableForPSA=17,430 ≤ 37,700 → PSA=£1,000; psaCover=1,000; savTaxable=4,000
+  // divTaxable=max(0,5000-500)=4,500
+  // nsTax=7,430×20%=£1,486
+  // savTax: bLeft=37,700-7,430=30,270; 4,000×20%=£800
+  // divTax: used=7,430+5,000=12,430; bLeft=37,700-12,430=25,270; 4,500×10.75%=£483.75
+  // total = £2,769.75
+  ;(function(){
+    const r = IT(20000, 5000, 5000);  // nonSavings = salary+SIPPtaxable combined
+    test('E10a', 'Mixed stacking · total tax = £2,769.75',   r.tax,        2769.75);
+    test('E10b', 'Mixed stacking · nsNet = £7,430',          r.nsNet,      7430);
+    test('E10c', 'Mixed stacking · savTaxable = £4,000',     r.savTaxable, 4000);
+    test('E10d', 'Mixed stacking · divTaxable = £4,500',     r.divTaxable, 4500);
+  })();
+
+  // ─────────────────────────────────────────────
+  // ── BLOCK 5: Zero / low income ───────────────
+  // ─────────────────────────────────────────────
+
+  // E11 — all zeros
+  ;(function(){
+    const r = IT(0, 0, 0);
+    test('E11', 'Zero income · tax = £0', r.tax, 0);
+  })();
+
+  // E12 — dividend only, within PA and allowance (£400)
+  // total=400 < PA=12,570 → divNet=0 → tax=0
+  ;(function(){
+    const r = IT(0, 0, 400);
+    test('E12', 'Dividend only · £400 (within PA) → tax = £0', r.tax, 0);
+  })();
+
+  // E13 — dividend only, above PA (£15,000)
+  // PA=12,570; divNet=max(0,15000-12570)=2,430
+  // divTaxable=max(0,2430-500)=1,930; 1,930×10.75%=£207.48
+  ;(function(){
+    const r = IT(0, 0, 15000);
+    test('E13a', 'Dividend only · £15,000 above PA → tax = £207.48', r.tax,        207.48);
+    test('E13b', 'Dividend only · divTaxable = £1,930',               r.divTaxable, 1930);
+  })();
+
+  // ─────────────────────────────────────────────
+  // ── BLOCK 6: NI threshold boundaries ─────────
+  // ─────────────────────────────────────────────
+
+  // E14 — salary exactly at PT (£12,570) → NI = £0
+  ;(function(){
+    const r = C.calcEmployeeNI(12570, TAX, false);
+    test('E14', 'NI · salary = PT (£12,570) → NI = £0', r, 0);
+  })();
+
+  // E15 — salary one above PT (£12,571) → NI = 1 × 8% = £0.08
+  ;(function(){
+    const r = C.calcEmployeeNI(12571, TAX, false);
+    test('E15', 'NI · salary = £12,571 → NI = £0.08', r, 0.08);
+  })();
+
+  // E16 — salary exactly at UEL (£50,270) → NI = 37,700 × 8% = £3,016
+  ;(function(){
+    const r = C.calcEmployeeNI(50270, TAX, false);
+    test('E16', 'NI · salary = UEL (£50,270) → NI = £3,016', r, 3016);
+  })();
+
+  // E17 — salary one above UEL (£50,271) → NI = 37,700×8% + 1×2% = £3,016.02
+  ;(function(){
+    const r = C.calcEmployeeNI(50271, TAX, false);
+    test('E17', 'NI · salary = £50,271 → NI = £3,016.02', r, 3016.02);
+  })();
+
+  // ─────────────────────────────────────────────
+  // ── BLOCK 7: Engine depletion scenarios ──────
+  // ─────────────────────────────────────────────
+
+  // DE01 — SIPP nearly empty (£50k), target £40k
+  // SIPP fully drawn to meet target (£40k drawn).
+  // sippTaxable=30k; nsNet=17,430@20%=£3,486.
+  // SIPP end = 50,000-40,000 = £10,000 (no growth).
+  // cashflowShortfall = £3,486 (tax not covered by draw).
+  ;(function(){
+    const r = run({ p1Bal: { Cash:0, GIA:0, SIPP:50000, ISA:0 } });
+    const row = r.rows[0];
+    test('DE01a', 'Depletion · SIPP near-empty · IT = £3,486',       row.p1IncomeTax,      3486,   ENG_EPSILON);
+    test('DE01b', 'Depletion · SIPP near-empty · SIPP drawn = £40k', row.p1Drawn.SIPP,    40000,   ENG_EPSILON);
+    test('DE01c', 'Depletion · SIPP near-empty · SIPP end = £10k',   row.snap.p1SIPP,     10000,   ENG_EPSILON);
+    test('DE01d', 'Depletion · SIPP near-empty · shortfall = £3,486', row.cashflowShortfall, 3486, ENG_EPSILON);
+  })();
+
+  // DE02 — ISA runs out; SIPP absorbs overflow, target £40k
+  // p1: ISA=£20k, SIPP=£500k.
+  // Tax-aware: SIPP fills PA first (16,760), then ISA provides portion of rem,
+  // then ISA exhausted → overflow falls back to SIPP.
+  // p1 SIPP total drawn ≈ £20k; ISA total drawn = £20k (fully depleted).
+  // sippTaxable ≈ 15,000; nsNet ≈ 2,430 @ 20% = £486.
+  // ISA end = £0; SIPP end = £480,000.
+  ;(function(){
+    const r = run({
+      p1Bal: { Cash:0, GIA:0, SIPP:500000, ISA:20000 },
+      p1Order: ['ISA', 'GIA', 'SIPP', 'Cash'],
+    });
+    const row = r.rows[0];
+    test('DE02a', 'Depletion · ISA exhausted · IT = £486',          row.p1IncomeTax,   486,    ENG_EPSILON);
+    test('DE02b', 'Depletion · ISA exhausted · ISA drawn = £20k',   row.p1Drawn.ISA,   20000,  ENG_EPSILON);
+    test('DE02c', 'Depletion · ISA exhausted · ISA end = £0',       row.snap.p1ISA,    0,      ENG_EPSILON);
+    test('DE02d', 'Depletion · ISA exhausted · SIPP end = £480k',   row.snap.p1SIPP,   480000, ENG_EPSILON);
+  })();
+
+  // DE03 — Both wrappers nearly empty; target unachievable
+  // p1: SIPP=£15k, ISA=£10k. Target=£40k.
+  // Engine draws all available: total ≈ £25k.
+  // sippTaxable=11,250 < PA=12,570 → nsNet=0 → IT=£0.
+  // cashflowShortfall ≈ £15,000 (target unmet).
+  ;(function(){
+    const r = run({
+      spending: 40000,
+      p1Bal: { Cash:0, GIA:0, SIPP:15000, ISA:10000 },
+    });
+    const row = r.rows[0];
+    test('DE03a', 'Depletion · both empty · IT = £0 (SIPP within PA)',     row.p1IncomeTax,      0,     ENG_EPSILON);
+    test('DE03b', 'Depletion · both empty · cashflow shortfall ≈ £15,000', row.cashflowShortfall, 15000, ENG_EPSILON);
+    test('DE03c', 'Depletion · both empty · SIPP end = £0',                row.snap.p1SIPP,       0,     ENG_EPSILON);
+    test('DE03d', 'Depletion · both empty · ISA end = £0',                 row.snap.p1ISA,        0,     ENG_EPSILON);
+  })();
+
+  // ─────────────────────────────────────────────
+  // Render
+  // ─────────────────────────────────────────────
+  const total  = results.length;
+  const passed = results.filter(r => r.pass).length;
+  const failed = total - passed;
+
+  document.getElementById('summary').innerHTML = `
+    <span class="summary-pill pill-total">${total} tests</span>
+    <span class="summary-pill pill-pass">✓ ${passed} passed</span>
+    ${failed > 0 ? `<span class="summary-pill pill-fail">✗ ${failed} failed</span>` : ''}
+  `;
+
+  const groups = {
+    'Block 1 — Personal Allowance boundary (£12,570)': results.filter(r => ['E01a','E01b','E02a','E02b','E03'].includes(r.id)),
+    'Block 2 — Higher rate threshold boundary (£50,270)': results.filter(r => ['E04a','E04b','E05a','E05b','E06'].includes(r.id)),
+    'Block 3 — PSA tier transitions (£1,000 → £500 → £0)': results.filter(r => ['E07a','E07b','E08a','E08b','E09a','E09b'].includes(r.id)),
+    'Block 4 — Mixed income stacking (salary + interest + dividends + SIPP)': results.filter(r => r.id.startsWith('E10')),
+    'Block 5 — Zero / low income': results.filter(r => ['E11','E12','E13a','E13b'].includes(r.id)),
+    'Block 6 — NI threshold boundaries': results.filter(r => ['E14','E15','E16','E17'].includes(r.id)),
+    'Block 7 — Engine depletion': results.filter(r => r.id.startsWith('DE')),
+  };
+
+  function fmt(n) {
+    return '£' + (n || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  const out = document.getElementById('output');
+
+  for (const [title, rows] of Object.entries(groups)) {
+    if (!rows.length) continue;
+    const sec = document.createElement('div');
+
+    const titleEl = document.createElement('div');
+    titleEl.className = 'section-title';
+    titleEl.textContent = title;
+    sec.appendChild(titleEl);
+
+    const hdrs = document.createElement('div');
+    hdrs.className = 'col-headers';
+    hdrs.innerHTML = `<span></span><span></span>
+      <span class="col-header">Expected</span>
+      <span class="col-header">Actual</span>
+      <span class="col-header">Δ</span>`;
+    sec.appendChild(hdrs);
+
+    rows.forEach(r => {
+      const row = document.createElement('div');
+      row.className = `test-row ${r.pass ? 'pass' : 'fail'}`;
+      row.innerHTML = `
+        <span class="test-icon ${r.pass ? 'pass' : 'fail'}">${r.pass ? '✓' : '✗'}</span>
+        <span class="test-label"><span class="test-id">${r.id}</span>${r.label}</span>
+        <span class="val expected">${fmt(r.expected)}</span>
+        <span class="val actual ${r.pass ? 'ok' : 'bad'}">${fmt(r.actual)}</span>
+        <span class="val delta ${r.pass ? 'ok' : 'bad'}">${r.pass ? '—' : fmt(r.delta)}</span>
+      `;
+      sec.appendChild(row);
+    });
+
+    out.appendChild(sec);
+  }
+
+
+  // ── Report results to parent harness ──
+  if (window.parent !== window) {
+    const total  = results.length;
+    const passed = results.filter(r => r.pass).length;
+    window.parent.postMessage({
+      type: 'suite-results',
+      file: window.location.pathname.split('/').pop(),
+      total,
+      passed,
+      failed: total - passed,
+      results: results.map(r => ({ id: r.id, label: r.label, pass: r.pass, actual: r.actual, expected: r.expected, delta: r.delta })),
+    }, '*');
+  }
+
+})();
+</script>
+</body>
+</html>
