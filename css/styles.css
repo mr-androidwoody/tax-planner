@@ -1936,7 +1936,7 @@ input[type="radio"] { accent-color: var(--accent); }
 }
 
 .chart-canvas-area h2 {
-  margin: 0 0 12px;
+  margin: 0;
   font-size: 0.94rem;
   font-weight: 700;
   color: var(--text);
@@ -2194,46 +2194,57 @@ input[type="radio"] { accent-color: var(--accent); }
    Chart Insight Button + Pane
    ======================================== */
 
-/* ⓘ button — top-right inside .chart-wrap */
-.chart-insight-btn {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 10;
+/* ========================================
+   Chart Canvas Area Header
+   ======================================== */
+
+.chart-canvas-area__header {
   display: flex;
   align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  background: rgba(255,255,255,0.92);
-  border: 1px solid var(--border);
-  border-radius: 50%;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.chart-canvas-area__header h2 {
+  margin: 0;
+}
+
+/* ⓘ button — sits in chart header, right-hand side */
+.chart-insight-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  background: linear-gradient(180deg, #4a78ff 0%, #3460e8 100%);
+  border: none;
+  border-radius: 999px;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(22,39,67,0.10);
-  transition: background 140ms ease, border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+  box-shadow: 0 3px 10px rgba(49,92,232,0.25);
+  transition: box-shadow 140ms ease, transform 140ms ease, opacity 140ms ease;
+  white-space: nowrap;
 }
 
 .chart-insight-btn:hover {
-  background: #fff;
-  border-color: var(--accent);
-  box-shadow: 0 4px 14px rgba(45,91,255,0.18);
+  box-shadow: 0 5px 16px rgba(49,92,232,0.35);
   transform: translateY(-1px);
 }
 
 .chart-insight-btn.is-active {
-  background: var(--accent);
-  border-color: var(--accent);
-  box-shadow: 0 4px 14px rgba(45,91,255,0.30);
-}
-
-.chart-insight-btn.is-active .chart-insight-btn__icon {
-  color: #fff;
+  background: linear-gradient(180deg, #1a3fbf 0%, #1230b0 100%);
+  box-shadow: 0 3px 10px rgba(18,48,176,0.30);
 }
 
 .chart-insight-btn__icon {
-  font-size: 0.88rem;
-  color: var(--accent);
+  font-size: 0.82rem;
+  color: #fff;
   line-height: 1;
+  pointer-events: none;
+}
+
+.chart-insight-btn__label {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #fff;
   pointer-events: none;
 }
 
