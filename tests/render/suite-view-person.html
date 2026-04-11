@@ -88,17 +88,30 @@
       });
 
       // ─────────────────────────────────────────────
-      // 4. Shortfall invariant: always measured against FULL household target
-      //    regardless of viewPerson setting.
-      //    When household is fully funded: shortfall = 0 in all views.
-      //    Row 0: householdGrossIncome 65300 > target 65000 → shortfall = 0
+      // 4. Shortfall: gap between visible person's gross and full household target.
+      //    'both' view: household is funded (65300 > 65000) → shortfall = 0.
+      //    'p1' view:   only p1 income visible (47500), gap = 65000-47500 = 17500.
+      //    'p2' view:   only p2 income visible (17800), gap = 65000-17800 = 47200.
+      //    The target is always the full household target — never per-person.
       // ─────────────────────────────────────────────
-      ['p1','p2','both'].forEach(vp => {
-        const ds = L.buildIncomeDatasets(rows, vp, false);
-        const sf = ds.find(d => d.label === 'Shortfall');
-        push(test(`VP-SF-FUNDED-${vp}`, `Shortfall row 0 = 0 for view=${vp} (household fully funded)`,
-          sf.data[0], 0, TOL));
-      });
+      const r0sf = rows[0];
+      const p1Gross0 = r0sf.p1SP + r0sf.p1SalInc + (r0sf.p1Drawn.SIPP||0) +
+                       (r0sf.p1Drawn.ISA||0) + (r0sf.p1Drawn.GIA||0) +
+                       (r0sf.p1IntDraw||0) + (r0sf.p1DivsUsed||0) + (r0sf.p1Drawn.Cash||0);
+      const p2Gross0 = r0sf.p2SP + r0sf.p2SalInc + (r0sf.p2Drawn.SIPP||0) +
+                       (r0sf.p2Drawn.ISA||0) + (r0sf.p2Drawn.GIA||0) +
+                       (r0sf.p2IntDraw||0) + (r0sf.p2DivsUsed||0) + (r0sf.p2Drawn.Cash||0);
+
+      const sfBoth = L.buildIncomeDatasets(rows, 'both', false).find(d => d.label === 'Shortfall');
+      const sfP1   = L.buildIncomeDatasets(rows, 'p1',   false).find(d => d.label === 'Shortfall');
+      const sfP2   = L.buildIncomeDatasets(rows, 'p2',   false).find(d => d.label === 'Shortfall');
+
+      push(test('VP-SF-BOTH-0', 'Shortfall both view row 0 = 0 (household fully funded)',
+        sfBoth.data[0], 0, TOL));
+      push(test('VP-SF-P1-0', 'Shortfall p1 view row 0 = max(0, target - p1Gross) / 1000',
+        sfP1.data[0], Math.max(0, r0sf.target - p1Gross0) / 1000, TOL));
+      push(test('VP-SF-P2-0', 'Shortfall p2 view row 0 = max(0, target - p2Gross) / 1000',
+        sfP2.data[0], Math.max(0, r0sf.target - p2Gross0) / 1000, TOL));
 
       // ─────────────────────────────────────────────
       // 5. taxFn per-person correctness
