@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Render Test Harness</title>
+  <style>
+    :root {
+      --bg:      #0f172a;
+      --surface: #1e293b;
+      --border:  #334155;
+      --pass:    #22c55e;
+      --fail:    #ef4444;
+      --warn:    #f59e0b;
+      --text:    #f1f5f9;
+      --muted:   #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg); color: var(--text);
+      font: 13px/1.5 'Consolas', 'Menlo', monospace;
+      padding: 24px;
+    }
+    h1 { font-size: 18px; margin-bottom: 4px; }
+    .subtitle { color: var(--muted); margin-bottom: 24px; font-size: 12px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 32px; }
+    th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+    th { background: var(--surface); color: var(--muted); font-size: 11px; text-transform: uppercase; }
+    tr:hover td { background: var(--surface); }
+    .pass  { color: var(--pass); }
+    .fail  { color: var(--fail); }
+    .warn  { color: var(--warn); }
+    .badge {
+      display: inline-block; padding: 2px 8px; border-radius: 4px;
+      font-size: 11px; font-weight: bold;
+    }
+    .badge-pass { background: #14532d; color: var(--pass); }
+    .badge-fail { background: #7f1d1d; color: var(--fail); }
+    .badge-pend { background: var(--surface); color: var(--muted); }
+    a { color: #60a5fa; }
+    .suite-row td:first-child a { font-weight: bold; }
+    #summary { margin-bottom: 8px; font-size: 12px; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <h1>Render Test Harness</h1>
+  <p class="subtitle">
+    Tests that verify calc-render-logic.js transforms rows[] correctly into chart datasets,
+    table values, and metric aggregates. Uses a Chart.js capture stub — no real canvas required.
+  </p>
+
+  <div id="summary">Loading suites…</div>
+
+  <table id="harness-table">
+    <thead>
+      <tr>
+        <th>Suite</th>
+        <th>Description</th>
+        <th>Passed</th>
+        <th>Failed</th>
+        <th>Known Bugs</th>
+        <th>Total</th>
+        <th>Result</th>
+      </tr>
+    </thead>
+    <tbody id="harness-body">
+    </tbody>
+  </table>
+
+  <script>
+    const SUITES = [
+      {
+        file: 'suite-chart-datasets.html',
+        name: 'Chart Dataset Integrity',
+        desc: 'Income chart dataset values, labels, stack keys, and _lifetimeValue match engine rows',
+      },
+      {
+        file: 'suite-gross-vs-net.html',
+        name: 'Gross vs Net Chart',
+        desc: 'net + tax = gross for every row; _lifetimeValue sums correctly; both/p1/p2 views',
+      },
+      {
+        file: 'suite-real-nominal.html',
+        name: 'Real vs Nominal Toggle',
+        desc: 'Real values = nominal × realDeflator; toggle affects all chart types consistently',
+      },
+      {
+        file: 'suite-view-person.html',
+        name: 'viewPerson Toggle',
+        desc: 'p1/p2/both datasets contain correct per-person contributions; shortfall always vs household target',
+      },
+      {
+        file: 'suite-metrics.html',
+        name: 'Metrics / Stat Cards',
+        desc: 'totalTax, avgRate, lastPortfolio match expected aggregations across views and real/nominal',
+      },
+      {
+        file: 'suite-tables.html',
+        name: 'Table Cell Values',
+        desc: 'Tax and wealth table row objects: component sums, running cumTax, snap field mapping, depletion detection',
+      },
+    ];
+
+    const tbody = document.getElementById('harness-body');
+    const rows  = {};
+
+    // Render placeholder rows
+    SUITES.forEach(s => {
+      const tr = document.createElement('tr');
+      tr.className = 'suite-row';
+      tr.id = 'row-' + s.file;
+      tr.innerHTML = `
+        <td><a href="${s.file}" target="_blank">${s.name}</a></td>
+        <td style="color:var(--muted);font-size:12px">${s.desc}</td>
+        <td>–</td><td>–</td><td>–</td><td>–</td>
+        <td><span class="badge badge-pend">Pending</span></td>
+      `;
+      tbody.appendChild(tr);
+      rows[s.file] = tr;
+    });
+
+    // Listen for results posted from suite iframes
+    window.addEventListener('message', e => {
+      if (!e.data || e.data.type !== 'suite-result') return;
+      const suite = SUITES.find(s => s.name === e.data.suite);
+      if (!suite) return;
+      const tr = rows[suite.file];
+      if (!tr) return;
+
+      const { passed, failed, knownBugs, total, ok } = e.data;
+      const badge = ok
+        ? `<span class="badge badge-pass">PASS</span>`
+        : `<span class="badge badge-fail">FAIL</span>`;
+
+      const cells = tr.querySelectorAll('td');
+      cells[2].textContent = passed;
+      cells[3].innerHTML = failed > 0 ? `<span class="fail">${failed}</span>` : '0';
+      cells[4].innerHTML = knownBugs > 0 ? `<span class="warn">${knownBugs}</span>` : '0';
+      cells[5].textContent = total;
+      cells[6].innerHTML = badge;
+
+      updateSummary();
+    });
+
+    // Run all suites in hidden iframes
+    SUITES.forEach(s => {
+      const iframe = document.createElement('iframe');
+      iframe.src = s.file;
+      iframe.style.display = 'none';
+      document.body.appendChild(iframe);
+    });
+
+    function updateSummary() {
+      const allRows = Object.values(rows);
+      const resolved = allRows.filter(tr => !tr.querySelector('.badge-pend'));
+      const anyFail  = allRows.some(tr => tr.querySelector('.badge-fail'));
+      document.getElementById('summary').textContent =
+        `${resolved.length} / ${allRows.length} suites complete` +
+        (resolved.length === allRows.length
+          ? anyFail ? ' — ✗ one or more suites FAILED' : ' — ✓ all suites passed'
+          : '');
+    }
+  </script>
+</body>
+</html>

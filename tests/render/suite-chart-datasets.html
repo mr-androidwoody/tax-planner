@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Suite: Chart Dataset Integrity</title>
+  <style>
+    :root { --bg:#0f172a; --surface:#1e293b; --border:#334155; --pass:#22c55e; --fail:#ef4444; --warn:#f59e0b; --text:#f1f5f9; --muted:#94a3b8; }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { background:var(--bg); color:var(--text); font:13px/1.5 'Consolas','Menlo',monospace; padding:24px; }
+    h2 { font-size:15px; margin:24px 0 8px; }
+    p  { color:var(--muted); margin-bottom:12px; font-size:12px; }
+    table { width:100%; border-collapse:collapse; margin-bottom:24px; }
+    th,td { padding:7px 10px; text-align:left; border-bottom:1px solid var(--border); font-size:12px; }
+    th { background:var(--surface); color:var(--muted); text-transform:uppercase; font-size:11px; }
+    .pass td:nth-child(3) { color:var(--pass); }
+    .fail td:nth-child(3) { color:var(--fail); }
+    .warn td:nth-child(3) { color:var(--warn); }
+    .pass,.fail,.warn { }
+    span.pass { color:var(--pass); } span.fail { color:var(--fail); } span.warn { color:var(--warn); }
+  </style>
+</head>
+<body>
+  <div id="results"></div>
+
+  <!-- Dependencies: no DOM access needed in logic module -->
+  <script src="../js/data.js"></script>
+  <script src="../js/calc-render-logic.js"></script>
+  <script src="render-test-runner.js"></script>
+
+  <script>
+    const { test, runSuite, makeFixture, TOL } = window.RenderTestRunner;
+    const L = window.RetireCalcRenderLogic;
+
+    runSuite('Chart Dataset Integrity', (results) => {
+      const rows = makeFixture();
+      const push = r => results.push(r);
+
+      // ── Build datasets under both views and both real/nominal modes ──
+      const dsNomBoth = L.buildIncomeDatasets(rows, 'both', false);
+      const dsRealBoth = L.buildIncomeDatasets(rows, 'both', true);
+
+      // ── Helper: find dataset by label ──
+      const ds = (sets, label) => sets.find(d => d.label === label);
+
+      // ─────────────────────────────────────────────
+      // 1. Dataset count and required labels
+      // ─────────────────────────────────────────────
+      const EXPECTED_LABELS = ['Salary','Cash','Interest','Dividends','GIA','ISA','SIPP / WP','State Pension','Shortfall'];
+      push(test('CD-01', 'Income datasets: correct count (9 datasets)',
+        dsNomBoth.length, EXPECTED_LABELS.length));
+
+      EXPECTED_LABELS.forEach((label, i) => {
+        push(test(`CD-0${i+2}`, `Dataset "${label}" is present`,
+          !!ds(dsNomBoth, label), true));
+      });
+
+      // ─────────────────────────────────────────────
+      // 2. Stack key = 'income' on all datasets
+      // ─────────────────────────────────────────────
+      dsNomBoth.forEach(d => {
+        push(test(`CD-STK-${d.label}`, `"${d.label}" has stack = 'income'`,
+          d.stack, 'income'));
+      });
+
+      // ─────────────────────────────────────────────
+      // 3. Data values in £k — spot check every source, row 0
+      // ─────────────────────────────────────────────
+      const r0 = rows[0];
+
+      // Salary: p1SalInc + p2SalInc
+      push(test('CD-VAL-SAL-0', 'Salary dataset row 0: (p1SalInc+p2SalInc)/1000 nominal',
+        ds(dsNomBoth,'Salary').data[0],
+        (r0.p1SalInc + r0.p2SalInc) / 1000, TOL));
+
+      // SIPP: p1Drawn.SIPP + p2Drawn.SIPP
+      push(test('CD-VAL-SIPP-0', 'SIPP dataset row 0: (p1+p2 SIPP drawn)/1000 nominal',
+        ds(dsNomBoth,'SIPP / WP').data[0],
+        (r0.p1Drawn.SIPP + r0.p2Drawn.SIPP) / 1000, TOL));
+
+      // ISA
+      push(test('CD-VAL-ISA-0', 'ISA dataset row 0: (p1+p2 ISA drawn)/1000 nominal',
+        ds(dsNomBoth,'ISA').data[0],
+        (r0.p1Drawn.ISA + r0.p2Drawn.ISA) / 1000, TOL));
+
+      // GIA
+      push(test('CD-VAL-GIA-0', 'GIA dataset row 0: (p1+p2 GIA drawn)/1000 nominal',
+        ds(dsNomBoth,'GIA').data[0],
+        (r0.p1Drawn.GIA + r0.p2Drawn.GIA) / 1000, TOL));
+
+      // Cash
+      push(test('CD-VAL-CASH-0', 'Cash dataset row 0: (p1+p2 cash drawn)/1000 nominal',
+        ds(dsNomBoth,'Cash').data[0],
+        (r0.p1Drawn.Cash + r0.p2Drawn.Cash) / 1000, TOL));
+
+      // Interest
+      push(test('CD-VAL-INT-0', 'Interest dataset row 0: (p1+p2 IntDraw)/1000 nominal',
+        ds(dsNomBoth,'Interest').data[0],
+        (r0.p1IntDraw + r0.p2IntDraw) / 1000, TOL));
+
+      // Dividends
+      push(test('CD-VAL-DIV-0', 'Dividends dataset row 0: (p1+p2 DivsUsed)/1000 nominal',
+        ds(dsNomBoth,'Dividends').data[0],
+        (r0.p1DivsUsed + r0.p2DivsUsed) / 1000, TOL));
+
+      // State Pension: row 2 (first year p1SP > 0)
+      const r2 = rows[2];
+      push(test('CD-VAL-SP-2', 'State Pension dataset row 2: (p1SP+p2SP)/1000 nominal',
+        ds(dsNomBoth,'State Pension').data[2],
+        (r2.p1SP + r2.p2SP) / 1000, TOL));
+
+      // ─────────────────────────────────────────────
+      // 4. Shortfall ≥ 0 in all rows
+      // ─────────────────────────────────────────────
+      const sfDs = ds(dsNomBoth, 'Shortfall');
+      sfDs.data.forEach((v, i) => {
+        push(test(`CD-SF-${i}`, `Shortfall dataset row ${i} is ≥ 0`, v >= 0, true));
+      });
+
+      // ─────────────────────────────────────────────
+      // 5. Shortfall = 0 when household gross meets target
+      // ─────────────────────────────────────────────
+      // Row 0: householdGrossIncome=65300, target=65000 → no shortfall
+      push(test('CD-SF-FUNDED-0', 'Shortfall is 0 in row 0 (household gross ≥ target)',
+        sfDs.data[0], 0, TOL));
+
+      // ─────────────────────────────────────────────
+      // 6. _lifetimeValue = sum of adj(fn(r),r) across all rows — nominal
+      // ─────────────────────────────────────────────
+      const expectedSIPPLifetime = rows.reduce((s, r) =>
+        s + (r.p1Drawn.SIPP + r.p2Drawn.SIPP), 0);
+      push(test('CD-LT-SIPP-NOM', '_lifetimeValue for SIPP/WP (nominal) = sum of raw draws',
+        ds(dsNomBoth,'SIPP / WP')._lifetimeValue,
+        expectedSIPPLifetime, 1.0));
+
+      const expectedSalaryLifetime = rows.reduce((s, r) =>
+        s + (r.p1SalInc + r.p2SalInc), 0);
+      push(test('CD-LT-SAL-NOM', '_lifetimeValue for Salary (nominal) = sum of raw salaries',
+        ds(dsNomBoth,'Salary')._lifetimeValue,
+        expectedSalaryLifetime, 1.0));
+
+      // ─────────────────────────────────────────────
+      // 7. _lifetimeValue — real mode is deflated
+      // ─────────────────────────────────────────────
+      const expectedSIPPReal = rows.reduce((s, r) =>
+        s + (r.p1Drawn.SIPP + r.p2Drawn.SIPP) * r.realDeflator, 0);
+      push(test('CD-LT-SIPP-REAL', '_lifetimeValue for SIPP/WP (real) = sum of adj draws',
+        ds(dsRealBoth,'SIPP / WP')._lifetimeValue,
+        expectedSIPPReal, 1.0));
+
+      // Lifetime real < nominal (deflator < 1 for all rows after first)
+      push(test('CD-LT-REAL-LT-NOM', 'SIPP lifetime value: real < nominal',
+        ds(dsRealBoth,'SIPP / WP')._lifetimeValue <
+        ds(dsNomBoth, 'SIPP / WP')._lifetimeValue, true));
+
+      // ─────────────────────────────────────────────
+      // 8. All data arrays have length = rows.length
+      // ─────────────────────────────────────────────
+      dsNomBoth.forEach(d => {
+        push(test(`CD-LEN-${d.label}`, `"${d.label}" data.length === rows.length`,
+          d.data.length, rows.length));
+      });
+
+      // ─────────────────────────────────────────────
+      // 9. Zero rows produces empty datasets gracefully
+      // ─────────────────────────────────────────────
+      const dsEmpty = L.buildIncomeDatasets([], 'both', false);
+      push(test('CD-EMPTY-01', 'Empty rows[] → datasets still have correct count',
+        dsEmpty.length, EXPECTED_LABELS.length));
+      push(test('CD-EMPTY-02', 'Empty rows[] → all data arrays are empty',
+        dsEmpty.every(d => d.data.length === 0), true));
+      push(test('CD-EMPTY-03', 'Empty rows[] → all _lifetimeValue are 0',
+        dsEmpty.filter(d => d._lifetimeValue !== undefined).every(d => d._lifetimeValue === 0), true));
+    });
+  </script>
+</body>
+</html>

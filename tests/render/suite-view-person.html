@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Suite: viewPerson Toggle</title>
+  <style>
+    :root { --bg:#0f172a; --surface:#1e293b; --border:#334155; --pass:#22c55e; --fail:#ef4444; --warn:#f59e0b; --text:#f1f5f9; --muted:#94a3b8; }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { background:var(--bg); color:var(--text); font:13px/1.5 'Consolas','Menlo',monospace; padding:24px; }
+    table { width:100%; border-collapse:collapse; margin-bottom:24px; }
+    th,td { padding:7px 10px; text-align:left; border-bottom:1px solid var(--border); font-size:12px; }
+    th { background:var(--surface); color:var(--muted); text-transform:uppercase; font-size:11px; }
+    .pass td:nth-child(3) { color:var(--pass); }
+    .fail td:nth-child(3) { color:var(--fail); }
+    .warn td:nth-child(3) { color:var(--warn); }
+    span.pass { color:var(--pass); } span.fail { color:var(--fail); } span.warn { color:var(--warn); }
+  </style>
+</head>
+<body>
+  <div id="results"></div>
+
+  <script src="../js/data.js"></script>
+  <script src="../js/calc-render-logic.js"></script>
+  <script src="render-test-runner.js"></script>
+
+  <script>
+    const { test, runSuite, makeFixture, TOL } = window.RenderTestRunner;
+    const L = window.RetireCalcRenderLogic;
+
+    runSuite('viewPerson Toggle', (results) => {
+      const rows = makeFixture();
+      const push = r => results.push(r);
+
+      const dsP1   = L.buildIncomeDatasets(rows, 'p1',   false);
+      const dsP2   = L.buildIncomeDatasets(rows, 'p2',   false);
+      const dsBoth = L.buildIncomeDatasets(rows, 'both', false);
+
+      const get = (sets, label) => sets.find(d => d.label === label);
+
+      // ─────────────────────────────────────────────
+      // 1. p1 view: datasets contain only p1 contributions
+      // ─────────────────────────────────────────────
+      rows.forEach((r, i) => {
+        // SIPP: p1 view should be only p1Drawn.SIPP
+        push(test(`VP-P1-SIPP-${i}`, `p1 view: SIPP row ${i} = p1Drawn.SIPP/1000`,
+          get(dsP1,'SIPP / WP').data[i],
+          r.p1Drawn.SIPP / 1000, TOL));
+
+        // Salary: p1 view = p1SalInc only
+        push(test(`VP-P1-SAL-${i}`, `p1 view: Salary row ${i} = p1SalInc/1000`,
+          get(dsP1,'Salary').data[i],
+          r.p1SalInc / 1000, TOL));
+
+        // ISA: p1 view = p1Drawn.ISA only
+        push(test(`VP-P1-ISA-${i}`, `p1 view: ISA row ${i} = p1Drawn.ISA/1000`,
+          get(dsP1,'ISA').data[i],
+          r.p1Drawn.ISA / 1000, TOL));
+      });
+
+      // ─────────────────────────────────────────────
+      // 2. p2 view: datasets contain only p2 contributions
+      // ─────────────────────────────────────────────
+      rows.forEach((r, i) => {
+        push(test(`VP-P2-SIPP-${i}`, `p2 view: SIPP row ${i} = p2Drawn.SIPP/1000`,
+          get(dsP2,'SIPP / WP').data[i],
+          r.p2Drawn.SIPP / 1000, TOL));
+
+        push(test(`VP-P2-SAL-${i}`, `p2 view: Salary row ${i} = p2SalInc/1000`,
+          get(dsP2,'Salary').data[i],
+          r.p2SalInc / 1000, TOL));
+      });
+
+      // ─────────────────────────────────────────────
+      // 3. both view: datasets = p1 + p2
+      // ─────────────────────────────────────────────
+      rows.forEach((r, i) => {
+        const p1SIPP   = get(dsP1,   'SIPP / WP').data[i];
+        const p2SIPP   = get(dsP2,   'SIPP / WP').data[i];
+        const bothSIPP = get(dsBoth, 'SIPP / WP').data[i];
+        push(test(`VP-BOTH-SIPP-${i}`, `both view: SIPP row ${i} = p1+p2`,
+          bothSIPP, p1SIPP + p2SIPP, TOL));
+
+        const p1ISA   = get(dsP1,   'ISA').data[i];
+        const p2ISA   = get(dsP2,   'ISA').data[i];
+        const bothISA = get(dsBoth, 'ISA').data[i];
+        push(test(`VP-BOTH-ISA-${i}`, `both view: ISA row ${i} = p1+p2`,
+          bothISA, p1ISA + p2ISA, TOL));
+      });
+
+      // ─────────────────────────────────────────────
+      // 4. Shortfall invariant: always measured against FULL household target
+      //    regardless of viewPerson setting.
+      //    When household is fully funded: shortfall = 0 in all views.
+      //    Row 0: householdGrossIncome 65300 > target 65000 → shortfall = 0
+      // ─────────────────────────────────────────────
+      ['p1','p2','both'].forEach(vp => {
+        const ds = L.buildIncomeDatasets(rows, vp, false);
+        const sf = ds.find(d => d.label === 'Shortfall');
+        push(test(`VP-SF-FUNDED-${vp}`, `Shortfall row 0 = 0 for view=${vp} (household fully funded)`,
+          sf.data[0], 0, TOL));
+      });
+
+      // ─────────────────────────────────────────────
+      // 5. taxFn per-person correctness
+      // ─────────────────────────────────────────────
+      const r0 = rows[0];
+      push(test('VP-TAX-P1', 'taxFn p1: only p1 taxes included',
+        L.taxFn(r0, 'p1'),
+        r0.p1IncomeTax + r0.p1CGT + r0.p1NI, TOL));
+      push(test('VP-TAX-P2', 'taxFn p2: only p2 taxes included',
+        L.taxFn(r0, 'p2'),
+        r0.p2IncomeTax + r0.p2CGT + r0.p2NI, TOL));
+      push(test('VP-TAX-BOTH', 'taxFn both: p1 + p2 taxes',
+        L.taxFn(r0, 'both'),
+        r0.p1IncomeTax + r0.p1CGT + r0.p1NI +
+        r0.p2IncomeTax + r0.p2CGT + r0.p2NI, TOL));
+      push(test('VP-TAX-ADDITIVE', 'taxFn p1 + taxFn p2 = taxFn both',
+        L.taxFn(r0, 'p1') + L.taxFn(r0, 'p2'), L.taxFn(r0, 'both'), TOL));
+
+      // ─────────────────────────────────────────────
+      // 6. grossFn per-person correctness
+      // ─────────────────────────────────────────────
+      push(test('VP-GROSS-P1', 'grossFn p1 = p1GrossIncome',
+        L.grossFn(r0, 'p1'), r0.p1GrossIncome, TOL));
+      push(test('VP-GROSS-P2', 'grossFn p2 = p2GrossIncome',
+        L.grossFn(r0, 'p2'), r0.p2GrossIncome, TOL));
+      push(test('VP-GROSS-BOTH', 'grossFn both = householdGrossIncome',
+        L.grossFn(r0, 'both'), r0.householdGrossIncome, TOL));
+      push(test('VP-GROSS-ADDITIVE', 'grossFn p1 + grossFn p2 = grossFn both',
+        L.grossFn(r0, 'p1') + L.grossFn(r0, 'p2'), L.grossFn(r0, 'both'), TOL));
+
+      // ─────────────────────────────────────────────
+      // 7. Wealth datasets: viewPerson filtering
+      //    p1 view = 5 datasets (indices 0–4), p2 view = 5 (indices 5–9)
+      // ─────────────────────────────────────────────
+      const wP1   = L.buildWealthDatasets(rows, 'p1',   false, 'Bob', 'Mary');
+      const wP2   = L.buildWealthDatasets(rows, 'p2',   false, 'Bob', 'Mary');
+      const wBoth = L.buildWealthDatasets(rows, 'both', false, 'Bob', 'Mary');
+
+      push(test('VP-WLT-P1-COUNT', 'Wealth p1 view: 5 datasets', wP1.length, 5));
+      push(test('VP-WLT-P2-COUNT', 'Wealth p2 view: 5 datasets', wP2.length, 5));
+      push(test('VP-WLT-BOTH-COUNT', 'Wealth both view: 10 datasets', wBoth.length, 10));
+
+      // p1 view datasets all labelled with p1 name
+      push(test('VP-WLT-P1-LABELS', 'Wealth p1 view: all labels contain "Bob"',
+        wP1.every(d => d.label.includes('Bob')), true));
+      push(test('VP-WLT-P2-LABELS', 'Wealth p2 view: all labels contain "Mary"',
+        wP2.every(d => d.label.includes('Mary')), true));
+
+      // p1 SIPP value matches snap.p1SIPP for each row
+      const p1SIPPds = wP1.find(d => d.label.includes('SIPP'));
+      rows.forEach((r, i) => {
+        push(test(`VP-WLT-P1SIPP-${i}`, `Wealth p1 SIPP row ${i} = snap.p1SIPP (nominal)`,
+          p1SIPPds.data[i], Math.round(r.snap.p1SIPP), 1));
+      });
+
+      // ─────────────────────────────────────────────
+      // 8. Metrics per-person
+      // ─────────────────────────────────────────────
+      const mP1   = L.buildMetrics(rows, 'p1',   false);
+      const mP2   = L.buildMetrics(rows, 'p2',   false);
+      const mBoth = L.buildMetrics(rows, 'both', false);
+
+      // p1 + p2 totalTax = both totalTax
+      push(test('VP-MET-TAX-ADDITIVE', 'Metrics: p1.totalTax + p2.totalTax ≈ both.totalTax',
+        mP1.totalTax + mP2.totalTax, mBoth.totalTax, 1.0));
+
+      // p1 + p2 lifetimeGross = both lifetimeGross
+      push(test('VP-MET-GROSS-ADDITIVE', 'Metrics: p1.lifetimeGross + p2.lifetimeGross ≈ both.lifetimeGross',
+        mP1.lifetimeGross + mP2.lifetimeGross, mBoth.lifetimeGross, 1.0));
+
+      // lastPortfolio is the same regardless of view (it's the whole portfolio)
+      push(test('VP-MET-PORT-INVARIANT', 'Metrics: lastPortfolio same across all viewPerson values',
+        mP1.lastPortfolio === mP2.lastPortfolio && mP2.lastPortfolio === mBoth.lastPortfolio, true));
+    });
+  </script>
+</body>
+</html>

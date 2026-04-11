@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Suite: Metrics / Stat Cards</title>
+  <style>
+    :root { --bg:#0f172a; --surface:#1e293b; --border:#334155; --pass:#22c55e; --fail:#ef4444; --warn:#f59e0b; --text:#f1f5f9; --muted:#94a3b8; }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { background:var(--bg); color:var(--text); font:13px/1.5 'Consolas','Menlo',monospace; padding:24px; }
+    table { width:100%; border-collapse:collapse; margin-bottom:24px; }
+    th,td { padding:7px 10px; text-align:left; border-bottom:1px solid var(--border); font-size:12px; }
+    th { background:var(--surface); color:var(--muted); text-transform:uppercase; font-size:11px; }
+    .pass td:nth-child(3) { color:var(--pass); }
+    .fail td:nth-child(3) { color:var(--fail); }
+    .warn td:nth-child(3) { color:var(--warn); }
+    span.pass { color:var(--pass); } span.fail { color:var(--fail); } span.warn { color:var(--warn); }
+  </style>
+</head>
+<body>
+  <div id="results"></div>
+
+  <script src="../js/data.js"></script>
+  <script src="../js/calc-render-logic.js"></script>
+  <script src="render-test-runner.js"></script>
+
+  <script>
+    const { test, runSuite, makeFixture, TOL } = window.RenderTestRunner;
+    const L = window.RetireCalcRenderLogic;
+
+    runSuite('Metrics / Stat Cards', (results) => {
+      const rows = makeFixture();
+      const push = r => results.push(r);
+
+      // ─────────────────────────────────────────────
+      // Pre-compute expected values by hand from fixture
+      // ─────────────────────────────────────────────
+
+      // Nominal both
+      const expTaxNomBoth = rows.reduce((s, r) =>
+        s + r.p1IncomeTax + r.p1CGT + r.p1NI + r.p2IncomeTax + r.p2CGT + r.p2NI, 0);
+      const expGrossNomBoth = rows.reduce((s, r) =>
+        s + r.householdGrossIncome, 0);
+      const expRateNomBoth  = expTaxNomBoth / expGrossNomBoth;
+
+      // Nominal p1
+      const expTaxNomP1   = rows.reduce((s, r) => s + r.p1IncomeTax + r.p1CGT + r.p1NI, 0);
+      const expGrossNomP1 = rows.reduce((s, r) => s + r.p1GrossIncome, 0);
+
+      // Nominal p2
+      const expTaxNomP2   = rows.reduce((s, r) => s + r.p2IncomeTax + r.p2CGT + r.p2NI, 0);
+      const expGrossNomP2 = rows.reduce((s, r) => s + r.p2GrossIncome, 0);
+
+      // Real both
+      const expTaxRealBoth = rows.reduce((s, r) =>
+        s + (r.p1IncomeTax + r.p1CGT + r.p1NI + r.p2IncomeTax + r.p2CGT + r.p2NI) * r.realDeflator, 0);
+      const expGrossRealBoth = rows.reduce((s, r) =>
+        s + r.householdGrossIncome * r.realDeflator, 0);
+
+      // Last portfolio values
+      const lastRow  = rows[rows.length - 1];
+      const expPortNom  = lastRow.totalPortfolio;
+      const expPortReal = lastRow.totalPortfolio * lastRow.realDeflator;
+
+      // ─────────────────────────────────────────────
+      // 1. totalTax — nominal
+      // ─────────────────────────────────────────────
+      const mNomBoth = L.buildMetrics(rows, 'both', false);
+      const mNomP1   = L.buildMetrics(rows, 'p1',   false);
+      const mNomP2   = L.buildMetrics(rows, 'p2',   false);
+
+      push(test('MET-TAX-NOM-BOTH', 'totalTax nominal both: sum of all taxes across rows',
+        mNomBoth.totalTax, expTaxNomBoth, 1.0));
+      push(test('MET-TAX-NOM-P1', 'totalTax nominal p1: sum of p1 taxes only',
+        mNomP1.totalTax, expTaxNomP1, 1.0));
+      push(test('MET-TAX-NOM-P2', 'totalTax nominal p2: sum of p2 taxes only',
+        mNomP2.totalTax, expTaxNomP2, 1.0));
+      push(test('MET-TAX-NOM-ADDITIVE', 'totalTax p1 + p2 = both (nominal)',
+        mNomP1.totalTax + mNomP2.totalTax, mNomBoth.totalTax, 1.0));
+
+      // ─────────────────────────────────────────────
+      // 2. totalTax — real
+      // ─────────────────────────────────────────────
+      const mRealBoth = L.buildMetrics(rows, 'both', true);
+      push(test('MET-TAX-REAL-BOTH', 'totalTax real both: sum of adj taxes',
+        mRealBoth.totalTax, expTaxRealBoth, 1.0));
+      push(test('MET-TAX-REAL-LT-NOM', 'totalTax real < nominal (deflators < 1 for rows 1+)',
+        mRealBoth.totalTax < mNomBoth.totalTax, true));
+
+      // ─────────────────────────────────────────────
+      // 3. lifetimeGross
+      // ─────────────────────────────────────────────
+      push(test('MET-GROSS-NOM-BOTH', 'lifetimeGross nominal both',
+        mNomBoth.lifetimeGross, expGrossNomBoth, 1.0));
+      push(test('MET-GROSS-NOM-P1', 'lifetimeGross nominal p1',
+        mNomP1.lifetimeGross, expGrossNomP1, 1.0));
+      push(test('MET-GROSS-REAL-BOTH', 'lifetimeGross real both',
+        mRealBoth.lifetimeGross, expGrossRealBoth, 1.0));
+
+      // ─────────────────────────────────────────────
+      // 4. avgRate = totalTax / lifetimeGross
+      // ─────────────────────────────────────────────
+      push(test('MET-RATE-NOM-BOTH', 'avgRate nominal both = totalTax / lifetimeGross',
+        mNomBoth.avgRate, expRateNomBoth, 0.0001));
+      push(test('MET-RATE-REAL-BOTH', 'avgRate real both = real totalTax / real gross',
+        mRealBoth.avgRate, expTaxRealBoth / expGrossRealBoth, 0.0001));
+      push(test('MET-RATE-POSITIVE', 'avgRate is positive', mNomBoth.avgRate > 0, true));
+      push(test('MET-RATE-UNDER-1', 'avgRate is < 1 (less than 100%)', mNomBoth.avgRate < 1, true));
+
+      // ─────────────────────────────────────────────
+      // 5. lastPortfolio
+      // ─────────────────────────────────────────────
+      push(test('MET-PORT-NOM', 'lastPortfolio nominal = last row totalPortfolio',
+        mNomBoth.lastPortfolio, expPortNom, 1.0));
+      push(test('MET-PORT-REAL', 'lastPortfolio real = totalPortfolio × deflator',
+        mRealBoth.lastPortfolio, expPortReal, 1.0));
+      push(test('MET-PORT-REAL-LT-NOM', 'lastPortfolio real < nominal',
+        mRealBoth.lastPortfolio < mNomBoth.lastPortfolio, true));
+
+      // lastPortfolio is view-invariant
+      const mNomP1port  = L.buildMetrics(rows, 'p1',   false).lastPortfolio;
+      const mNomP2port  = L.buildMetrics(rows, 'p2',   false).lastPortfolio;
+      push(test('MET-PORT-VIEW-INVAR', 'lastPortfolio is same for p1/p2/both views',
+        mNomP1port === mNomBoth.lastPortfolio && mNomP2port === mNomBoth.lastPortfolio, true));
+
+      // ─────────────────────────────────────────────
+      // 6. Edge: empty rows
+      // ─────────────────────────────────────────────
+      const mEmpty = L.buildMetrics([], 'both', false);
+      push(test('MET-EMPTY-TAX',  'buildMetrics([]) → totalTax = 0',  mEmpty.totalTax, 0, TOL));
+      push(test('MET-EMPTY-RATE', 'buildMetrics([]) → avgRate = 0',   mEmpty.avgRate,  0, TOL));
+      push(test('MET-EMPTY-PORT', 'buildMetrics([]) → lastPortfolio = 0', mEmpty.lastPortfolio, 0, TOL));
+
+      // ─────────────────────────────────────────────
+      // 7. Consistency: metrics totalTax matches buildTaxChartData sum
+      // ─────────────────────────────────────────────
+      const { taxData } = L.buildTaxChartData(rows, 'both', false);
+      const taxChartSum = taxData.reduce((s, v) => s + v, 0);
+      push(test('MET-CONSIST-TAXCHART', 'metrics.totalTax ≈ sum of taxData (nominal both)',
+        mNomBoth.totalTax, taxChartSum, 5.0)); // small rounding diff from Math.round in taxData
+    });
+  </script>
+</body>
+</html>

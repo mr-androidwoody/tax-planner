@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Suite: Gross vs Net Chart</title>
+  <style>
+    :root { --bg:#0f172a; --surface:#1e293b; --border:#334155; --pass:#22c55e; --fail:#ef4444; --warn:#f59e0b; --text:#f1f5f9; --muted:#94a3b8; }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { background:var(--bg); color:var(--text); font:13px/1.5 'Consolas','Menlo',monospace; padding:24px; }
+    h2 { font-size:15px; margin:24px 0 8px; }
+    p  { color:var(--muted); margin-bottom:12px; font-size:12px; }
+    table { width:100%; border-collapse:collapse; margin-bottom:24px; }
+    th,td { padding:7px 10px; text-align:left; border-bottom:1px solid var(--border); font-size:12px; }
+    th { background:var(--surface); color:var(--muted); text-transform:uppercase; font-size:11px; }
+    .pass td:nth-child(3) { color:var(--pass); }
+    .fail td:nth-child(3) { color:var(--fail); }
+    .warn td:nth-child(3) { color:var(--warn); }
+    span.pass { color:var(--pass); } span.fail { color:var(--fail); } span.warn { color:var(--warn); }
+  </style>
+</head>
+<body>
+  <div id="results"></div>
+
+  <script src="../js/data.js"></script>
+  <script src="../js/calc-render-logic.js"></script>
+  <script src="render-test-runner.js"></script>
+
+  <script>
+    const { test, runSuite, makeFixture, TOL } = window.RenderTestRunner;
+    const L = window.RetireCalcRenderLogic;
+
+    runSuite('Gross vs Net Chart', (results) => {
+      const rows = makeFixture();
+      const push = r => results.push(r);
+
+      // ─────────────────────────────────────────────
+      // 1. Core identity: net + tax = gross for every row, both views, both modes
+      // ─────────────────────────────────────────────
+      ['both','p1','p2'].forEach(vp => {
+        [true, false].forEach(useReal => {
+          const [netDs, taxDs] = L.buildGrossNetDatasets(rows, vp, useReal);
+          const mode = useReal ? 'real' : 'nominal';
+
+          rows.forEach((r, i) => {
+            const net  = netDs.data[i] * 1000;   // back to £
+            const tax  = taxDs.data[i] * 1000;
+            const gross = L.grossFn(r, vp) * (useReal ? r.realDeflator : 1);
+
+            push(test(`GN-IDENT-${vp}-${mode}-${i}`,
+              `net+tax = gross: view=${vp}, ${mode}, row ${i}`,
+              net + tax, gross, 1.0));
+          });
+        });
+      });
+
+      // ─────────────────────────────────────────────
+      // 2. Net segment = gross - tax explicitly
+      // ─────────────────────────────────────────────
+      const [netNom, taxNom] = L.buildGrossNetDatasets(rows, 'both', false);
+      rows.forEach((r, i) => {
+        const expectedNet = L.grossFn(r, 'both') - L.taxFn(r, 'both');
+        push(test(`GN-NET-${i}`, `Net value row ${i} = grossFn - taxFn (nominal)`,
+          netNom.data[i] * 1000, expectedNet, 1.0));
+      });
+
+      // ─────────────────────────────────────────────
+      // 3. Tax segment matches taxFn directly
+      // ─────────────────────────────────────────────
+      rows.forEach((r, i) => {
+        push(test(`GN-TAX-${i}`, `Tax segment row ${i} = taxFn (nominal)`,
+          taxNom.data[i] * 1000, L.taxFn(r, 'both'), 1.0));
+      });
+
+      // ─────────────────────────────────────────────
+      // 4. Dataset labels and metadata
+      // ─────────────────────────────────────────────
+      push(test('GN-META-01', 'Returns exactly 2 datasets', netNom !== undefined && taxNom !== undefined, true));
+      push(test('GN-META-02', 'First dataset label = "Net income"', netNom.label, 'Net income'));
+      push(test('GN-META-03', 'Second dataset label = "Tax"',       taxNom.label, 'Tax'));
+      push(test('GN-META-04', 'Both datasets have stack = "gross"',
+        netNom.stack === 'gross' && taxNom.stack === 'gross', true));
+      push(test('GN-META-05', 'Tax dataset has _fixed = true',      taxNom._fixed, true));
+      push(test('GN-META-06', 'Net dataset has no _fixed flag',      !!netNom._fixed, false));
+
+      // ─────────────────────────────────────────────
+      // 5. _lifetimeValue: net + tax lifetime = gross lifetime
+      // ─────────────────────────────────────────────
+      const expectedGrossLifetime = rows.reduce((s, r) => s + L.grossFn(r, 'both'), 0);
+      const expectedTaxLifetime   = rows.reduce((s, r) => s + L.taxFn(r, 'both'), 0);
+      const expectedNetLifetime   = expectedGrossLifetime - expectedTaxLifetime;
+
+      push(test('GN-LT-01', '_lifetimeValue net (nominal) = sum of net across rows',
+        netNom._lifetimeValue, expectedNetLifetime, 1.0));
+      push(test('GN-LT-02', '_lifetimeValue tax (nominal) = sum of tax across rows',
+        taxNom._lifetimeValue, expectedTaxLifetime, 1.0));
+      push(test('GN-LT-03', 'net _lifetimeValue + tax _lifetimeValue = gross lifetime',
+        netNom._lifetimeValue + taxNom._lifetimeValue, expectedGrossLifetime, 1.0));
+
+      // ─────────────────────────────────────────────
+      // 6. Net is never negative (tax can't exceed gross)
+      // ─────────────────────────────────────────────
+      rows.forEach((r, i) => {
+        push(test(`GN-NONNEG-${i}`, `Net segment row ${i} ≥ 0`,
+          netNom.data[i] >= 0, true));
+      });
+
+      // ─────────────────────────────────────────────
+      // 7. grossFn and taxFn are per-person correct
+      // ─────────────────────────────────────────────
+      const r0 = rows[0];
+      push(test('GN-GROSS-P1-0', 'grossFn p1 row 0 = p1GrossIncome',
+        L.grossFn(r0, 'p1'), r0.p1GrossIncome, 1.0));
+      push(test('GN-GROSS-P2-0', 'grossFn p2 row 0 = p2GrossIncome',
+        L.grossFn(r0, 'p2'), r0.p2GrossIncome, 1.0));
+      push(test('GN-GROSS-BOTH-0', 'grossFn both row 0 = householdGrossIncome',
+        L.grossFn(r0, 'both'), r0.householdGrossIncome, 1.0));
+
+      push(test('GN-TAX-P1-0', 'taxFn p1 row 0 = p1IncomeTax + p1CGT + p1NI',
+        L.taxFn(r0, 'p1'), r0.p1IncomeTax + r0.p1CGT + r0.p1NI, 1.0));
+      push(test('GN-TAX-P2-0', 'taxFn p2 row 0 = p2IncomeTax + p2CGT + p2NI',
+        L.taxFn(r0, 'p2'), r0.p2IncomeTax + r0.p2CGT + r0.p2NI, 1.0));
+      push(test('GN-TAX-BOTH-0', 'taxFn both row 0 = household total tax',
+        L.taxFn(r0, 'both'),
+        r0.p1IncomeTax + r0.p1CGT + r0.p1NI + r0.p2IncomeTax + r0.p2CGT + r0.p2NI, 1.0));
+    });
+  </script>
+</body>
+</html>

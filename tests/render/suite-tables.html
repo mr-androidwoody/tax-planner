@@ -1,1 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Suite: Table Cell Values</title>
+  <style>
+    :root { --bg:#0f172a; --surface:#1e293b; --border:#334155; --pass:#22c55e; --fail:#ef4444; --warn:#f59e0b; --text:#f1f5f9; --muted:#94a3b8; }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { background:var(--bg); color:var(--text); font:13px/1.5 'Consolas','Menlo',monospace; padding:24px; }
+    table { width:100%; border-collapse:collapse; margin-bottom:24px; }
+    th,td { padding:7px 10px; text-align:left; border-bottom:1px solid var(--border); font-size:12px; }
+    th { background:var(--surface); color:var(--muted); text-transform:uppercase; font-size:11px; }
+    .pass td:nth-child(3) { color:var(--pass); }
+    .fail td:nth-child(3) { color:var(--fail); }
+    .warn td:nth-child(3) { color:var(--warn); }
+    span.pass { color:var(--pass); } span.fail { color:var(--fail); } span.warn { color:var(--warn); }
+  </style>
+</head>
+<body>
+  <div id="results"></div>
 
+  <script src="../js/data.js"></script>
+  <script src="../js/calc-render-logic.js"></script>
+  <script src="render-test-runner.js"></script>
+
+  <script>
+    const { test, runSuite, makeFixture, makeBobbyFixture, TOL } = window.RenderTestRunner;
+    const L = window.RetireCalcRenderLogic;
+
+    runSuite('Table Cell Values', (results) => {
+      const rows  = makeFixture();
+      const push  = r => results.push(r);
+
+      // ─────────────────────────────────────────────
+      // TAX TABLE
+      // ─────────────────────────────────────────────
+
+      const taxNom  = L.buildTableTaxRows(rows, false);
+      const taxReal = L.buildTableTaxRows(rows, true);
+
+      // 1. Per-component values match engine row fields
+      rows.forEach((r, i) => {
+        push(test(`TBL-WI-${i}`, `Tax table wi row ${i} = p1IncomeTax (nominal)`,
+          taxNom[i].wi, r.p1IncomeTax, TOL));
+        push(test(`TBL-WC-${i}`, `Tax table wc row ${i} = p1CGT (nominal)`,
+          taxNom[i].wc, r.p1CGT, TOL));
+        push(test(`TBL-WN-${i}`, `Tax table wn row ${i} = p1NI (nominal)`,
+          taxNom[i].wn, r.p1NI, TOL));
+        push(test(`TBL-HI-${i}`, `Tax table hi row ${i} = p2IncomeTax (nominal)`,
+          taxNom[i].hi, r.p2IncomeTax, TOL));
+        push(test(`TBL-HC-${i}`, `Tax table hc row ${i} = p2CGT (nominal)`,
+          taxNom[i].hc, r.p2CGT, TOL));
+        push(test(`TBL-HN-${i}`, `Tax table hn row ${i} = p2NI (nominal)`,
+          taxNom[i].hn, r.p2NI, TOL));
+      });
+
+      // 2. Person total = sum of components
+      rows.forEach((r, i) => {
+        push(test(`TBL-WT-${i}`, `Tax table wt row ${i} = wi+wc+wn`,
+          taxNom[i].wt, taxNom[i].wi + taxNom[i].wc + taxNom[i].wn, TOL));
+        push(test(`TBL-HT-${i}`, `Tax table ht row ${i} = hi+hc+hn`,
+          taxNom[i].ht, taxNom[i].hi + taxNom[i].hc + taxNom[i].hn, TOL));
+      });
+
+      // 3. Household total = p1 total + p2 total
+      rows.forEach((r, i) => {
+        push(test(`TBL-HH-${i}`, `Tax table hh row ${i} = wt+ht`,
+          taxNom[i].hh, taxNom[i].wt + taxNom[i].ht, TOL));
+      });
+
+      // 4. cumTax is a strict running sum
+      let runningSum = 0;
+      taxNom.forEach((row, i) => {
+        runningSum += row.hh;
+        push(test(`TBL-CUM-${i}`, `cumTax row ${i} = running sum of hh`,
+          row.cumTax, runningSum, TOL));
+      });
+
+      // 5. cumTax is monotonically non-decreasing
+      for (let i = 1; i < taxNom.length; i++) {
+        push(test(`TBL-CUM-MONO-${i}`, `cumTax row ${i} ≥ cumTax row ${i-1}`,
+          taxNom[i].cumTax >= taxNom[i-1].cumTax, true));
+      }
+
+      // 6. Real mode: each component = nominal × realDeflator
+      rows.forEach((r, i) => {
+        push(test(`TBL-REAL-WI-${i}`, `Real wi row ${i} = p1IncomeTax × deflator`,
+          taxReal[i].wi, r.p1IncomeTax * r.realDeflator, TOL));
+        push(test(`TBL-REAL-HH-${i}`, `Real hh row ${i} = nominal hh × deflator`,
+          taxReal[i].hh, taxNom[i].hh * r.realDeflator, TOL));
+      });
+
+      // 7. Year and age passthrough
+      rows.forEach((r, i) => {
+        push(test(`TBL-YEAR-${i}`, `Tax table year row ${i}`, taxNom[i].year, r.year));
+        push(test(`TBL-P1AGE-${i}`, `Tax table p1Age row ${i}`, taxNom[i].p1Age, r.p1Age));
+        push(test(`TBL-P2AGE-${i}`, `Tax table p2Age row ${i}`, taxNom[i].p2Age, r.p2Age));
+      });
+
+      // ─────────────────────────────────────────────
+      // WEALTH TABLE
+      // ─────────────────────────────────────────────
+
+      const wNom  = L.buildTableWealthRows(rows, false);
+      const wReal = L.buildTableWealthRows(rows, true);
+
+      // 8. Each snap field value matches engine snap (nominal)
+      rows.forEach((r, i) => {
+        const s = r.snap;
+        push(test(`TBL-W-P1CASH-${i}`,   `Wealth p1Cash row ${i}`,   wNom[i].p1Cash,   s.p1Cash   || 0, TOL));
+        push(test(`TBL-W-P1INTBAL-${i}`,  `Wealth p1IntBal row ${i}`, wNom[i].p1IntBal, s.p1IntBal || 0, TOL));
+        push(test(`TBL-W-P1GIA-${i}`,     `Wealth p1GIA row ${i}`,    wNom[i].p1GIA,    s.p1GIA    || 0, TOL));
+        push(test(`TBL-W-P1SIPP-${i}`,    `Wealth p1SIPP row ${i}`,   wNom[i].p1SIPP,   s.p1SIPP   || 0, TOL));
+        push(test(`TBL-W-P1ISA-${i}`,     `Wealth p1ISA row ${i}`,    wNom[i].p1ISA,    s.p1ISA    || 0, TOL));
+        push(test(`TBL-W-P2SIPP-${i}`,    `Wealth p2SIPP row ${i}`,   wNom[i].p2SIPP,   s.p2SIPP   || 0, TOL));
+      });
+
+      // 9. Wealth table row total = sum of all 10 snap fields
+      rows.forEach((r, i) => {
+        const s = r.snap;
+        const expectedTotal = (s.p1Cash||0)+(s.p1IntBal||0)+(s.p1GIA||0)+(s.p1SIPP||0)+(s.p1ISA||0)
+                            + (s.p2Cash||0)+(s.p2IntBal||0)+(s.p2GIA||0)+(s.p2SIPP||0)+(s.p2ISA||0);
+        push(test(`TBL-W-TOTAL-${i}`, `Wealth total row ${i} = sum of all snap fields`,
+          wNom[i].total, expectedTotal, TOL));
+      });
+
+      // 10. Real mode: each field = nominal × deflator
+      rows.forEach((r, i) => {
+        push(test(`TBL-W-REAL-SIPP-${i}`, `Real p1SIPP row ${i} = snap.p1SIPP × deflator`,
+          wReal[i].p1SIPP, (r.snap.p1SIPP || 0) * r.realDeflator, TOL));
+      });
+
+      // ─────────────────────────────────────────────
+      // SOURCE-TO-DISPLAY CONSISTENCY
+      // This is the test category that catches "Bobby's Cash" class bugs:
+      // snap.pXWrapper non-zero but display card shows zero (or vice-versa).
+      //
+      // Assert: for every row and every wrapper field, the wealth chart dataset
+      // value equals Math.round(adj(snap.field, row)) — i.e. the same transform
+      // that renderTables and buildWealthDatasets both apply.
+      // If they differ, chart and table are using different source values.
+      // ─────────────────────────────────────────────
+
+      const wealthDs = L.buildWealthDatasets(rows, 'both', false, 'P1', 'P2');
+
+      const SNAP_DATASET_MAP = [
+        // [snapField, datasetLabelFragment]
+        ['p1Cash',   'P1 Cash'],
+        ['p1IntBal', 'P1 Interest'],
+        ['p1GIA',    'P1 GIA'],
+        ['p1SIPP',   'P1 SIPP'],
+        ['p1ISA',    'P1 ISA'],
+        ['p2Cash',   'P2 Cash'],
+        ['p2IntBal', 'P2 Interest'],
+        ['p2GIA',    'P2 GIA'],
+        ['p2SIPP',   'P2 SIPP'],
+        ['p2ISA',    'P2 ISA'],
+      ];
+
+      SNAP_DATASET_MAP.forEach(([snapField, labelFrag]) => {
+        const ds = wealthDs.find(d => d.label.includes(labelFrag));
+        rows.forEach((r, i) => {
+          const expectedChartVal = Math.round((r.snap[snapField] || 0)); // nominal, adj=1
+          const expectedTableVal = wNom[i][snapField];
+
+          // Chart dataset matches snap
+          push(test(`TBL-CONS-DS-${snapField}-${i}`,
+            `Chart dataset "${labelFrag}" row ${i} matches snap.${snapField}`,
+            ds.data[i], expectedChartVal, 1));
+
+          // Table row matches snap
+          push(test(`TBL-CONS-TBL-${snapField}-${i}`,
+            `Wealth table row ${i} field ${snapField} matches snap.${snapField}`,
+            expectedTableVal, r.snap[snapField] || 0, TOL));
+
+          // Chart and table agree with each other
+          push(test(`TBL-CONS-AGREE-${snapField}-${i}`,
+            `Chart and table agree on ${snapField} row ${i}`,
+            ds.data[i], Math.round(expectedTableVal), 1));
+        });
+      });
+
+      // ─────────────────────────────────────────────
+      // BOBBY'S CASH: source-to-display consistency
+      // Bobby starts with £0 Cash. Engine may accumulate surplus into p1Bal.Cash.
+      // This test asserts: if snap.p1Cash > 0, the chart dataset shows > 0 too.
+      // (The bug was: Portfolio Balances card showed £0 but chart showed non-zero.)
+      // ─────────────────────────────────────────────
+      const bobbyRows = makeBobbyFixture();
+      const bobbyDs   = L.buildWealthDatasets(bobbyRows, 'both', false, 'Bobby', 'Mary');
+      const bobbyWNom = L.buildTableWealthRows(bobbyRows, false);
+
+      const bobbyP1CashDs = bobbyDs.find(d => d.label.includes('Bobby') && d.label.includes('Cash'));
+
+      push(test('BOBBY-SNAP-NONZERO', 'Bobby fixture: snap.p1Cash > 0 (engine accumulated surplus)',
+        bobbyRows[0].snap.p1Cash > 0, true));
+
+      push(test('BOBBY-DS-MATCHES-SNAP', 'Chart dataset value matches snap.p1Cash (chart honest about Cash)',
+        bobbyP1CashDs.data[0], Math.round(bobbyRows[0].snap.p1Cash), 1));
+
+      push(test('BOBBY-TABLE-MATCHES-SNAP', 'Wealth table value matches snap.p1Cash',
+        bobbyWNom[0].p1Cash, bobbyRows[0].snap.p1Cash, TOL));
+
+      push(test('BOBBY-CONSISTENCY', 'Chart and table agree on Bobby Cash value',
+        bobbyP1CashDs.data[0], Math.round(bobbyWNom[0].p1Cash), 1));
+
+      // This test documents the original bug:
+      // The Portfolio Balances card was reading starting balance (£0), not snap.
+      // It should fail if someone reintroduces a card that ignores snap.
+      push(test('BOBBY-NOT-ZERO', 'Bobby Cash: chart correctly shows non-zero (not starting balance)',
+        bobbyP1CashDs.data[0] > 0, true));
+    });
+  </script>
+</body>
+</html>

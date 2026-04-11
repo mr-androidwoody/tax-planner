@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Suite: Real vs Nominal Toggle</title>
+  <style>
+    :root { --bg:#0f172a; --surface:#1e293b; --border:#334155; --pass:#22c55e; --fail:#ef4444; --warn:#f59e0b; --text:#f1f5f9; --muted:#94a3b8; }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { background:var(--bg); color:var(--text); font:13px/1.5 'Consolas','Menlo',monospace; padding:24px; }
+    table { width:100%; border-collapse:collapse; margin-bottom:24px; }
+    th,td { padding:7px 10px; text-align:left; border-bottom:1px solid var(--border); font-size:12px; }
+    th { background:var(--surface); color:var(--muted); text-transform:uppercase; font-size:11px; }
+    .pass td:nth-child(3) { color:var(--pass); }
+    .fail td:nth-child(3) { color:var(--fail); }
+    .warn td:nth-child(3) { color:var(--warn); }
+    span.pass { color:var(--pass); } span.fail { color:var(--fail); } span.warn { color:var(--warn); }
+  </style>
+</head>
+<body>
+  <div id="results"></div>
+
+  <script src="../js/data.js"></script>
+  <script src="../js/calc-render-logic.js"></script>
+  <script src="render-test-runner.js"></script>
+
+  <script>
+    const { test, runSuite, makeFixture, TOL } = window.RenderTestRunner;
+    const L = window.RetireCalcRenderLogic;
+
+    runSuite('Real vs Nominal Toggle', (results) => {
+      const rows = makeFixture();
+      const push = r => results.push(r);
+
+      // ─────────────────────────────────────────────
+      // 1. adj() scalar: the core primitive
+      // ─────────────────────────────────────────────
+      rows.forEach((r, i) => {
+        push(test(`RN-ADJ-NOM-${i}`, `adj(val, row, false) = val (nominal, row ${i})`,
+          L.adj(10000, r, false), 10000, TOL));
+        push(test(`RN-ADJ-REAL-${i}`, `adj(val, row, true) = val × realDeflator (row ${i})`,
+          L.adj(10000, r, true), 10000 * r.realDeflator, TOL));
+      });
+
+      // Row 0: deflator = 1.0 → real = nominal
+      push(test('RN-ADJ-BASE', 'adj real = adj nominal when realDeflator = 1.0',
+        L.adj(50000, rows[0], true), L.adj(50000, rows[0], false), TOL));
+
+      // Rows 1+: real < nominal (deflator < 1)
+      rows.slice(1).forEach((r, i) => {
+        push(test(`RN-ADJ-DEFL-${i+1}`, `Real < nominal for row ${i+1} (deflator=${r.realDeflator})`,
+          L.adj(50000, r, true) < L.adj(50000, r, false), true));
+      });
+
+      // ─────────────────────────────────────────────
+      // 2. Income datasets: real vs nominal ratio = realDeflator
+      // ─────────────────────────────────────────────
+      const incNom  = L.buildIncomeDatasets(rows, 'both', false);
+      const incReal = L.buildIncomeDatasets(rows, 'both', true);
+      const dsNom  = label => incNom.find(d => d.label === label);
+      const dsReal = label => incReal.find(d => d.label === label);
+
+      // SIPP draws are non-zero in all rows — good test case
+      rows.forEach((r, i) => {
+        if (dsNom('SIPP / WP').data[i] > 0) {
+          const ratio = dsReal('SIPP / WP').data[i] / dsNom('SIPP / WP').data[i];
+          push(test(`RN-INC-SIPP-${i}`, `SIPP real/nominal ratio = realDeflator row ${i}`,
+            ratio, r.realDeflator, 0.001));
+        }
+      });
+
+      // Salary (non-zero in rows 0 and 1)
+      rows.forEach((r, i) => {
+        const nomVal = dsNom('Salary').data[i];
+        if (nomVal > 0) {
+          push(test(`RN-INC-SAL-${i}`, `Salary real/nominal ratio = realDeflator row ${i}`,
+            dsReal('Salary').data[i] / nomVal, r.realDeflator, 0.001));
+        }
+      });
+
+      // ─────────────────────────────────────────────
+      // 3. Gross vs Net: real vs nominal ratio
+      // ─────────────────────────────────────────────
+      const [netNom, taxNom] = L.buildGrossNetDatasets(rows, 'both', false);
+      const [netRea, taxRea] = L.buildGrossNetDatasets(rows, 'both', true);
+
+      rows.forEach((r, i) => {
+        if (netNom.data[i] > 0) {
+          push(test(`RN-GN-NET-${i}`, `Gross/net: net real/nominal ratio = realDeflator row ${i}`,
+            netRea.data[i] / netNom.data[i], r.realDeflator, 0.001));
+        }
+        if (taxNom.data[i] > 0) {
+          push(test(`RN-GN-TAX-${i}`, `Gross/net: tax real/nominal ratio = realDeflator row ${i}`,
+            taxRea.data[i] / taxNom.data[i], r.realDeflator, 0.001));
+        }
+      });
+
+      // ─────────────────────────────────────────────
+      // 4. Tax chart data: real vs nominal
+      // ─────────────────────────────────────────────
+      const { taxData: taxNomArr } = L.buildTaxChartData(rows, 'both', false);
+      const { taxData: taxRealArr, rateData: rateRealArr } = L.buildTaxChartData(rows, 'both', true);
+
+      rows.forEach((r, i) => {
+        const rawTax = L.taxFn(r, 'both');
+        push(test(`RN-TAX-NOM-${i}`, `taxData nominal row ${i} = round(taxFn)`,
+          taxNomArr[i], Math.round(rawTax), 1));
+        push(test(`RN-TAX-REAL-${i}`, `taxData real row ${i} = round(taxFn × deflator)`,
+          taxRealArr[i], Math.round(rawTax * r.realDeflator), 1));
+      });
+
+      // Rate data is not deflated — it's a ratio, same in real/nominal
+      const { rateData: rateNomArr } = L.buildTaxChartData(rows, 'both', false);
+      rows.forEach((r, i) => {
+        push(test(`RN-RATE-${i}`, `rateData is identical in real and nominal mode row ${i}`,
+          rateRealArr[i], rateNomArr[i], 0.01));
+      });
+
+      // ─────────────────────────────────────────────
+      // 5. Wealth datasets: real vs nominal ratio
+      // ─────────────────────────────────────────────
+      const wNom  = L.buildWealthDatasets(rows, 'both', false, 'P1', 'P2');
+      const wReal = L.buildWealthDatasets(rows, 'both', true,  'P1', 'P2');
+
+      // p1 SIPP — non-zero in all rows
+      const p1SIPPnom  = wNom.find(d => d.label.includes('SIPP') && d.label.includes('P1'));
+      const p1SIPPreal = wReal.find(d => d.label.includes('SIPP') && d.label.includes('P1'));
+
+      rows.forEach((r, i) => {
+        const nomVal = p1SIPPnom.data[i];
+        if (nomVal > 0) {
+          push(test(`RN-WLT-SIPP-${i}`, `Wealth p1 SIPP real/nominal ratio = realDeflator row ${i}`,
+            p1SIPPreal.data[i] / nomVal, r.realDeflator, 0.001));
+        }
+      });
+
+      // ─────────────────────────────────────────────
+      // 6. Metrics: real vs nominal
+      // ─────────────────────────────────────────────
+      const mNom  = L.buildMetrics(rows, 'both', false);
+      const mReal = L.buildMetrics(rows, 'both', true);
+
+      // totalTax: real < nominal (deflators < 1 for rows 1+)
+      push(test('RN-MET-TAX', 'Metrics: real totalTax < nominal totalTax',
+        mReal.totalTax < mNom.totalTax, true));
+
+      // lastPortfolio: real vs nominal
+      const lastRow = rows[rows.length - 1];
+      push(test('RN-MET-PORT-NOM', 'Metrics: nominal lastPortfolio = totalPortfolio unchanged',
+        mNom.lastPortfolio, lastRow.totalPortfolio, 1.0));
+      push(test('RN-MET-PORT-REAL', 'Metrics: real lastPortfolio = totalPortfolio × deflator',
+        mReal.lastPortfolio, lastRow.totalPortfolio * lastRow.realDeflator, 1.0));
+
+      // avgRate: ratio of totals — should differ between real/nominal only due to
+      // weighting across rows with different deflators; in practice close but not equal
+      push(test('RN-MET-RATE-EXISTS', 'Metrics: avgRate is a finite number in real mode',
+        isFinite(mReal.avgRate), true));
+
+      // ─────────────────────────────────────────────
+      // 7. Table rows: real vs nominal
+      // ─────────────────────────────────────────────
+      const tNom  = L.buildTableTaxRows(rows, false);
+      const tReal = L.buildTableTaxRows(rows, true);
+
+      rows.forEach((r, i) => {
+        const wiNom  = tNom[i].wi;
+        const wiReal = tReal[i].wi;
+        push(test(`RN-TBL-WI-NOM-${i}`, `Table wi (p1 income tax) nominal row ${i} = p1IncomeTax`,
+          wiNom, r.p1IncomeTax, TOL));
+        push(test(`RN-TBL-WI-REAL-${i}`, `Table wi (p1 income tax) real row ${i} = p1IncomeTax × deflator`,
+          wiReal, r.p1IncomeTax * r.realDeflator, TOL));
+      });
+    });
+  </script>
+</body>
+</html>
