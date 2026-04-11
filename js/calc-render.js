@@ -642,18 +642,31 @@
   }
 
   function buildShortfallInsight() {
-    const sfRows = _rows.filter(r => (r.cashflowShortfall || 0) > 0);
+    const NEAR_DEPLETION = 20000;
+    const sfRows = _rows.filter(r => (r.cashflowShortfall || 0) > 0 && (r.totalPortfolio || 0) <= NEAR_DEPLETION);
     const frag = document.createDocumentFragment();
     if (!sfRows.length) return frag;
 
-    const total = sfRows.reduce((s, r) => s + (r.cashflowShortfall || 0), 0);
-    const peak  = Math.max(...sfRows.map(r => r.cashflowShortfall || 0));
-    const peakRow = sfRows.find(r => (r.cashflowShortfall || 0) === peak);
-    const first = sfRows[0];
-    const last  = sfRows[sfRows.length - 1];
+    const total    = sfRows.reduce((s, r) => s + (r.cashflowShortfall || 0), 0);
+    const peak     = Math.max(...sfRows.map(r => r.cashflowShortfall || 0));
+    const peakRow  = sfRows.find(r => (r.cashflowShortfall || 0) === peak);
+    const first    = sfRows[0];
+    const last     = sfRows[sfRows.length - 1];
+
+    // Determine severity from first shortfall year's portfolio value
+    const firstPortfolio = first.totalPortfolio || 0;
+    const isExhausted    = firstPortfolio === 0;
+    const severityLabel  = isExhausted
+      ? '🛑 Portfolio exhausted'
+      : `⚠️ Portfolio nearly exhausted (${fmt0(firstPortfolio)} remaining)`;
+
+    const banner = document.createElement('div');
+    banner.className = 'chart-insight-banner' + (isExhausted ? ' chart-insight-banner--danger' : ' chart-insight-banner--warn');
+    banner.textContent = severityLabel;
+    frag.appendChild(banner);
 
     const items = [
-      { label: 'First shortfall', value: `${first.year}` },
+      { label: 'From',            value: `${first.year}` },
       { label: 'Duration',        value: `${sfRows.length} year${sfRows.length !== 1 ? 's' : ''} (${first.year}–${last.year})` },
       { label: 'Total gap',       value: fmt0(total) },
       { label: 'Peak annual gap', value: `${fmt0(peak)} in ${peakRow.year}` },
@@ -668,7 +681,7 @@
 
     const note = document.createElement('p');
     note.className = 'chart-insight-note';
-    note.textContent = 'Red bars on the chart show the annual gap. Adjust your spending target or portfolio to eliminate the shortfall.';
+    note.textContent = 'Red bars on the chart show the annual gap. Adjust your spending target or add to your portfolio to eliminate the shortfall.';
     frag.appendChild(note);
     return frag;
   }
@@ -864,8 +877,8 @@
         },
       });
       renderIncomeLegend(_incomeChart, recomputeShortfall);
-      const hasShortfall = _engineShortfall.some(v => v > 0);
-      renderInsightButton('income', hasShortfall);
+      const hasGenuineShortfall = _rows.some(r => (r.cashflowShortfall || 0) > 0 && (r.totalPortfolio || 0) <= 20000);
+      renderInsightButton('income', hasGenuineShortfall);
     }
 
     // ─────────────────────────────────────────────
