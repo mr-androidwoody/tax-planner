@@ -2190,3 +2190,171 @@ input[type="radio"] { accent-color: var(--accent); }
     overflow-x: auto;
   }
 }
+/* ========================================
+   Chart Insight Button + Pane
+   ======================================== */
+
+/* ⓘ button — top-right inside .chart-wrap */
+.chart-insight-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: rgba(255,255,255,0.92);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(22,39,67,0.10);
+  transition: background 140ms ease, border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+}
+
+.chart-insight-btn:hover {
+  background: #fff;
+  border-color: var(--accent);
+  box-shadow: 0 4px 14px rgba(45,91,255,0.18);
+  transform: translateY(-1px);
+}
+
+.chart-insight-btn.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 4px 14px rgba(45,91,255,0.30);
+}
+
+.chart-insight-btn.is-active .chart-insight-btn__icon {
+  color: #fff;
+}
+
+.chart-insight-btn__icon {
+  font-size: 0.88rem;
+  color: var(--accent);
+  line-height: 1;
+  pointer-events: none;
+}
+
+/* Insight pane — floats inside .chart-wrap */
+.chart-insight-pane {
+  position: absolute;
+  top: 44px;
+  right: 10px;
+  z-index: 20;
+  width: min(320px, calc(100% - 20px));
+  background: var(--panel-solid);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 8px 32px rgba(18,30,52,0.14);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: insightPaneIn 180ms ease;
+}
+
+@keyframes insightPaneIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.chart-insight-pane__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--panel-soft);
+  border-bottom: 1px solid var(--border);
+}
+
+.chart-insight-pane__title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+
+.chart-insight-pane__close {
+  appearance: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.82rem;
+  color: var(--muted);
+  padding: 0;
+  line-height: 1;
+  transition: color 120ms ease;
+}
+
+.chart-insight-pane__close:hover { color: var(--danger); }
+
+.chart-insight-pane__body {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+/* Shortfall stat rows */
+.chart-insight-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.8rem;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.chart-insight-row:last-of-type { border-bottom: none; }
+
+.chart-insight-row__label {
+  color: var(--muted);
+  flex: 1;
+}
+
+.chart-insight-row__value {
+  font-weight: 700;
+  color: var(--text);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-insight-note {
+  margin: 4px 0 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+  line-height: 1.45;
+  font-style: italic;
+}
+
+/* Wealth annotation groups */
+.chart-insight-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.chart-insight-group__heading {
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  margin-bottom: 2px;
+}
+
+.chart-insight-summary {
+  font-size: 0.79rem;
+  color: var(--text);
+  line-height: 1.45;
+}
+
+.chart-insight-year {
+  font-weight: 700;
+  color: var(--accent);
+  margin-right: 4px;
+}
