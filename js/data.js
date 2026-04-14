@@ -26,7 +26,7 @@
       additionalThreshold: 125140,
       taperStart: 100000,
       nonSavingsRates: { basic: 0.20, higher: 0.40, additional: 0.45 },
-      savingsRates: { basic: 0.22, higher: 0.42, additional: 0.47 },
+      savingsRates: { basic: 0.20, higher: 0.40, additional: 0.45 }, // corrected: matches non-savings (no announced divergence)
       dividendRates: { basic: 0.1075, higher: 0.3575, additional: 0.3935 },
       dividendAllowance: 500,
       psa: { basic: 1000, higher: 500, additional: 0 },

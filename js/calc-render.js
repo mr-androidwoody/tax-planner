@@ -3,6 +3,8 @@
 
   // State shared within this module
   let _rows       = [];
+  let _annotations = [];
+  let _depletions  = {};
   let _viewPerson = 'both';
   let _useReal    = true;
   let _activeResultsTab = 'income';
@@ -15,7 +17,8 @@
   // ─────────────────────────────────────────────
   // HELPERS
   // ─────────────────────────────────────────────
-  const adj = (val, row) => _useReal ? val * row.realDeflator : val;
+  const L   = window.RetireCalcRenderLogic;
+  const adj = (val, row) => L.adj(val, row, _useReal);
   const fmt = n => D.formatMoney(n);
 
   function getNames() {
@@ -27,9 +30,10 @@
   // ─────────────────────────────────────────────
   // PUBLIC: receive new projection results
   // ─────────────────────────────────────────────
-  function setResults(rows) {
-    _rows = rows;
-    window._debugRows = rows; // TEMP DEBUG — remove after diagnosis
+  function setResults(result) {
+    _rows        = result.rows || result; // backwards-compat if bare array passed
+    _annotations = result.annotations || [];
+    _depletions  = result.depletions  || {};
   }
 
   // ─────────────────────────────────────────────
@@ -99,44 +103,12 @@
   }
 
   // ─────────────────────────────────────────────
-  // ALERTS
-  // ─────────────────────────────────────────────
-  function renderAlerts(depletions) {
-    const c = document.getElementById('alerts-container');
-    if (!c) return;
-    c.innerHTML = '';
-    const entries = Object.entries(depletions || {}).sort((a, b) => a[1].year - b[1].year);
-    entries.forEach(([key, { year, age }]) => {
-      const d = document.createElement('div');
-      d.className = 'alert alert-warn';
-      d.innerHTML = `⚠ <strong>${key}</strong> depleted in <strong>${year}</strong> (age ${age})`;
-      c.appendChild(d);
-    });
-  }
-
-  // ─────────────────────────────────────────────
   // METRICS
   // ─────────────────────────────────────────────
   function renderMetrics() {
     if (!_rows.length) return;
 
-    const totalTax = _rows.reduce((s, r) => {
-      const t = _viewPerson === 'p1' ? r.p1IncomeTax + r.p1CGT + r.p1NI
-              : _viewPerson === 'p2' ? r.p2IncomeTax + r.p2CGT + r.p2NI
-              : r.p1IncomeTax + r.p1CGT + r.p1NI + r.p2IncomeTax + r.p2CGT + r.p2NI;
-      return s + adj(t, r);
-    }, 0);
-
-    const { lifetimeTax: _lt, lifetimeGross: _lg } = _rows.reduce((s, r) => {
-      const tax   = _viewPerson === 'p1' ? r.p1IncomeTax + r.p1CGT + r.p1NI
-                  : _viewPerson === 'p2' ? r.p2IncomeTax + r.p2CGT + r.p2NI
-                  : r.p1IncomeTax + r.p1CGT + r.p1NI + r.p2IncomeTax + r.p2CGT + r.p2NI;
-      const gross = _viewPerson === 'p1' ? (r.p1GrossIncome  || 0)
-                  : _viewPerson === 'p2' ? (r.p2GrossIncome  || 0)
-                  : (r.householdGrossIncome || 0);
-      return { lifetimeTax: s.lifetimeTax + adj(tax, r), lifetimeGross: s.lifetimeGross + adj(gross, r) };
-    }, { lifetimeTax: 0, lifetimeGross: 0 });
-    const avgRate = _lg > 0 ? _lt / _lg : 0;
+    const { totalTax, avgRate, lastPortfolio: _lp } = L.buildMetrics(_rows, _viewPerson, _useReal);
 
     const spending    = D.parseCurrency(document.getElementById('spending')?.value || '0');
     const stepDownPct = parseFloat(document.getElementById('stepDownPct')?.value) || 0;
@@ -149,7 +121,6 @@
       incomeTargetStr = fmtK(spending) + ' per year';
     }
 
-    const last = _rows[_rows.length - 1];
     const mTax    = document.getElementById('m-tax');
     const mRate   = document.getElementById('m-rate');
     const mTarget = document.getElementById('m-income-target');
@@ -157,7 +128,7 @@
     if (mTax)    mTax.textContent    = fmt(totalTax);
     if (mRate)   mRate.textContent   = (avgRate * 100).toFixed(1) + '%';
     if (mTarget) mTarget.textContent = incomeTargetStr;
-    if (mPort)   mPort.textContent   = fmt(adj(last.totalPortfolio, last));
+    if (mPort)   mPort.textContent   = fmt(_lp);
   }
 
   // ─────────────────────────────────────────────
@@ -205,7 +176,7 @@
 
     const fmt0 = n => '£' + Math.round(n).toLocaleString('en-GB');
 
-    if (label === 'Salary') {
+    if (label === 'Salary'       || label.endsWith("'s Salary")) {
       const hasSal  = rows.find(r => (r.p1SalInc || 0) + (r.p2SalInc || 0) > 0);
       if (!hasSal) return null;
       const p1name  = (document.getElementById('sp-p1name')?.value || 'Person 1').trim();
@@ -231,7 +202,7 @@
       return `${name}'s salary of ${fmt0(annual)}/yr, drawn until ${lastSal.year} (age ${p1Show ? lastSal.p1Age : lastSal.p2Age})`;
     }
 
-    if (label === 'Cash') {
+    if (label === 'Cash'         || label.endsWith("'s Cash")) {
       const firstCash = rows.find(r => (r.p1Drawn?.Cash || 0) + (r.p2Drawn?.Cash || 0) > 0);
       const lastCash  = [...rows].reverse().find(r => (r.p1Drawn?.Cash || 0) + (r.p2Drawn?.Cash || 0) > 0);
       if (!firstCash) return null;
@@ -239,7 +210,7 @@
       return `Liquid cash reserves drawn in early retirement to bridge spending before investment wrappers — used across ${yrs} year${yrs !== 1 ? 's' : ''} (${firstCash.year}–${lastCash.year})`;
     }
 
-    if (label === 'Interest') {
+    if (label === 'Interest'     || label.endsWith("'s Interest")) {
       const firstInt = rows.find(r => (r.p1IntDraw || 0) + (r.p2IntDraw || 0) > 0);
       const lastInt  = [...rows].reverse().find(r => (r.p1IntDraw || 0) + (r.p2IntDraw || 0) > 0);
       if (!firstInt) return null;
@@ -247,7 +218,7 @@
       return `Monthly draws from interest-bearing accounts (e.g. money market funds) over ${yrs} years (${firstInt.year}–${lastInt.year}), at their configured draw rate`;
     }
 
-    if (label === 'Dividends') {
+    if (label === 'Dividends'    || label.endsWith("'s Dividends")) {
       // Average GIA balance across years that have dividends
       const divRows = rows.filter(r => (r.p1Divs || 0) + (r.p2Divs || 0) > 0);
       if (!divRows.length) return null;
@@ -258,7 +229,7 @@
       return `Estimated dividend income from GIA holdings — average GIA balance of ${fmt0(avgGIA)} at a ${yieldPct}% annual yield. Shown separately from GIA capital withdrawals`;
     }
 
-    if (label === 'GIA') {
+    if (label === 'GIA'          || label.endsWith("'s GIA")) {
       const firstGIA = rows.find(r => (r.p1Drawn?.GIA || 0) + (r.p2Drawn?.GIA || 0) > 0);
       const lastGIA  = [...rows].reverse().find(r => (r.p1Drawn?.GIA || 0) + (r.p2Drawn?.GIA || 0) > 0);
       const totalDivs = rows.reduce((s, r) => s + (r.p1Divs || 0) + (r.p2Divs || 0), 0);
@@ -267,14 +238,14 @@
       return `Capital withdrawals from GIA over ${yrs} years (${firstGIA.year}–${lastGIA.year}). Excludes ${fmt0(totalDivs)} dividend income shown separately — GIA gains within annual CGT exemption where possible`;
     }
 
-    if (label === 'ISA') {
+    if (label === 'ISA'          || label.endsWith("'s ISA")) {
       const firstISA = rows.find(r => (r.p1Drawn?.ISA || 0) + (r.p2Drawn?.ISA || 0) > 0);
       const lastISA  = [...rows].reverse().find(r => (r.p1Drawn?.ISA || 0) + (r.p2Drawn?.ISA || 0) > 0);
       if (!firstISA) return null;
       return `Completely tax-free withdrawals from ISA, drawn from ${firstISA.year} onwards. No income tax, CGT or dividend tax on any ISA income`;
     }
 
-    if (label === 'SIPP / WP') {
+    if (label === 'SIPP / WP'    || label.endsWith("'s SIPP / WP")) {
       const totalGross = rows.reduce((s, r) => s + (r.p1Drawn?.SIPP || 0) + (r.p2Drawn?.SIPP || 0), 0);
       const totalTaxable = rows.reduce((s, r) => s + (r.p1Drawn?.sippTaxable || 0) + (r.p2Drawn?.sippTaxable || 0), 0);
       const taxFree = totalGross - totalTaxable;
@@ -283,14 +254,14 @@
       return `Gross pension withdrawals from ${firstSIPP.year} — ${fmt0(taxFree)} tax-free (25%) and ${fmt0(totalTaxable)} taxable (75%). The largest single investment source over retirement`;
     }
 
-    if (label === 'State Pension') {
+    if (label === 'State Pension' || label.endsWith("'s State Pension")) {
       const p1SP = rows.find(r => r.p1SP > 0);
       const p2SP = rows.find(r => r.p2SP > 0);
       const p1Name = (document.getElementById('sp-p1name')?.value || 'Person 1').trim();
       const p2Name = (document.getElementById('sp-p2name')?.value || 'Person 2').trim();
       const parts = [];
-      if (p1SP) parts.push(`${p1Name} from ${p1SP.year} (age ${p1SP.p1Age})`);
-      if (p2SP) parts.push(`${p2Name} from ${p2SP.year} (age ${p2SP.p2Age})`);
+      if (p1SP) parts.push(`${p1Name}'s State Pension from ${p1SP.year} (age ${p1SP.p1Age})`);
+      if (p2SP) parts.push(`${p2Name}'s State Pension from ${p2SP.year} (age ${p2SP.p2Age})`);
       return `Combined state pension — ${parts.join(', ')}. The largest single lifetime income source`;
     }
 
@@ -500,9 +471,10 @@
     const barValue = document.createElement('span');
     barValue.className = 'sidebar-legend__value';
     const totalTax = _rows.reduce((s, r) => {
-      const t = _viewPerson === 'p1' ? r.p1IncomeTax + r.p1CGT + r.p1NI
-              : _viewPerson === 'p2' ? r.p2IncomeTax + r.p2CGT + r.p2NI
-              : r.p1IncomeTax + r.p1CGT + r.p1NI + r.p2IncomeTax + r.p2CGT + r.p2NI;
+      const t = _viewPerson === 'p1' ? (r.p1IncomeTax ?? 0) + (r.p1CGT ?? 0) + (r.p1NI ?? 0)
+              : _viewPerson === 'p2' ? (r.p2IncomeTax ?? 0) + (r.p2CGT ?? 0) + (r.p2NI ?? 0)
+              : (r.p1IncomeTax ?? 0) + (r.p1CGT ?? 0) + (r.p1NI ?? 0) +
+                (r.p2IncomeTax ?? 0) + (r.p2CGT ?? 0) + (r.p2NI ?? 0);
       return s + adj(t, r);
     }, 0);
     barValue.textContent = fmt(totalTax);
@@ -532,16 +504,8 @@
 
     const avgRate = _rows.length
       ? (() => {
-          const { t, g } = _rows.reduce((s, r) => {
-            const tax   = _viewPerson === 'p1' ? r.p1IncomeTax + r.p1CGT + r.p1NI
-                        : _viewPerson === 'p2' ? r.p2IncomeTax + r.p2CGT + r.p2NI
-                        : r.p1IncomeTax + r.p1CGT + r.p1NI + r.p2IncomeTax + r.p2CGT + r.p2NI;
-            const gross = _viewPerson === 'p1' ? (r.p1GrossIncome  || 0)
-                        : _viewPerson === 'p2' ? (r.p2GrossIncome  || 0)
-                        : (r.householdGrossIncome || 0);
-            return { t: s.t + adj(tax, r), g: s.g + adj(gross, r) };
-          }, { t: 0, g: 0 });
-          return g > 0 ? (t / g * 100).toFixed(1) : '0.0';
+          const { avgRate: r } = L.buildMetrics(_rows, _viewPerson, _useReal);
+          return (r * 100).toFixed(1);
         })()
       : '0.0';
 
@@ -554,6 +518,200 @@
     lineItem.appendChild(lineValue);
     lineItem.addEventListener('click', () => toggleDataset(1));
     host.appendChild(lineItem);
+  }
+
+  // ─────────────────────────────────────────────
+  // INSIGHT BUTTON + PANE (shared by Income and Wealth charts)
+  // ─────────────────────────────────────────────
+  let _wealthPaneOpen = false;
+  let _incomePaneOpen = false;
+
+  const ANNOTATION_GROUPS = [
+    { event: 'cash_surplus', emoji: '💰', label: 'Surplus cash' },
+    { event: 'sp_starts',   emoji: '🏦', label: 'State Pension' },
+    { event: 'salary_stop', emoji: '💼', label: 'Salary stops' },
+    { event: 'depletion',   emoji: '🛑', label: 'Depletions' },
+  ];
+
+  function fmt0(n) { return '£' + Math.round(n).toLocaleString('en-GB'); }
+
+  // Inject ⓘ button into chart header anchor. chartId = 'income' | 'wealth'
+  function renderInsightButton(chartId, hasContent) {
+    const anchor = document.getElementById(chartId === 'income' ? 'income-insight-anchor' : 'wealth-insight-anchor');
+    if (!anchor) return;
+
+    anchor.innerHTML = '';
+    if (!hasContent) return;
+
+    const isOpen = chartId === 'income' ? _incomePaneOpen : _wealthPaneOpen;
+
+    const btn = document.createElement('button');
+    btn.className = 'chart-insight-btn' + (isOpen ? ' is-active' : '');
+    btn.setAttribute('aria-label', 'Show chart insights');
+    btn.innerHTML = `<span class="chart-insight-btn__icon">ⓘ</span><span class="chart-insight-btn__label">${chartId === 'income' ? 'Shortfall info' : 'Insights'}</span>`;
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (chartId === 'income') _incomePaneOpen = !_incomePaneOpen;
+      else _wealthPaneOpen = !_wealthPaneOpen;
+      renderInsightPane(chartId);
+      renderInsightButton(chartId, true);
+    });
+    anchor.appendChild(btn);
+  }
+
+  // Build and inject (or remove) the insight pane over the chart canvas
+  function renderInsightPane(chartId) {
+    const wrap = document.getElementById(chartId === 'income' ? 'incomeChart' : 'wealthChart')
+      ?.closest('.chart-wrap');
+    if (!wrap) return;
+    const existing = wrap.querySelector('.chart-insight-pane');
+    if (existing) existing.remove();
+
+    const isOpen = chartId === 'income' ? _incomePaneOpen : _wealthPaneOpen;
+    if (!isOpen) return;
+
+    const pane = document.createElement('div');
+    pane.className = 'chart-insight-pane';
+
+    const header = document.createElement('div');
+    header.className = 'chart-insight-pane__header';
+    const title = document.createElement('span');
+    title.className = 'chart-insight-pane__title';
+    title.textContent = chartId === 'income' ? '⚠️ Shortfall detected' : 'ⓘ Projection insights';
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'chart-insight-pane__close';
+    closeBtn.textContent = '✕';
+    closeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (chartId === 'income') _incomePaneOpen = false;
+      else _wealthPaneOpen = false;
+      renderInsightPane(chartId);
+      renderInsightButton(chartId, true);
+    });
+    header.appendChild(title);
+    header.appendChild(closeBtn);
+    pane.appendChild(header);
+
+    const body = document.createElement('div');
+    body.className = 'chart-insight-pane__body';
+
+    if (chartId === 'income') {
+      body.appendChild(buildShortfallInsight());
+    } else {
+      body.appendChild(buildWealthInsights());
+    }
+
+    pane.appendChild(body);
+
+    // Close on click outside
+    setTimeout(() => {
+      document.addEventListener('click', function outsideClick(e) {
+        if (!pane.contains(e.target) && !e.target.closest('.chart-insight-btn')) {
+          if (chartId === 'income') _incomePaneOpen = false;
+          else _wealthPaneOpen = false;
+          renderInsightPane(chartId);
+          renderInsightButton(chartId, true);
+          document.removeEventListener('click', outsideClick);
+        }
+      });
+    }, 0);
+
+    wrap.appendChild(pane);
+  }
+
+  function buildShortfallInsight() {
+    const NEAR_DEPLETION = 20000;
+    const sfRows = _rows.filter(r => (r.cashflowShortfall || 0) > 0 && (r.totalPortfolio || 0) <= NEAR_DEPLETION);
+    const frag = document.createDocumentFragment();
+    if (!sfRows.length) return frag;
+
+    const total    = sfRows.reduce((s, r) => s + (r.cashflowShortfall || 0), 0);
+    const peak     = Math.max(...sfRows.map(r => r.cashflowShortfall || 0));
+    const peakRow  = sfRows.find(r => (r.cashflowShortfall || 0) === peak);
+    const first    = sfRows[0];
+    const last     = sfRows[sfRows.length - 1];
+
+    // Determine severity from first shortfall year's portfolio value
+    const firstPortfolio = first.totalPortfolio || 0;
+    const isExhausted    = firstPortfolio === 0;
+    const severityLabel  = isExhausted
+      ? '🛑 Portfolio exhausted'
+      : `⚠️ Portfolio nearly exhausted (${fmt0(firstPortfolio)} remaining)`;
+
+    const banner = document.createElement('div');
+    banner.className = 'chart-insight-banner' + (isExhausted ? ' chart-insight-banner--danger' : ' chart-insight-banner--warn');
+    banner.textContent = severityLabel;
+    frag.appendChild(banner);
+
+    const items = [
+      { label: 'From',            value: `${first.year}` },
+      { label: 'Duration',        value: `${sfRows.length} year${sfRows.length !== 1 ? 's' : ''} (${first.year}–${last.year})` },
+      { label: 'Total gap',       value: fmt0(total) },
+      { label: 'Peak annual gap', value: `${fmt0(peak)} in ${peakRow.year}` },
+    ];
+
+    items.forEach(({ label, value }) => {
+      const row = document.createElement('div');
+      row.className = 'chart-insight-row';
+      row.innerHTML = `<span class="chart-insight-row__label">${label}</span><span class="chart-insight-row__value">${value}</span>`;
+      frag.appendChild(row);
+    });
+
+    const note = document.createElement('p');
+    note.className = 'chart-insight-note';
+    note.textContent = 'Red bars on the chart show the annual gap. Adjust your spending target or add to your portfolio to eliminate the shortfall.';
+    frag.appendChild(note);
+    return frag;
+  }
+
+  function buildWealthInsights() {
+    const frag = document.createDocumentFragment();
+    if (!_annotations.length) return frag;
+
+    ANNOTATION_GROUPS.forEach(({ event, emoji, label }) => {
+      const items = _annotations.filter(a => a.event === event);
+      if (!items.length) return;
+
+      const group = document.createElement('div');
+      group.className = 'chart-insight-group';
+
+      const heading = document.createElement('div');
+      heading.className = 'chart-insight-group__heading';
+      heading.textContent = `${emoji} ${label}`;
+      group.appendChild(heading);
+
+      // Summarise repeating events; show discrete ones as-is
+      if (event === 'cash_surplus' && items.length > 1) {
+        const first = items[0], last = items[items.length - 1];
+        const total = _rows
+          .filter(r => r.year >= first.year && r.year <= last.year)
+          .reduce((s, r) => s + Math.max(0, (r.p1SP || 0) + (r.p2SP || 0) + (r.p1SalInc || 0) + (r.p2SalInc || 0) + (r.p1Divs || 0) + (r.p2Divs || 0) - (r.target || 0)), 0);
+        const firstAmt = items[0].message.match(/£[\d,]+/)?.[0] || '';
+        const lastAmt  = last.message.match(/£[\d,]+/)?.[0] || '';
+        const row = document.createElement('div');
+        row.className = 'chart-insight-summary';
+        row.textContent = `${first.year}–${last.year}: Annual household surplus above target parked in ${items[0].message.split('parked in ')[1]} — ${firstAmt} rising to ${lastAmt}/yr (total ${fmt0(total)})`;
+        group.appendChild(row);
+      } else {
+        items.forEach(a => {
+          const row = document.createElement('div');
+          row.className = 'chart-insight-summary';
+          // For depletions, look up age from _depletions keyed by account name
+          let suffix = '';
+          if (a.event === 'depletion') {
+            const accountName = a.message.replace(' depleted', '').replace("'s ", ' ');
+            const dep = _depletions[accountName];
+            if (dep) suffix = ` (age ${dep.age})`;
+          }
+          row.innerHTML = `<span class="chart-insight-year">${a.year}</span> ${a.message}${suffix}`;
+          group.appendChild(row);
+        });
+      }
+
+      frag.appendChild(group);
+    });
+
+    return frag;
   }
 
   // ─────────────────────────────────────────────
@@ -630,91 +788,26 @@
 
     function renderCharts() {
     if (!_rows.length) return;
+    try { _rows.forEach(L.validateRow); } catch (e) {
+      console.error('[RetireCalcRender] Schema validation failed — rendering aborted.', e);
+      return;
+    }
     const labels = _rows.map(r => r.year);
     const { p1, p2 } = getNames();
 
-    const COLOURS = {
-      p1SP: '#4472C4',
-      p2SP: '#70AD47',
-      p1SIPP: '#ED7D31',
-      p2SIPP: '#FFC000',
-      p1ISA: '#5B9BD5',
-      p2ISA: '#2E86C1',
-      p1GIA: '#A9D18E',
-      p2GIA: '#78C86A',
-      intDraw: '#9B59B6',
-      p1Divs: '#27AE60',
-      p2Divs: '#E74C3C',
-      p1Cash: '#B0B0B0',
-      salary: '#FF7F7F',
-      target: '#1F2937',
-      net: '#2563EB',
-      shortfall: '#DC2626',
-      surplus: '#16A34A',
-    };
-
-    // ds builds a dataset for the income chart.
-    // p1fn / p2fn extract the p1 and p2 portions separately so the
-    // _viewPerson toggle can show only the relevant person's contribution
-    // while always measuring shortfall against the full household target.
-    function ds(label, p1fn, p2fn, color) {
-      const both = r => (p1fn(r) || 0) + (p2fn(r) || 0);
-      const fn   = _viewPerson === 'p1' ? p1fn
-                 : _viewPerson === 'p2' ? p2fn
-                 : both;
-      return {
-        label,
-        data: _rows.map(r => adj(fn(r) || 0, r) / 1000),
-        backgroundColor: color,
-        stack: 'income',
-        _lifetimeValue: _rows.reduce((s, r) => s + adj(fn(r) || 0, r), 0),
-      };
-    }
-
     // ─────────────────────────────────────────────
     // INCOME CHART
-    // One dataset per source type; filtered by _viewPerson.
-    // Shortfall always measured against full household target (65k).
-    // Red shortfall fills the gap when visible income can't meet the target.
     // ─────────────────────────────────────────────
 
-    // Full household target — always the 65k line regardless of person toggle
+    // Full household target — always used for shortfall regardless of person toggle
     const _targetData      = _rows.map(r => adj(r.target || 0, r) / 1000);
-    // Engine shortfall — gap between visible person's gross income and full household target
-    _engineShortfall = _rows.map(r => {
-      const p1Gross = (r.p1SP || 0) + (r.p1SalInc || 0) + (r.p1Drawn.SIPP || 0) +
-                      (r.p1Drawn.ISA || 0) + (r.p1Drawn.GIA || 0) +
-                      (r.p1IntDraw || 0) + (r.p1DivsUsed || 0) + (r.p1Drawn.Cash || 0);
-      const p2Gross = (r.p2SP || 0) + (r.p2SalInc || 0) + (r.p2Drawn.SIPP || 0) +
-                      (r.p2Drawn.ISA || 0) + (r.p2Drawn.GIA || 0) +
-                      (r.p2IntDraw || 0) + (r.p2DivsUsed || 0) + (r.p2Drawn.Cash || 0);
-      const visibleGross = _viewPerson === 'p1' ? p1Gross
-                         : _viewPerson === 'p2' ? p2Gross
-                         : p1Gross + p2Gross;
-      return adj(Math.max(0, (r.target || 0) - visibleGross), r) / 1000;
-    });
 
-    let sets = [];
-    sets.push(ds('Salary',        r => r.p1SalInc     || 0, r => r.p2SalInc     || 0, COLOURS.salary));
-    sets.push(ds('Cash',          r => r.p1Drawn.Cash || 0, r => r.p2Drawn.Cash || 0, COLOURS.p1Cash));
-    sets.push(ds('Interest',      r => r.p1IntDraw    || 0, r => r.p2IntDraw    || 0, COLOURS.intDraw));
-    sets.push(ds('Dividends',     r => r.p1DivsUsed  || 0, r => r.p2DivsUsed  || 0, COLOURS.p1Divs));
-    sets.push(ds('GIA',           r => r.p1Drawn.GIA  || 0, r => r.p2Drawn.GIA  || 0, COLOURS.p1GIA));
-    sets.push(ds('ISA',           r => r.p1Drawn.ISA  || 0, r => r.p2Drawn.ISA  || 0, COLOURS.p1ISA));
-    sets.push(ds('SIPP / WP',     r => r.p1Drawn.SIPP || 0, r => r.p2Drawn.SIPP || 0, COLOURS.p1SIPP));
-    sets.push(ds('State Pension', r => r.p1SP         || 0, r => r.p2SP         || 0, COLOURS.p1SP));
+    const sets = L.buildIncomeDatasets(_rows, _viewPerson, _useReal, p1, p2);
 
-    // Red shortfall — gap between visible income and full household target
-    // Seeded from engine shortfall (zero in funded years); grows as sources are toggled off
-    sets.push({
-      label: 'Shortfall',
-      data: _engineShortfall.slice(),
-      backgroundColor: COLOURS.shortfall,
-      stack: 'income',
-    });
+    // Extract the engine shortfall from the Shortfall dataset for legend use
+    _engineShortfall = sets[sets.length - 1].data.slice();
 
-    // Recompute shortfall when sources are toggled on/off
-    // Always measures against the full household target
+    // Recompute shortfall when sources are toggled on/off in the legend
     function recomputeShortfall(chart) {
       const sfIdx = chart.data.datasets.findIndex(d => d.label === 'Shortfall');
       if (sfIdx < 0) return;
@@ -773,73 +866,23 @@
         },
       });
       renderIncomeLegend(_incomeChart, recomputeShortfall);
+      const hasGenuineShortfall = _rows.some(r => (r.cashflowShortfall || 0) > 0 && (r.totalPortfolio || 0) <= 20000);
+      renderInsightButton('income', hasGenuineShortfall);
     }
 
     // ─────────────────────────────────────────────
-    // TAX / RATE DATA (hoisted — used by both Gross vs Net and Tax charts)
+    // TAX / RATE DATA — used by both Gross vs Net and Tax charts
     // ─────────────────────────────────────────────
-    const taxData = _rows.map(r => {
-      const t = _viewPerson === 'p1'
-        ? r.p1IncomeTax + r.p1CGT + r.p1NI
-        : _viewPerson === 'p2'
-          ? r.p2IncomeTax + r.p2CGT + r.p2NI
-          : r.p1IncomeTax + r.p1CGT + r.p1NI + r.p2IncomeTax + r.p2CGT + r.p2NI;
-      return Math.round(adj(t, r));
-    });
-
-    const rateData = _rows.map(r => {
-      const tax = _viewPerson === 'p1'
-        ? r.p1IncomeTax + r.p1CGT + r.p1NI
-        : _viewPerson === 'p2'
-          ? r.p2IncomeTax + r.p2CGT + r.p2NI
-          : r.p1IncomeTax + r.p1CGT + r.p1NI + r.p2IncomeTax + r.p2CGT + r.p2NI;
-
-      const gross = _viewPerson === 'p1'
-        ? (r.p1GrossIncome || 0)
-        : _viewPerson === 'p2'
-          ? (r.p2GrossIncome || 0)
-          : (r.householdGrossIncome || 0);
-
-      return gross > 0 ? parseFloat((tax / gross * 100).toFixed(1)) : 0;
-    });
+    const { taxData, rateData } = L.buildTaxChartData(_rows, _viewPerson, _useReal);
 
     // ─────────────────────────────────────────────
     // GROSS VS NET INCOME CHART
     // Two segments only: Net income (bottom) + Tax (top).
-    // Bar total = gross drawn (~£65k target). Tax segment shows what's lost.
+    // Bar total = gross drawn. Tax segment shows what's lost.
     // ─────────────────────────────────────────────
     const spendingCtx = document.getElementById('spendingChart')?.getContext('2d');
     if (spendingCtx) {
-      const grossNetSets = [];
-
-      const grossFn = r => _viewPerson === 'p1' ? (r.p1GrossIncome || 0)
-                        : _viewPerson === 'p2' ? (r.p2GrossIncome || 0)
-                        : (r.householdGrossIncome || 0);
-
-      const taxFn = r => _viewPerson === 'p1' ? (r.p1IncomeTax || 0) + (r.p1CGT || 0) + (r.p1NI || 0)
-                       : _viewPerson === 'p2' ? (r.p2IncomeTax || 0) + (r.p2CGT || 0) + (r.p2NI || 0)
-                       : (r.p1IncomeTax || 0) + (r.p1CGT || 0) + (r.p1NI || 0) + (r.p2IncomeTax || 0) + (r.p2CGT || 0) + (r.p2NI || 0);
-
-      const netFn = r => grossFn(r) - taxFn(r);
-
-      grossNetSets.push({
-        label: 'Net income',
-        data: _rows.map(r => adj(netFn(r), r) / 1000),
-        backgroundColor: '#4472C4',
-        stack: 'gross',
-        type: 'bar',
-        _lifetimeValue: _rows.reduce((s, r) => s + adj(netFn(r), r), 0),
-      });
-
-      grossNetSets.push({
-        label: 'Tax',
-        data: _rows.map(r => adj(taxFn(r), r) / 1000),
-        backgroundColor: '#C55A11',
-        stack: 'gross',
-        type: 'bar',
-        _lifetimeValue: _rows.reduce((s, r) => s + adj(taxFn(r), r), 0),
-        _fixed: true,
-      });
+      const grossNetSets = L.buildGrossNetDatasets(_rows, _viewPerson, _useReal);
 
       if (_spendingChart) _spendingChart.destroy();
       _spendingChart = new Chart(spendingCtx, {
@@ -988,80 +1031,14 @@
     // ─────────────────────────────────────────────
     const wealthCtx = document.getElementById('wealthChart')?.getContext('2d');
     if (wealthCtx) {
-      const wealthData = [
-        {
-          label: `${p1} Cash`,
-          data: _rows.map(r => Math.round(adj(r.snap?.p1Cash || 0, r))),
-          backgroundColor: '#B0B0B0',
-          stack: 'wealth',
-        },
-        {
-          label: `${p1} Interest`,
-          data: _rows.map(r => Math.round(adj(r.snap?.p1IntBal || 0, r))),
-          backgroundColor: '#9B59B6',
-          stack: 'wealth',
-        },
-        {
-          label: `${p1} GIA`,
-          data: _rows.map(r => Math.round(adj(r.snap?.p1GIA || 0, r))),
-          backgroundColor: '#A9D18E',
-          stack: 'wealth',
-        },
-        {
-          label: `${p1} SIPP / WP`,
-          data: _rows.map(r => Math.round(adj(r.snap?.p1SIPP || 0, r))),
-          backgroundColor: '#ED7D31',
-          stack: 'wealth',
-        },
-        {
-          label: `${p1} ISA`,
-          data: _rows.map(r => Math.round(adj(r.snap?.p1ISA || 0, r))),
-          backgroundColor: '#5B9BD5',
-          stack: 'wealth',
-        },
-        {
-          label: `${p2} Cash`,
-          data: _rows.map(r => Math.round(adj(r.snap?.p2Cash || 0, r))),
-          backgroundColor: '#D0D0D0',
-          stack: 'wealth',
-        },
-        {
-          label: `${p2} Interest`,
-          data: _rows.map(r => Math.round(adj(r.snap?.p2IntBal || 0, r))),
-          backgroundColor: '#C39BD3',
-          stack: 'wealth',
-        },
-        {
-          label: `${p2} GIA`,
-          data: _rows.map(r => Math.round(adj(r.snap?.p2GIA || 0, r))),
-          backgroundColor: '#78C86A',
-          stack: 'wealth',
-        },
-        {
-          label: `${p2} SIPP / WP`,
-          data: _rows.map(r => Math.round(adj(r.snap?.p2SIPP || 0, r))),
-          backgroundColor: '#FFC000',
-          stack: 'wealth',
-        },
-        {
-          label: `${p2} ISA`,
-          data: _rows.map(r => Math.round(adj(r.snap?.p2ISA || 0, r))),
-          backgroundColor: '#2E86C1',
-          stack: 'wealth',
-        },
-      ];
-    }
+      const wealthDatasets = L.buildWealthDatasets(_rows, _viewPerson, _useReal, p1, p2);
 
       if (_wealthChart) _wealthChart.destroy();
       _wealthChart = new Chart(wealthCtx, {
         type: 'bar',
         data: {
           labels,
-          datasets: _viewPerson === 'p1'
-            ? wealthData.slice(0, 5)
-            : _viewPerson === 'p2'
-              ? wealthData.slice(5)
-              : wealthData,
+          datasets: wealthDatasets,
         },
         options: {
           responsive: true,
@@ -1095,50 +1072,10 @@
         },
       });
       renderWealthLegend(_wealthChart);
+      renderInsightButton('wealth', _annotations.length > 0);
     }
   }
 
-  function _renderWealthChart(labels, p1, p2) {
-    if (!p1 || !p2) { const n = getNames(); p1 = n.p1; p2 = n.p2; }
-    function wds(label, fn, color) {
-      return { label, data: _rows.map(r => Math.round(adj(fn(r.snap), r) / 1000)), backgroundColor: color, stack: 'wealth' };
-    }
-    const datasets = [];
-    if (_viewPerson === 'both' || _viewPerson === 'p1') {
-      datasets.push(wds(`SIPP – ${p1}`,           s => s.p1SIPP,        '#E84D4D'));
-      datasets.push(wds(`ISA – ${p1}`,            s => s.p1ISA,         '#4472C4'));
-      datasets.push(wds(`GIA – ${p1}`,            s => s.p1GIA,         '#FFC000'));
-      datasets.push(wds(`Interest accts – ${p1}`, s => s.p1IntBal || 0, '#9B59B6'));
-      datasets.push(wds(`Cash – ${p1}`,           s => s.p1Cash,        '#B0B0B0'));
-    }
-    if (_viewPerson === 'both' || _viewPerson === 'p2') {
-      datasets.push(wds(`SIPP – ${p2}`,           s => s.p2SIPP,        '#FF8C8C'));
-      datasets.push(wds(`ISA – ${p2}`,            s => s.p2ISA,         '#5B9BD5'));
-      datasets.push(wds(`GIA – ${p2}`,            s => s.p2GIA,         '#FFD966'));
-      datasets.push(wds(`Interest accts – ${p2}`, s => s.p2IntBal || 0, '#C39BD3'));
-      datasets.push(wds(`Cash – ${p2}`,           s => s.p2Cash,        '#D0D0D0'));
-    }
-    const wCtx = document.getElementById('wealthChart')?.getContext('2d');
-    if (!wCtx) return;
-    if (_wealthChart) _wealthChart.destroy();
-    _wealthChart = new Chart(wCtx, {
-      type: 'bar',
-      data: { labels, datasets },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: {
-          legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
-          tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${D.formatMoney((ctx.parsed.y || 0) * 1000)}` } },
-        },
-        scales: {
-          x: { stacked: true, ticks: { font: { size: 10 }, maxRotation: 45 } },
-          y: { stacked: true,
-            title: { display: true, text: _useReal ? 'Real £k' : 'Nominal £k', font: { size: 11 } },
-            ticks: { font: { size: 11 }, callback: v => v + 'k' } },
-        },
-      },
-    });
-  }
 
   // ─────────────────────────────────────────────
   // TABLES
@@ -1146,24 +1083,20 @@
   function renderTables() {
     if (!_rows.length) return;
     const f = n => D.formatMoney(n);
-    const a = (val, row) => _useReal ? val * row.realDeflator : val;
     const { p1, p2 } = getNames();
 
     // Tax table
     const taxTbl = document.getElementById('tax-table');
     if (taxTbl) {
-      let cumTax = 0;
+      const taxRows = L.buildTableTaxRows(_rows, _useReal);
       let grandWI = 0, grandWC = 0, grandWN = 0, grandHI = 0, grandHC = 0, grandHN = 0;
       let body = '<tbody>';
-      _rows.forEach(r => {
-        const wi = a(r.p1IncomeTax, r), wc = a(r.p1CGT, r), wn = a(r.p1NI || 0, r);
-        const hi = a(r.p2IncomeTax, r), hc = a(r.p2CGT, r), hn = a(r.p2NI || 0, r);
-        const wt = wi + wc + wn, ht = hi + hc + hn, hh = wt + ht;
-        cumTax += hh;
+      taxRows.forEach(row => {
+        const { year, p1Age, p2Age, wi, wc, wn, wt, hi, hc, hn, ht, hh, cumTax } = row;
         grandWI += wi; grandWC += wc; grandWN += wn;
         grandHI += hi; grandHC += hc; grandHN += hn;
         body += `<tr>
-          <td>${r.year}</td><td>${r.p1Age}</td><td>${r.p2Age}</td>
+          <td>${year}</td><td>${p1Age}</td><td>${p2Age}</td>
           <td>${f(wi)}</td><td>${f(wc)}</td><td>${f(wn)}</td><td>${f(wt)}</td>
           <td>${f(hi)}</td><td>${f(hc)}</td><td>${f(hn)}</td><td>${f(ht)}</td>
           <td>${f(hh)}</td><td>${f(cumTax)}</td>
@@ -1177,9 +1110,9 @@
         <td>${f(grand)}</td><td>${f(grand)}</td>
       </tr></tbody>`;
       taxTbl.innerHTML = `<thead><tr>
-        <th>Year</th><th>${p1} age</th><th>${p2} age</th>
-        <th>${p1} income tax</th><th>${p1} CGT</th><th>${p1} NI</th><th>${p1} total</th>
-        <th>${p2} income tax</th><th>${p2} CGT</th><th>${p2} NI</th><th>${p2} total</th>
+        <th>Year</th><th>${p1}'s age</th><th>${p2}'s age</th>
+        <th>${p1}'s income tax</th><th>${p1}'s CGT</th><th>${p1}'s NI</th><th>${p1}'s total</th>
+        <th>${p2}'s income tax</th><th>${p2}'s CGT</th><th>${p2}'s NI</th><th>${p2}'s total</th>
         <th>Household tax</th><th>Cumulative tax</th>
       </tr></thead>` + body;
     }
@@ -1187,25 +1120,30 @@
     // Wealth table
     const wTbl = document.getElementById('wealth-table');
     if (wTbl) {
+      const wealthRows = L.buildTableWealthRows(_rows, _useReal);
+      const rowByYear  = Object.fromEntries(_rows.map(r => [r.year, r]));
       let body = '<tbody>';
-      _rows.forEach(r => {
-        const s  = r.snap;
-        const av = v => a(v, r);
-        const cell = v => { const adj2 = a(v, r); return `<td${adj2 < 1 && v > 0 ? ' class="depleted"' : ''}>${f(adj2)}</td>`; };
-        const wTotal = av((s.p1Cash||0)+(s.p1IntBal||0)+(s.p1GIA||0)+(s.p1SIPP||0)+(s.p1ISA||0)
-                         +(s.p2Cash||0)+(s.p2IntBal||0)+(s.p2GIA||0)+(s.p2SIPP||0)+(s.p2ISA||0));
+      wealthRows.forEach(row => {
+        const { year, p1Age, p2Age,
+                p1Cash, p1IntBal, p1GIA, p1SIPP, p1ISA,
+                p2Cash, p2IntBal, p2GIA, p2SIPP, p2ISA, total } = row;
+        // Depleted marker: cell value rounds to zero but underlying snap was positive
+        const cell = (adjVal, snapVal) =>
+          `<td${adjVal < 1 && snapVal > 0 ? ' class="depleted"' : ''}>${f(adjVal)}</td>`;
+        const rawRow = rowByYear[year];
+        const s = rawRow?.snap ?? {};
         body += `<tr>
-          <td>${r.year}</td><td>${r.p1Age}</td><td>${r.p2Age}</td>
-          ${cell(s.p1Cash)}${cell(s.p1IntBal||0)}${cell(s.p1GIA)}${cell(s.p1SIPP)}${cell(s.p1ISA)}
-          ${cell(s.p2Cash)}${cell(s.p2IntBal||0)}${cell(s.p2GIA)}${cell(s.p2SIPP)}${cell(s.p2ISA)}
-          <td>${f(wTotal)}</td>
+          <td>${year}</td><td>${p1Age}</td><td>${p2Age}</td>
+          ${cell(p1Cash, s.p1Cash ?? 0)}${cell(p1IntBal, s.p1IntBal ?? 0)}${cell(p1GIA, s.p1GIA ?? 0)}${cell(p1SIPP, s.p1SIPP ?? 0)}${cell(p1ISA, s.p1ISA ?? 0)}
+          ${cell(p2Cash, s.p2Cash ?? 0)}${cell(p2IntBal, s.p2IntBal ?? 0)}${cell(p2GIA, s.p2GIA ?? 0)}${cell(p2SIPP, s.p2SIPP ?? 0)}${cell(p2ISA, s.p2ISA ?? 0)}
+          <td>${f(total)}</td>
         </tr>`;
       });
       body += '</tbody>';
       wTbl.innerHTML = `<thead><tr>
-        <th>Year</th><th>${p1} age</th><th>${p2} age</th>
-        <th>${p1} Cash</th><th>${p1} Interest</th><th>${p1} GIA</th><th>${p1} SIPP</th><th>${p1} ISA</th>
-        <th>${p2} Cash</th><th>${p2} Interest</th><th>${p2} GIA</th><th>${p2} SIPP</th><th>${p2} ISA</th>
+        <th>Year</th><th>${p1}'s age</th><th>${p2}'s age</th>
+        <th>${p1}'s Cash</th><th>${p1}'s Interest</th><th>${p1}'s GIA</th><th>${p1}'s SIPP</th><th>${p1}'s ISA</th>
+        <th>${p2}'s Cash</th><th>${p2}'s Interest</th><th>${p2}'s GIA</th><th>${p2}'s SIPP</th><th>${p2}'s ISA</th>
         <th>Total</th>
       </tr></thead>` + body;
     }
@@ -1217,18 +1155,8 @@
     setReal,
     initResultsTabs,
     initTableSelector,
-    renderAlerts,
     renderMetrics,
     renderCharts,
     renderTables,
   };
-
-    window.RetireRender = window.RetireRender || {};
-
-    Object.assign(window.RetireRender, {
-      setResults,
-      renderCharts,
-      renderMetrics,
-      renderAlerts
-    });
 })();

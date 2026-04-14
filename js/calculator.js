@@ -2,6 +2,13 @@
   const D = window.RetireData;
 
   // ─────────────────────────────────────────────
+  // CONSTANTS
+  // ─────────────────────────────────────────────
+  // 25% of a SIPP withdrawal is tax-free (pension commencement lump sum);
+  // the remaining 75% is taxable as non-savings income.
+  const SIPP_TAXABLE_RATIO = 0.75;
+
+  // ─────────────────────────────────────────────
   // TAX RULE HELPERS
   // ─────────────────────────────────────────────
   function getTaxRulesForYear(year) {
@@ -11,23 +18,26 @@
   function upratedTaxRules(baseRules, uprateFactor) {
     return {
       ...baseRules,
+      // Uprated: income tax and NI thresholds are typically CPI/earnings linked
       PA:                   baseRules.PA                   * uprateFactor,
       basicLimit:           baseRules.basicLimit           * uprateFactor,
       additionalThreshold:  baseRules.additionalThreshold  * uprateFactor,
       taperStart:           baseRules.taperStart           * uprateFactor,
-      cgtExempt:            baseRules.cgtExempt            * uprateFactor,
-      srsLimit:             baseRules.srsLimit             * uprateFactor,
-      dividendAllowance:    baseRules.dividendAllowance    * uprateFactor,
-      psa: {
-        basic:      baseRules.psa.basic      * uprateFactor,
-        higher:     baseRules.psa.higher     * uprateFactor,
-        additional: baseRules.psa.additional * uprateFactor,
-      },
       ni: {
         primaryThreshold:   baseRules.ni.primaryThreshold   * uprateFactor,
         upperEarningsLimit: baseRules.ni.upperEarningsLimit * uprateFactor,
         mainRate:           baseRules.ni.mainRate,
         upperRate:          baseRules.ni.upperRate,
+      },
+      // NOT uprated: statutory fixed allowances set by parliament, not inflation-linked
+      // cgtExempt (£3,000), srsLimit (£5,000), dividendAllowance (£500), psa (£1,000/£500/£0)
+      cgtExempt:         baseRules.cgtExempt,
+      srsLimit:          baseRules.srsLimit,
+      dividendAllowance: baseRules.dividendAllowance,
+      psa: {
+        basic:      baseRules.psa.basic,
+        higher:     baseRules.psa.higher,
+        additional: baseRules.psa.additional,
       },
     };
   }
@@ -92,12 +102,17 @@
 
     const totalIncome = nonSavings + savings + dividends;
     if (totalIncome <= 0) {
-      return { tax: 0, taxableIncomeAfterPA: 0, paUsed: 0,
-               nsNet: 0, savNet: 0, divNet: 0, savTaxable: 0, divTaxable: 0 };
+      return { tax: 0, taxableIncomeAfterPA: 0, pa: 0, paUsed: 0,
+               nsNet: 0, savNet: 0, divNet: 0,
+               srsCover: 0, savTaxable: 0, divTaxable: 0,
+               psa: 0, nsTax: 0, savTax: 0, divTax: 0 };
     }
 
+    // PA taper: £1 reduction per £2 over £100k, exact (no rounding).
+    // HMRC works in exact amounts — Math.floor is incorrect here.
+    const reduction = Math.max(0, (totalIncome - TAX.taperStart) / 2);
     const pa = totalIncome > TAX.taperStart
-      ? Math.max(0, TAX.PA - Math.floor((totalIncome - TAX.taperStart) / 2))
+      ? Math.max(0, TAX.PA - reduction)
       : TAX.PA;
 
     let paRem = pa;
@@ -109,8 +124,11 @@
     const srsCover   = Math.min(savNet, srsAvail);
     const savAfterSRS = savNet - srsCover;
 
-    const psa = (nonSavings + savings + dividends) <= TAX.basicLimit          ? TAX.psa.basic
-              : (nonSavings + savings + dividends) <= TAX.additionalThreshold ? TAX.psa.higher
+    // PSA tier is determined by whether ANY taxable income (after PA) falls in the higher
+    // rate band — HMRC explicitly includes dividend income in this assessment (LITRG).
+    const taxableForPSA = nsNet + savNet + divNet;
+    const psa = taxableForPSA <= (TAX.basicLimit - TAX.PA)          ? TAX.psa.basic
+              : taxableForPSA <= (TAX.additionalThreshold - TAX.PA) ? TAX.psa.higher
               : TAX.psa.additional;
     const psaCover   = Math.min(savAfterSRS, psa);
     const savTaxable = Math.max(0, savAfterSRS - psaCover);
@@ -147,8 +165,13 @@
     return {
       tax: nsTax + savTax + divTax,
       taxableIncomeAfterPA: nsNet + savNet + divNet,
+      pa,
       paUsed: pa - paRem,
-      nsNet, savNet, divNet, savTaxable, divTaxable,
+      nsNet, savNet, divNet,
+      srsCover,
+      savTaxable, divTaxable,
+      psa,
+      nsTax, savTax, divTax,
     };
   }
 
@@ -175,7 +198,7 @@
       drawn[w]   += take;
       balances[w] -= take;
       rem         -= take;
-      if (w === 'SIPP') drawn.sippTaxable += take * 0.75;
+      if (w === 'SIPP') drawn.sippTaxable += take * SIPP_TAXABLE_RATIO;
     }
     return drawn;
   }
@@ -192,6 +215,7 @@
   }
 
   window.RetireCalc = {
+    SIPP_TAXABLE_RATIO,
     getTaxRulesForYear,
     upratedTaxRules,
     summarisePortfolio,

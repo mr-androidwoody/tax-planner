@@ -1,33 +1,6 @@
 (function () {
   const D = window.RetireData;
   const C = window.RetireCalc;
-  const calculateTax = window.calculateTax; 
-
-  function mapTaxRules(TAX) {
-    return {
-      personalAllowance: TAX.PA,
-      basicRateLimit: TAX.basicLimit,
-      higherRateLimit: TAX.additionalThreshold,
-
-      incomeTaxRates: TAX.nonSavingsRates,
-      dividendRates: TAX.dividendRates,
-
-      savings: {
-        startingRateLimit: TAX.srsLimit,
-        personalSavingsAllowanceBasic: TAX.psa.basic,
-        personalSavingsAllowanceHigher: TAX.psa.higher
-      },
-
-      dividendAllowance: TAX.dividendAllowance,
-
-      ni: {
-        primaryThreshold: TAX.ni.primaryThreshold,
-        rate: TAX.ni.mainRate
-      }
-    };
-  }
-
-    
 
   // inputs  — plain object built by gatherInputs() in app.js
   // accounts — interest-bearing accounts array (may be empty)
@@ -45,6 +18,7 @@
       thresholdMode, thresholdFromYear,
       bniEnabled, bniP1GIA, bniP2GIA,
       dividendYield,
+      dividendMode,
       withdrawalMode,
       p1Order, p2Order,
     } = inputs;
@@ -71,6 +45,16 @@
         monthlyDraw: a.monthlyDraw || 0,
       }));
 
+    // FIX: GIA-wrapper interest accounts (e.g. QMMF) are taxed on their yield
+    // separately via p1IntTaxable. Remove their balances from p1Bal.GIA / p2Bal.GIA
+    // so they do not also generate phantom dividend income — preventing double-counting.
+    intAccts.forEach(a => {
+      if (a.wrapper === 'GIA') {
+        if (a.owner === 'p1') p1Bal.GIA = Math.max(0, (p1Bal.GIA || 0) - a.balance);
+        else                  p2Bal.GIA = Math.max(0, (p2Bal.GIA || 0) - a.balance);
+      }
+    });
+
     let p1GIACost = p1Bal.GIA;
     let p2GIACost = p2Bal.GIA;
 
@@ -85,6 +69,7 @@
     });
 
     const depletions = {};
+    const annotations = [];
     let cumInfl = 1;
     const rows = [];
 
@@ -97,6 +82,33 @@
       const p2SP     = p2Age >= p2SPAge ? p2SPAmt * cumInfl : 0;
       const p2SalInc = (p2SalaryStop && p2Age <= p2SalaryStop) ? p2Salary * cumInfl : 0;
       const p1SalInc = (p1SalaryStop && p1Age <= p1SalaryStop) ? p1Salary * cumInfl : 0;
+
+      // Annotations: one-off lifecycle events
+      if (p1Age === p1SPAge && p1SPAmt > 0)
+        annotations.push({ year, person: 'p1', event: 'sp_starts',
+          message: `${p1name}'s State Pension begins (£${Math.round(p1SPAmt).toLocaleString('en-GB')}/yr)` });
+      if (p2Age === p2SPAge && p2SPAmt > 0)
+        annotations.push({ year, person: 'p2', event: 'sp_starts',
+          message: `${p2name}'s State Pension begins (£${Math.round(p2SPAmt).toLocaleString('en-GB')}/yr)` });
+      if (p1SalaryStop && p1Age === p1SalaryStop + 1 && p1Salary > 0)
+        annotations.push({ year, person: 'p1', event: 'salary_stop',
+          message: `${p1name}'s salary stops` });
+      if (p2SalaryStop && p2Age === p2SalaryStop + 1 && p2Salary > 0)
+        annotations.push({ year, person: 'p2', event: 'salary_stop',
+          message: `${p2name}'s salary stops` });
+
+      // Minimum pension access age: 55 before 2028, 57 from 2028 onwards.
+      const minPensionAge = year >= 2028 ? 57 : 55;
+      const p1SIPPLocked  = p1Age < minPensionAge;
+      const p2SIPPLocked  = p2Age < minPensionAge;
+
+      if (p1Age === minPensionAge && (p1Bal.SIPP || 0) > 0)
+        annotations.push({ year, person: 'p1', event: 'sipp_unlocked',
+          message: `${p1name}'s pension accessible from age ${minPensionAge}` });
+      if (p2Age === minPensionAge && (p2Bal.SIPP || 0) > 0)
+        annotations.push({ year, person: 'p2', event: 'sipp_unlocked',
+          message: `${p2name}'s pension accessible from age ${minPensionAge}` });
+
       const target   = (spending * cumInfl) * (
         stepDownPct > 0 && p1Age >= 75 ? (1 - stepDownPct / 100) : 1
       );
@@ -112,21 +124,25 @@
       const effThresholds = C.upratedTaxRules(baseRules, uprateFactor);
       const effCGTExempt  = effThresholds.cgtExempt;
 
-      // GIA dividends — opening balance × yield, paid out as cashflow (not reinvested).
-      // Full amount is taxable when received regardless of spending need.
-      // GIA balance is reduced by dividends before growth to avoid double-counting
-      // (growth rate is total return; extracting dividends separately requires netting them out first).
+      // GIA dividends — always taxable on arising basis (HMRC), regardless of reinvest/payout.
+      // p1Divs     = earned/taxable (always computed)
+      // p1DivsUsed = cashflow only (= p1Divs in payout, 0 in reinvest)
       const p1GIAOpen  = p1Bal.GIA || 0;
       const p2GIAOpen  = p2Bal.GIA || 0;
-      const p1Divs     = p1GIAOpen * dividendYield;
-      const p2Divs     = p2GIAOpen * dividendYield;
-      // All dividends are taxable as received — no spending-cap capping
-      const p1DivsUsed = p1Divs;
-      const p2DivsUsed = p2Divs;
+      const p1Divs = p1GIAOpen * dividendYield;
+      const p2Divs = p2GIAOpen * dividendYield;
+      let p1DivsUsed, p2DivsUsed;
 
-      // Deduct dividends from GIA now (before growth) so growth applies to ex-dividend balance
-      p1Bal.GIA = Math.max(0, (p1Bal.GIA || 0) - p1Divs);
-      p2Bal.GIA = Math.max(0, (p2Bal.GIA || 0) - p2Divs);
+      if (dividendMode === 'reinvest') {
+        p1DivsUsed = 0; p2DivsUsed = 0;
+        // GIA balance not reduced — dividends compound inside wrapper
+      } else {
+        p1DivsUsed = p1Divs;
+        p2DivsUsed = p2Divs;
+        // Deduct dividends from GIA before growth so growth applies to ex-dividend balance
+        p1Bal.GIA  = Math.max(0, (p1Bal.GIA || 0) - p1Divs);
+        p2Bal.GIA  = Math.max(0, (p2Bal.GIA || 0) - p2Divs);
+      }
 
       // FIX 1: annual CGT gain accumulators — reset each year, exemption applied once at year-end
       let p1AnnualGains = 0;
@@ -167,10 +183,14 @@
       let p1IntTaxable = 0, p2IntTaxable = 0;
 
       // How much of the target is already covered before interest draws
-      const preIntGuaranteed = p1SP + p2SP + p1SalInc + p2SalInc + p1Divs + p2Divs;
+      const preIntGuaranteed = p1SP + p2SP + p1SalInc + p2SalInc + p1DivsUsed + p2DivsUsed;
       // Surplus salary/SP above target goes to p1 cash buffer
       const preIntSurplus    = Math.max(0, preIntGuaranteed - target);
-      if (preIntSurplus > 0) p1Bal.Cash = (p1Bal.Cash || 0) + preIntSurplus;
+      if (preIntSurplus > 0) {
+        p1Bal.Cash = (p1Bal.Cash || 0) + preIntSurplus;
+        annotations.push({ year, person: 'p1', event: 'cash_surplus',
+          message: `Household surplus income (£${Math.round(preIntSurplus).toLocaleString('en-GB')}) above target parked in ${p1name}'s Cash` });
+      }
       let intBudget = Math.max(0, target - preIntGuaranteed);
 
       intAccts.forEach(a => {
@@ -214,7 +234,7 @@
       });
 
       // Priority 2: cash (dividends now count as guaranteed income)
-      const guaranteed = p1SP + p2SP + p2SalInc + p1SalInc + intDrawTotal + p1Divs + p2Divs;
+      const guaranteed = p1SP + p2SP + p2SalInc + p1SalInc + intDrawTotal + p1DivsUsed + p2DivsUsed;
       let shortfall    = Math.max(0, target - guaranteed);
 
       let p1CashDrawn = 0;
@@ -234,304 +254,306 @@
         shortfall  -= cashDrawn;
       }
 
-        // Priority 3: wrapper draws
-        const p1WrapperOrder = p1Order.filter(w => w !== 'Cash');
-        const p2WrapperOrder = p2Order.filter(w => w !== 'Cash');
-        
-        let p1Drawn = { GIA: 0, SIPP: 0, ISA: 0, Cash: 0, sippTaxable: 0 };
-        let p2Drawn = { GIA: 0, SIPP: 0, ISA: 0, Cash: 0, sippTaxable: 0 };
-        
-        let remainingShortfall = shortfall;
-        
-        // -----------------------------
-        // MODE: 50 / 50 (pure mechanical)
-        // -----------------------------
-        if (withdrawalMode === '50/50') {
-        
-          const half = remainingShortfall / 2;
-        
-          // P1 draw
-          let r1 = C.withdraw(p1Bal, p1WrapperOrder, half);
-          p1Drawn.GIA += r1.GIA;
-          p1Drawn.SIPP += r1.SIPP;
-          p1Drawn.ISA += r1.ISA;
-          p1Drawn.sippTaxable += r1.sippTaxable;
-        
-          const p1Total = r1.GIA + r1.SIPP + r1.ISA;
-          let unmet = Math.max(0, half - p1Total);
-        
-          // P2 draw (takes its half + P1 unmet)
-          let r2 = C.withdraw(p2Bal, p2WrapperOrder, half + unmet);
-          p2Drawn.GIA += r2.GIA;
-          p2Drawn.SIPP += r2.SIPP;
-          p2Drawn.ISA += r2.ISA;
-          p2Drawn.sippTaxable += r2.sippTaxable;
-        
-          const p2Total = r2.GIA + r2.SIPP + r2.ISA;
-          let p2Unmet = Math.max(0, (half + unmet) - p2Total);
-        
-          // Final fallback to P1 only if needed
-          if (p2Unmet > 0) {
-            let r3 = C.withdraw(p1Bal, p1WrapperOrder, p2Unmet);
-            p1Drawn.GIA += r3.GIA;
-            p1Drawn.SIPP += r3.SIPP;
-            p1Drawn.ISA += r3.ISA;
-            p1Drawn.sippTaxable += r3.sippTaxable;
-          }
-        
+      // Priority 3: wrapper draws
+      const p1WrapperOrder = p1Order.filter(w => w !== 'Cash' && !(w === 'SIPP' && p1SIPPLocked));
+      const p2WrapperOrder = p2Order.filter(w => w !== 'Cash' && !(w === 'SIPP' && p2SIPPLocked));
+      let p1Drawn, p2Drawn;
+
+      if (withdrawalMode === '50/50') {
+        // Purely mechanical equal split — no tax logic applied
+        const p1Half  = shortfall / 2;
+        p1Drawn       = C.withdraw(p1Bal, p1WrapperOrder, p1Half);
+        const p1Unmet = Math.max(0, p1Half - p1Drawn.GIA - p1Drawn.SIPP - p1Drawn.ISA);
+
+        p2Drawn       = C.withdraw(p2Bal, p2WrapperOrder, shortfall / 2 + p1Unmet);
+        const p2Unmet = Math.max(
+          0,
+          (shortfall / 2 + p1Unmet) - p2Drawn.GIA - p2Drawn.SIPP - p2Drawn.ISA
+        );
+
+        if (p2Unmet > 0) {
+          const extra = C.withdraw(p1Bal, p1WrapperOrder, p2Unmet);
+          p1Drawn.GIA += extra.GIA;
+          p1Drawn.SIPP += extra.SIPP;
+          p1Drawn.ISA += extra.ISA;
+          p1Drawn.sippTaxable += extra.sippTaxable;
         }
-        
-        // -----------------------------
-        // MODE: TAX-AWARE
-        // -----------------------------
-        else {
-        
-          if (remainingShortfall > 0) {
-        
-            // -----------------------------
-            // Step 1: fill Personal Allowance with SIPP
-            // -----------------------------
-            const p1BaseIncome = p1SP + p1SalInc + p1IntTaxable + p1Divs;
-            const p2BaseIncome = p2SP + p2SalInc + p2IntTaxable + p2Divs;
-        
-            const p1PAHeadroom = Math.max(0, effThresholds.PA - p1BaseIncome);
-            const p2PAHeadroom = Math.max(0, effThresholds.PA - p2BaseIncome);
-        
-            const p1TargetGross = Math.min(p1PAHeadroom / 0.75, p1Bal.SIPP || 0);
-            const p2TargetGross = Math.min(p2PAHeadroom / 0.75, p2Bal.SIPP || 0);
-        
-            let r1 = C.withdraw(p1Bal, ['SIPP'], p1TargetGross);
-            let r2 = C.withdraw(p2Bal, ['SIPP'], p2TargetGross);
-        
-            p1Drawn.SIPP += r1.SIPP;
-            p1Drawn.sippTaxable += r1.sippTaxable;
-        
-            p2Drawn.SIPP += r2.SIPP;
-            p2Drawn.sippTaxable += r2.sippTaxable;
-        
-            const sippDrawnTotal = r1.SIPP + r2.SIPP;
-            remainingShortfall = Math.max(0, remainingShortfall - sippDrawnTotal);
-        
-            // -----------------------------
-            // Step 2: non-SIPP wrappers (GIA / ISA)
-            // -----------------------------
-            if (remainingShortfall > 0) {
-        
-              const p1Non = p1WrapperOrder.filter(w => w !== 'SIPP');
-              const p2Non = p2WrapperOrder.filter(w => w !== 'SIPP');
-        
-              const half = remainingShortfall / 2;
-        
-              let r1n = C.withdraw(p1Bal, p1Non, half);
-              let r2n = C.withdraw(p2Bal, p2Non, half);
-        
-              p1Drawn.GIA += r1n.GIA;
-              p1Drawn.ISA += r1n.ISA;
-        
-              p2Drawn.GIA += r2n.GIA;
-              p2Drawn.ISA += r2n.ISA;
-        
-              const drawnNon =
-                r1n.GIA + r1n.ISA +
-                r2n.GIA + r2n.ISA;
-        
-              remainingShortfall = Math.max(0, remainingShortfall - drawnNon);
-        
-              // -----------------------------
-              // Step 3: fallback (cross-draw)
-              // -----------------------------
-              if (remainingShortfall > 0) {
-        
-                let rFallback = C.withdraw(p1Bal, p1WrapperOrder, remainingShortfall);
-        
-                p1Drawn.GIA += rFallback.GIA;
-                p1Drawn.ISA += rFallback.ISA;
-                p1Drawn.SIPP += rFallback.SIPP;
-                p1Drawn.sippTaxable += rFallback.sippTaxable;
-        
-                const fallbackTotal =
-                  rFallback.GIA + rFallback.ISA + rFallback.SIPP;
-        
-                remainingShortfall = Math.max(0, remainingShortfall - fallbackTotal);
-              }
-        
-              // -----------------------------
-              // Step 4: final catch-all (SIPP only)
-              // -----------------------------
-              if (remainingShortfall > 0) {
-        
-                let rFinal = C.withdraw(p2Bal, ['SIPP'], remainingShortfall);
-        
-                p2Drawn.SIPP += rFinal.SIPP;
-                p2Drawn.sippTaxable += rFinal.sippTaxable;
-        
-                const finalTotal = rFinal.SIPP;
-        
-                remainingShortfall = Math.max(0, remainingShortfall - finalTotal);
-              }
-            }
-          }
+      } else if (shortfall > 0) {
+        // Tax-aware mode — only runs when there is a spending shortfall to fill
+
+        // Step 1: PA headroom — non-savings (SP, salary), interest, and dividends all
+        // consume PA in order, reducing headroom available for a tax-free SIPP draw.
+        const p1GuaranteedNS = p1SP + p1SalInc;
+        const p2GuaranteedNS = p2SP + p2SalInc;
+        const p1PAHeadroom   = Math.max(0, effThresholds.PA - p1GuaranteedNS - p1IntTaxable - p1Divs);
+        const p2PAHeadroom   = Math.max(0, effThresholds.PA - p2GuaranteedNS - p2IntTaxable - p2Divs);
+
+        // Step 2: draw SIPP to fill PA — only if pension is accessible.
+        // Gross = headroom / SIPP_TAXABLE_RATIO (75% of draw is taxable income).
+        const p1SippTarget = (!p1SIPPLocked && p1PAHeadroom > 0)
+          ? Math.min(p1PAHeadroom / C.SIPP_TAXABLE_RATIO, p1Bal.SIPP || 0)
+          : 0;
+        const p2SippTarget = (!p2SIPPLocked && p2PAHeadroom > 0)
+          ? Math.min(p2PAHeadroom / C.SIPP_TAXABLE_RATIO, p2Bal.SIPP || 0)
+          : 0;
+
+        p1Drawn = C.withdraw(p1Bal, ['SIPP'], p1SippTarget);
+        p2Drawn = C.withdraw(p2Bal, ['SIPP'], p2SippTarget);
+
+        // Step 3: remaining shortfall split proportionally by remaining PA headroom
+        const p1SippTaxable = p1Drawn.sippTaxable;
+        const p2SippTaxable = p2Drawn.sippTaxable;
+        const p1RemHeadroom = Math.max(0, p1PAHeadroom - p1SippTaxable);
+        const p2RemHeadroom = Math.max(0, p2PAHeadroom - p2SippTaxable);
+        const sippDrawTotal = p1Drawn.SIPP + p2Drawn.SIPP;
+        const remShortfall  = Math.max(0, shortfall - sippDrawTotal);
+
+        const totalHeadroom = p1RemHeadroom + p2RemHeadroom;
+        const p1Weight      = totalHeadroom > 0 ? p1RemHeadroom / totalHeadroom : 0.5;
+        const p2Weight      = 1 - p1Weight;
+
+        const p1NonSippOrder = p1WrapperOrder.filter(w => w !== 'SIPP' && w !== 'Cash');
+        const p2NonSippOrder = p2WrapperOrder.filter(w => w !== 'SIPP' && w !== 'Cash');
+
+        const p1RemDrawn = C.withdraw(p1Bal, p1NonSippOrder, remShortfall * p1Weight);
+        const p2RemDrawn = C.withdraw(p2Bal, p2NonSippOrder, remShortfall * p2Weight);
+
+        // Merge draws
+        p1Drawn.GIA += p1RemDrawn.GIA;
+        p1Drawn.ISA += p1RemDrawn.ISA;
+        p2Drawn.GIA += p2RemDrawn.GIA;
+        p2Drawn.ISA += p2RemDrawn.ISA;
+
+        // Fallback: unmet demand goes to the other person, including SIPP as last resort
+        const p1Unmet = Math.max(
+          0,
+          remShortfall * p1Weight - p1RemDrawn.GIA - p1RemDrawn.ISA - p1RemDrawn.SIPP
+        );
+        const p2Unmet = Math.max(
+          0,
+          remShortfall * p2Weight - p2RemDrawn.GIA - p2RemDrawn.ISA - p2RemDrawn.SIPP
+        );
+
+        if (p1Unmet > 0) {
+          const extra = C.withdraw(p2Bal, p2WrapperOrder, p1Unmet);
+          p2Drawn.GIA += extra.GIA;
+          p2Drawn.ISA += extra.ISA;
+          p2Drawn.SIPP += extra.SIPP;
+          p2Drawn.sippTaxable += extra.sippTaxable;
+        }
+        if (p2Unmet > 0) {
+          const extra = C.withdraw(p1Bal, p1WrapperOrder, p2Unmet);
+          p1Drawn.GIA += extra.GIA;
+          p1Drawn.ISA += extra.ISA;
+          p1Drawn.SIPP += extra.SIPP;
+          p1Drawn.sippTaxable += extra.sippTaxable;
         }
 
-    // Add cash draws (always apply, never inside conditionals)
-    p1Drawn.Cash += p1CashDrawn;
-    p2Drawn.Cash += p2CashDrawn;
-    
-    // Growth
-    C.growBalances(p1Bal, growth);
-    C.growBalances(p2Bal, growth);
-    
-    // GIA gains
-    p1AnnualGains += p1Drawn.GIA * p1GainRatio;
-    p2AnnualGains += p2Drawn.GIA * p2GainRatio;
-    
-    // Update cost basis
-    if (p1GIABalBefore > 0 && p1Drawn.GIA > 0) {
-      p1GIACost *= (1 - Math.min(1, p1Drawn.GIA / p1GIABalBefore));
-    }
-    
-    if (p2GIABalBefore > 0 && p2Drawn.GIA > 0) {
-      p2GIACost *= (1 - Math.min(1, p2Drawn.GIA / p2GIABalBefore));
-    }
-    
-    // Tax
-    const rulesMapped = mapTaxRules(effThresholds);
-    
-    const p1TaxResult = calculateTax({
-      salary: p1SalInc + p1SP + p1Drawn.sippTaxable,
-      interest: p1IntTaxable,
-      dividends: p1DivsUsed
-    }, rulesMapped);
-    
-    const p2TaxResult = calculateTax({
-      salary: p2SalInc + p2SP + p2Drawn.sippTaxable,
-      interest: p2IntTaxable,
-      dividends: p2DivsUsed
-    }, rulesMapped);
-      
-    // CGT
-    const p1TaxableGain = Math.max(0, p1AnnualGains - effCGTExempt);
-    const p2TaxableGain = Math.max(0, p2AnnualGains - effCGTExempt);
-    
-    const p1TaxableIncome =
-      (p1SalInc + p1SP + p1Drawn.sippTaxable + p1IntTaxable + p1DivsUsed)
-      - effThresholds.PA;
-    
-    const p2TaxableIncome =
-      (p2SalInc + p2SP + p2Drawn.sippTaxable + p2IntTaxable + p2DivsUsed)
-      - effThresholds.PA;
-    
-    const p1CGT = C.calcCGT(Math.max(0, p1TaxableIncome), p1TaxableGain, effThresholds);
-    const p2CGT = C.calcCGT(Math.max(0, p2TaxableIncome), p2TaxableGain, effThresholds);
-    
-    // NI
-    const p1NI = p1TaxResult.ni;
-    const p2NI = p2TaxResult.ni;
-    
-    // Income totals
-    const p1IncomeTaxTotal =
-      p1TaxResult.incomeTax +
-      p1TaxResult.savingsTax +
-      p1TaxResult.dividendTax;
-    
-    const p2IncomeTaxTotal =
-      p2TaxResult.incomeTax +
-      p2TaxResult.savingsTax +
-      p2TaxResult.dividendTax;
-    
-    // Gross income
-    const p1GrossIncome =
-      p1SP + p1SalInc + p1IntDraw + p1DivsUsed +
-      p1Drawn.Cash + p1Drawn.GIA + p1Drawn.SIPP + p1Drawn.ISA;
-    
-    const p2GrossIncome =
-      p2SP + p2SalInc + p2IntDraw + p2DivsUsed +
-      p2Drawn.Cash + p2Drawn.GIA + p2Drawn.SIPP + p2Drawn.ISA;
-    
-    // Totals
-    const p1TaxTotal = p1TaxResult.total + p1CGT;
-    const p2TaxTotal = p2TaxResult.total + p2CGT;
-    
-    const householdGrossIncome = p1GrossIncome + p2GrossIncome;
-    const householdTax = p1TaxTotal + p2TaxTotal;
-    const householdNetCashflow = householdGrossIncome - householdTax;
-    
-    // Natural income
-    const p1NaturalIncome = p1SP + p1SalInc + p1IntDraw + p1Divs;
-    const p2NaturalIncome = p2SP + p2SalInc + p2IntDraw + p2Divs;
-    
-    const p1NaturalNet = p1NaturalIncome - p1IncomeTaxTotal - p1NI;
-    const p2NaturalNet = p2NaturalIncome - p2IncomeTaxTotal - p2NI;
-    
-    const householdNaturalNet = p1NaturalNet + p2NaturalNet;
-        
-    // Final push
-    rows.push({
-      year, p1Age, p2Age,
-    
-      target,
-    
-      p1SP, p2SP, p1SalInc, p2SalInc,
-      intDrawTotal, p1IntDraw, p2IntDraw,
-      p1IntTaxable, p2IntTaxable,
-      p1Divs, p2Divs,
-      p1DivsUsed, p2DivsUsed,
-      p1Drawn, p2Drawn,
-    
-      p1IncomeTax: p1IncomeTaxTotal,
-      p2IncomeTax: p2IncomeTaxTotal,
-      p1CGT,
-      p2CGT,
-      p1NI,
-      p2NI,
-    
-      p1Tax: p1TaxTotal,
-      p2Tax: p2TaxTotal,
-    
-      p1GrossIncome,
-      p2GrossIncome,
-      householdGrossIncome,
-      householdTax,
-      householdNetCashflow,
-    
-      p1NaturalNet,
-      p2NaturalNet,
-      householdNaturalNet,
-    
-      p1TaxInc: p1SalInc + p1SP + p1Drawn.sippTaxable + p1IntTaxable + p1DivsUsed,
-      p2TaxInc: p2SalInc + p2SP + p2Drawn.sippTaxable + p2IntTaxable + p2DivsUsed,
-    
-      p1AnnualGains,
-      p2AnnualGains,
-    
-      // ✅ REQUIRED FOR RENDERER
-      p1Cash: p1Bal.Cash || 0,
-      p2Cash: p2Bal.Cash || 0,
-    
-      p1ISA: p1Bal.ISA || 0,
-      p2ISA: p2Bal.ISA || 0,
-    
-      p1SIPP: p1Bal.SIPP || 0,
-      p2SIPP: p2Bal.SIPP || 0,
-    
-      p1GIA: p1Bal.GIA || 0,
-      p2GIA: p2Bal.GIA || 0,
-    
-      totalPortfolio:
-        C.totalBal(p1Bal) +
-        C.totalBal(p2Bal)
-    });
+        // Final catch-all: if shortfall still unmet, draw more SIPP — but only if accessible.
+        const totalDrawn = p1Drawn.GIA + p1Drawn.SIPP + p1Drawn.ISA
+                         + p2Drawn.GIA + p2Drawn.SIPP + p2Drawn.ISA;
+        const stillUnmet = Math.max(0, shortfall - totalDrawn);
+        if (stillUnmet > 0) {
+          const p1Extra = !p1SIPPLocked
+            ? C.withdraw(p1Bal, ['SIPP'], stillUnmet / 2)
+            : { SIPP: 0, sippTaxable: 0 };
+          const p2Share = stillUnmet / 2 + Math.max(0, stillUnmet / 2 - p1Extra.SIPP);
+          const p2Extra = !p2SIPPLocked
+            ? C.withdraw(p2Bal, ['SIPP'], p2Share)
+            : { SIPP: 0, sippTaxable: 0 };
+          p1Drawn.SIPP += p1Extra.SIPP;
+          p1Drawn.sippTaxable += p1Extra.sippTaxable;
+          p2Drawn.SIPP += p2Extra.SIPP;
+          p2Drawn.sippTaxable += p2Extra.sippTaxable;
+          const p2StillUnmet = Math.max(0, stillUnmet / 2 - p2Extra.SIPP);
+          if (p2StillUnmet > 0 && !p1SIPPLocked) {
+            const p1Last = C.withdraw(p1Bal, ['SIPP'], p2StillUnmet);
+            p1Drawn.SIPP += p1Last.SIPP;
+            p1Drawn.sippTaxable += p1Last.sippTaxable;
+          }
+        }
+      } else {
+        // Tax-aware mode, shortfall === 0: no portfolio draw needed
+        p1Drawn = { GIA: 0, SIPP: 0, ISA: 0, Cash: 0, sippTaxable: 0 };
+        p2Drawn = { GIA: 0, SIPP: 0, ISA: 0, Cash: 0, sippTaxable: 0 };
+      }
 
-      } // end for loop
+      p1Drawn.Cash += p1CashDrawn;
+      p2Drawn.Cash += p2CashDrawn;
 
-      return {
-        rows,
-        depletions
+      // Growth (cost basis NOT grown — gains accumulate naturally)
+      C.growBalances(p1Bal, growth);
+      C.growBalances(p2Bal, growth);
+
+      // Accumulate withdrawal GIA gains using pre-computed gainRatio (no exemption yet)
+      p1AnnualGains += p1Drawn.GIA * p1GainRatio;
+      p2AnnualGains += p2Drawn.GIA * p2GainRatio;
+
+      if (p1GIABalBefore > 0 && p1Drawn.GIA > 0) {
+        p1GIACost = Math.max(
+          0,
+          p1GIACost * (1 - Math.min(1, p1Drawn.GIA / p1GIABalBefore))
+        );
+      }
+      if (p2GIABalBefore > 0 && p2Drawn.GIA > 0) {
+        p2GIACost = Math.max(
+          0,
+          p2GIACost * (1 - Math.min(1, p2Drawn.GIA / p2GIABalBefore))
+        );
+      }
+
+      // Income tax first (required for CGT band stacking)
+      const p1NonSavings = p1SP + p1SalInc + p1Drawn.sippTaxable;
+      const p2NonSavings = p2SP + p2SalInc + p2Drawn.sippTaxable;
+      const p1Income     = C.calcIncomeTaxDetailed(p1NonSavings, p1IntTaxable, p1Divs, effThresholds);
+      const p2Income     = C.calcIncomeTaxDetailed(p2NonSavings, p2IntTaxable, p2Divs, effThresholds);
+
+      // FIX 1: single CGT per person — one exemption applied to full annual gains
+      const p1TaxableGain = Math.max(0, p1AnnualGains - effCGTExempt);
+      const p2TaxableGain = Math.max(0, p2AnnualGains - effCGTExempt);
+      const p1CGT         = C.calcCGT(p1Income.taxableIncomeAfterPA, p1TaxableGain, effThresholds);
+      const p2CGT         = C.calcCGT(p2Income.taxableIncomeAfterPA, p2TaxableGain, effThresholds);
+
+      // Pay CGT from cash where possible
+      if (p1CGT > 0) {
+        const f = Math.min(p1CGT, p1Bal.Cash || 0);
+        p1Bal.Cash -= f;
+      }
+      if (p2CGT > 0) {
+        const f = Math.min(p2CGT, p2Bal.Cash || 0);
+        p2Bal.Cash -= f;
+      }
+
+      const p1NI = C.calcEmployeeNI(p1SalInc, effThresholds, p1Age >= p1SPAge);
+      const p2NI = C.calcEmployeeNI(p2SalInc, effThresholds, p2Age >= p2SPAge);
+
+      // Depletion tracking — keys kept as "${name} Wrapper" (unchanged; rename deferred)
+      const checkMap = {
+        [`${p1name} Cash`]: p1Bal.Cash, [`${p1name} GIA`]: p1Bal.GIA,
+        [`${p1name} SIPP`]: p1Bal.SIPP, [`${p1name} ISA`]: p1Bal.ISA,
+        [`${p2name} Cash`]: p2Bal.Cash, [`${p2name} GIA`]: p2Bal.GIA,
+        [`${p2name} SIPP`]: p2Bal.SIPP, [`${p2name} ISA`]: p2Bal.ISA,
       };
+      Object.entries(checkMap).forEach(([key, bal]) => {
+        if (!depletions[key] && (startBal[key] || 0) > 0 && bal <= 0) {
+          const age = year - (key.startsWith(p1name) ? p1DOB : p2DOB);
+          depletions[key] = { year, age };
+          annotations.push({ year, person: key.startsWith(p1name) ? 'p1' : 'p2',
+            event: 'depletion', message: `${key.replace(/^(.+) (\w+)$/, "$1's $2")} depleted` });
+        }
+      });
+
+      // FIX: filter by 'p1'/'p2' token, not display name
+      const intBalP1 = intAccts
+        .filter(a => a.owner === 'p1')
+        .reduce((s, a) => s + (a.balance || 0), 0);
+      const intBalP2 = intAccts
+        .filter(a => a.owner !== 'p1')
+        .reduce((s, a) => s + (a.balance || 0), 0);
+
+      const p1GrossIncome =
+        p1SP +
+        p1SalInc +
+        p1IntDraw +
+        p1DivsUsed +
+        (p1Drawn.Cash || 0) +
+        (p1Drawn.GIA || 0) +
+        (p1Drawn.SIPP || 0) +
+        (p1Drawn.ISA || 0);
+
+      const p2GrossIncome =
+        p2SP +
+        p2SalInc +
+        p2IntDraw +
+        p2DivsUsed +
+        (p2Drawn.Cash || 0) +
+        (p2Drawn.GIA || 0) +
+        (p2Drawn.SIPP || 0) +
+        (p2Drawn.ISA || 0);
+
+      const p1TaxTotal = p1Income.tax + p1CGT + p1NI;
+      const p2TaxTotal = p2Income.tax + p2CGT + p2NI;
+
+      const householdGrossIncome = p1GrossIncome + p2GrossIncome;
+      const householdTax         = p1TaxTotal + p2TaxTotal;
+      const householdNetCashflow = householdGrossIncome - householdTax;
+
+      const cashflowShortfall = Math.max(0, target - householdNetCashflow);
+      const cashflowSurplus   = Math.max(0, householdNetCashflow - target);
+
+
+
+      const p1NaturalIncome = p1SP + p1SalInc + p1IntDraw + p1Divs;    
+      const p2NaturalIncome =  p2SP + p2SalInc + p2IntDraw + p2Divs;
+    
+      const householdNaturalIncome = p1NaturalIncome + p2NaturalIncome;
+    
+      const p1NaturalNet = p1NaturalIncome - p1Income.tax - p1NI;
+      const p2NaturalNet = p2NaturalIncome - p2Income.tax - p2NI;
+      const householdNaturalNet = p1NaturalNet + p2NaturalNet;
+
+      const p1NetCashflow = p1GrossIncome - p1TaxTotal;
+      const p2NetCashflow = p2GrossIncome - p2TaxTotal;
+
+        rows.push({
+        year, p1Age, p2Age,
+
+        target,
+
+        p1SP, p2SP, p1SalInc, p2SalInc,
+        intDrawTotal, p1IntDraw, p2IntDraw,
+        p1IntTaxable, p2IntTaxable,
+        p1Divs, p2Divs,
+        p1DivsUsed, p2DivsUsed,
+        p1Drawn, p2Drawn,
+
+        p1IncomeTax: p1Income.tax,
+        p2IncomeTax: p2Income.tax,
+        p1CGT,
+        p2CGT,
+        p1NI,
+        p2NI,
+
+        p1Tax: p1TaxTotal,
+        p2Tax: p2TaxTotal,
+
+        p1GrossIncome,
+        p2GrossIncome,
+        householdGrossIncome,
+        householdTax,
+        householdNetCashflow,
+        p1NetCashflow,
+        p2NetCashflow,
+        cashflowShortfall,
+        cashflowSurplus,
+
+        p1NaturalNet,
+        p2NaturalNet,
+        householdNaturalNet,
+
+        p1TaxInc: p1NonSavings + p1IntTaxable + p1Divs,
+        p2TaxInc: p2NonSavings + p2IntTaxable + p2Divs,
+        p1AnnualGains,
+        p2AnnualGains,
+        bniCGTBill: p1CGT + p2CGT,
+
+        totalPortfolio: C.totalBal(p1Bal) + C.totalBal(p2Bal) + intBalP1 + intBalP2,
+        realDeflator,
+        cumInfl,
+
+        snap: {
+          p1Cash: p1Bal.Cash, p1IntBal: intBalP1,
+          p1GIA:  p1Bal.GIA,  p1SIPP:   p1Bal.SIPP, p1ISA: p1Bal.ISA,
+          p2Cash: p2Bal.Cash, p2IntBal: intBalP2,
+          p2GIA:  p2Bal.GIA,  p2SIPP:   p2Bal.SIPP, p2ISA: p2Bal.ISA,
+        },
+      });
+
+      cumInfl *= (1 + inflation); // advance AFTER this year's figures are recorded
     }
 
-    window.RetireEngine = {
-      runProjection
-    };
+    return { rows, depletions, annotations };
+  }
 
+  window.RetireEngine = { runProjection };
 })();
