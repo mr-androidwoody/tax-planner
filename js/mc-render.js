@@ -127,9 +127,9 @@
     const verdictHTML = `
       <section class="mc-section mc-verdict ${verdictClass}">
         <h4 class="mc-section-heading">Verdict</h4>
-        <p>Your plan succeeds in ${successPaths.toLocaleString('en-GB')} of
+        <p>Your plan succeeds in <strong>${successPaths.toLocaleString('en-GB')}</strong> of
         ${r.simCount.toLocaleString('en-GB')} simulations
-        (${fmtPct(r.successRate)}). ${verdictLabel}</p>
+        (<strong>${fmtPct(r.successRate)}</strong>). ${verdictLabel}</p>
       </section>`;
 
     // ── 2. SUSTAINABLE SPENDING ───────────────────────────────────────────
@@ -155,19 +155,19 @@
       let sustainBody;
       if (sustainableIsFloor) {
         // All three runs at or above 95% – plan is very strong
-        sustainBody = `Your plan succeeds in ${confPct}% or more of simulations even at
-          ${fmt(sustainableSpending)}/year – ${fmt(absDiff)}/year above your current target.
+        sustainBody = `Your plan succeeds in <strong>${confPct}%</strong> or more of simulations even at
+          <strong>${fmt(sustainableSpending)}</strong>/year – <strong>${fmt(absDiff)}</strong>/year above your current target.
           Your plan is highly resilient; the true sustainable spending level is
           likely higher still.`;
       } else if (isAbove) {
-        sustainBody = `Your current spending target of ${fmt(currentSpending)}/year is within
-          the ${confPct}% confidence threshold. The estimated sustainable spending level is
-          ${floorPrefix}${fmt(sustainableSpending)}/year${portClause} –
-          giving you headroom of approximately ${fmt(absDiff)}/year above your current target.`;
+        sustainBody = `Your current spending target of <strong>${fmt(currentSpending)}</strong>/year is within
+          the <strong>${confPct}%</strong> confidence threshold. The estimated sustainable spending level is
+          ${floorPrefix}<strong>${fmt(sustainableSpending)}</strong>/year${portClause} –
+          giving you headroom of approximately <strong>${fmt(absDiff)}</strong>/year above your current target.`;
       } else {
-        sustainBody = `To achieve ${confPct}% confidence of never running out, the estimated
-          sustainable spending level is ${fmt(sustainableSpending)}/year${portClause} –
-          approximately ${fmt(absDiff)}/year below your current target of ${fmt(currentSpending)}/year.
+        sustainBody = `To achieve <strong>${confPct}%</strong> confidence of never running out, the estimated
+          sustainable spending level is <strong>${fmt(sustainableSpending)}</strong>/year${portClause} –
+          approximately <strong>${fmt(absDiff)}</strong>/year below your current target of <strong>${fmt(currentSpending)}</strong>/year.
           Consider reducing discretionary spending or building a larger portfolio before retiring.`;
       }
 
@@ -186,12 +186,12 @@
     if (p50Depletes) {
       const yearsEarly = lastYear - p50Depletes;
       medianBody = `In the median scenario, the portfolio is exhausted by
-        ${p50Depletes} – ${yearsEarly} year${yearsEarly !== 1 ? 's' : ''} before
+        <strong>${p50Depletes}</strong> – ${yearsEarly} year${yearsEarly !== 1 ? 's' : ''} before
         the end of the projection.`;
     } else {
       medianBody = `In the median scenario, your portfolio peaks at
-        ${fmt(p50Peak.value)} around ${p50Peak.year} and finishes at
-        ${fmt(p50[lastIdx])} in ${lastYear} (${modeLabel} terms).`;
+        <strong>${fmt(p50Peak.value)}</strong> around ${p50Peak.year} and finishes at
+        <strong>${fmt(p50[lastIdx])}</strong> in ${lastYear} (${modeLabel} terms).`;
     }
 
     const medianHTML = `
@@ -206,12 +206,12 @@
     if (p10Depletes) {
       const yearsEarly = lastYear - p10Depletes;
       stressBody = `In the bottom 10% of outcomes, the portfolio runs out by
-        ${p10Depletes} – ${yearsEarly} year${yearsEarly !== 1 ? 's' : ''} before
+        <strong>${p10Depletes}</strong> – ${yearsEarly} year${yearsEarly !== 1 ? 's' : ''} before
         the end of the projection. This scenario typically reflects a combination
         of poor early returns and elevated inflation.`;
     } else {
       stressBody = `In a poor returns environment (10th percentile), your portfolio
-        retains ${fmt(p10[lastIdx])} by ${lastYear} (${modeLabel} terms). While
+        retains <strong>${fmt(p10[lastIdx])}</strong> by ${lastYear} (${modeLabel} terms). While
         significantly below the median, the plan remains solvent throughout the
         projection under this stress scenario.`;
     }
@@ -232,7 +232,7 @@
       <section class="mc-section">
         <h4 class="mc-section-heading">90th percentile – optimistic case</h4>
         <p>In a favourable environment (90th percentile), your portfolio reaches
-        ${fmt(p90Final)} by ${lastYear} (${modeLabel} terms).${legacyNote}</p>
+        <strong>${fmt(p90Final)}</strong> by ${lastYear} (${modeLabel} terms).${legacyNote}</p>
       </section>`;
 
     // ── 5. INTERQUARTILE RANGE ────────────────────────────────────────────
@@ -242,7 +242,7 @@
       <section class="mc-section">
         <h4 class="mc-section-heading">Middle 50% of outcomes</h4>
         <p>In the central half of all simulated paths, your portfolio finishes
-        between ${fmt(p25Final)} (25th percentile) and ${fmt(p75Final)}
+        between <strong>${fmt(p25Final)}</strong> (25th percentile) and <strong>${fmt(p75Final)}</strong>
         (75th percentile) by ${lastYear} (${modeLabel} terms). A tight range
         indicates lower dispersion risk; a wide range reflects sensitivity to
         return sequence.${
@@ -260,7 +260,7 @@
         <section class="mc-section">
           <h4 class="mc-section-heading">Earliest depletion</h4>
           <p>In the worst-case paths, funds could be exhausted as early as
-          ${r.earliestDepletion} – just ${yearsIn} year${yearsIn !== 1 ? 's' : ''}
+          <strong>${r.earliestDepletion}</strong> – just ${yearsIn} year${yearsIn !== 1 ? 's' : ''}
           into the projection. This typically occurs when a severe market downturn
           coincides with high spending in the early years of retirement.</p>
         </section>`;
@@ -312,7 +312,7 @@
     const assumHTML = `
       <section class="mc-section mc-section--muted">
         <h4 class="mc-section-heading">Assumptions</h4>
-        <p>This stress test uses ${eVol}% equity volatility and ${iVol}% inflation
+        <p>This stress test uses <strong>${eVol}%</strong> equity volatility and <strong>${iVol}%</strong> inflation
         volatility – ${volLabel}. Each of the
         ${r.simCount.toLocaleString('en-GB')} paths independently samples annual
         returns and inflation, compounding uncertainty across the full
