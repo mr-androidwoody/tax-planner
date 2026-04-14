@@ -205,6 +205,7 @@
       spending:          safeValue('spending'),
       stepDownPct:       safeValue('stepDownPct'),
       growth:            safeValue('growth'),
+      growthPreset:      document.querySelector('input[name="growthPreset"]:checked')?.value || null,
       inflation:         safeValue('inflation'),
       thresholdMode:     document.querySelector('input[name="thresholdMode"]:checked')?.value || 'frozen',
       thresholdFromYear: safeValue('thresholdFromYearVal'),
@@ -274,6 +275,9 @@
     sv('spending',             a.spending);
     sv('stepDownPct',          a.stepDownPct);
     sv('growth',               a.growth);
+    const gp = document.querySelector(`input[name="growthPreset"][value="${a.growthPreset}"]`);
+    document.querySelectorAll('input[name="growthPreset"]').forEach(r => r.checked = false);
+    if (gp) gp.checked = true;
     sv('inflation',            a.inflation);
     sv('thresholdFromYearVal', a.thresholdFromYear);
     sv('dividendYield',        a.dividendYield);
@@ -1050,6 +1054,10 @@
       if (tab !== 'results') {
         const band = document.querySelector('.metrics-band');
         if (band) band.style.display = '';
+      }
+      // Reapply comma formatting to currency inputs when returning to setup
+      if (tab === 'setup') {
+        document.querySelectorAll('.currency-input').forEach(R.applyCurrencyFormattingToInput);
       }
       return RetireTabs.switchTab(tab);
     }
