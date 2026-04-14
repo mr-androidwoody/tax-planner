@@ -2619,7 +2619,7 @@ input[type="radio"] { accent-color: var(--accent); }
   border-color: transparent;
   padding-left: 0;
   padding-right: 0;
-  margin-bottom: 20px;
+  margin-bottom: 12px;
 }
 
 .mc-section--intro p {
