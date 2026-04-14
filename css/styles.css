@@ -773,6 +773,7 @@ input[type="radio"] { accent-color: var(--accent); }
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
+  margin-left: auto;
 }
 
 .accounts-toolbar-left h2 {
@@ -819,6 +820,7 @@ input[type="radio"] { accent-color: var(--accent); }
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
+  margin-left: auto;
 }
 
 /* Portfolio alert bar — shown when no accounts or any row unbalanced */
