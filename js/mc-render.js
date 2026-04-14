@@ -28,9 +28,10 @@
   }
 
   // ── State ─────────────────────────────────────────────────────────────────
-  let _result        = null;
-  let _meanInflation = 0.025;
-  let _useReal       = true;
+  let _result          = null;
+  let _meanInflation   = 0.025;
+  let _useReal         = true;
+  let _spendingContext = null; // { currentSpending, sustainableSpending, targetConfidence, openingPortfolio }
 
   // ── Deflation ─────────────────────────────────────────────────────────────
   function _deflate(v, i) {
@@ -39,10 +40,11 @@
   function _deflateArr(arr) { return arr.map((v, i) => _deflate(v, i)); }
 
   // ── Public API ────────────────────────────────────────────────────────────
-  function setResults(result, meanInflation) {
-    _result        = result;
-    _meanInflation = (typeof meanInflation === 'number' && !isNaN(meanInflation))
+  function setResults(result, meanInflation, spendingContext) {
+    _result          = result;
+    _meanInflation   = (typeof meanInflation === 'number' && !isNaN(meanInflation))
       ? meanInflation : 0.025;
+    _spendingContext = spendingContext || null;
   }
 
   function setReal(useReal) {
@@ -130,7 +132,50 @@
         (${fmtPct(r.successRate)}). ${verdictLabel}</p>
       </section>`;
 
-    // ── 2. MEDIAN OUTCOME ─────────────────────────────────────────────────
+    // ── 2. SUSTAINABLE SPENDING ───────────────────────────────────────────
+    let sustainHTML = '';
+    if (_spendingContext && _spendingContext.sustainableSpending != null) {
+      const { currentSpending, sustainableSpending, targetConfidence, openingPortfolio } = _spendingContext;
+      const headroom    = sustainableSpending - currentSpending;
+      const isAbove     = headroom >= 0;
+      const absDiff     = Math.abs(Math.round(headroom));
+      const pctOfPort   = openingPortfolio > 0
+        ? ((sustainableSpending / openingPortfolio) * 100).toFixed(1)
+        : null;
+      const confPct     = (targetConfidence * 100).toFixed(0);
+
+      // Severity: green = headroom exists, amber = within 15% over, red = >15% over
+      const overBy = isAbove ? 0 : Math.abs(headroom) / currentSpending;
+      const sClass  = isAbove        ? 'mc-sustain--safe' :
+                      overBy <= 0.15 ? 'mc-sustain--warn' :
+                                       'mc-sustain--danger';
+
+      const portClause = pctOfPort
+        ? ` (${pctOfPort}% of your opening portfolio)`
+        : '';
+
+      let sustainBody;
+      if (isAbove) {
+        sustainBody = `Your current spending target of ${fmt(currentSpending)}/year is within
+          the ${confPct}% confidence threshold. Based on your portfolio and guaranteed
+          income, the sustainable spending level is estimated at ${fmt(sustainableSpending)}/year${portClause} —
+          giving you headroom of approximately ${fmt(absDiff)}/year above your current target.`;
+      } else {
+        sustainBody = `To achieve ${confPct}% confidence of never running out, the estimated
+          sustainable spending level is ${fmt(sustainableSpending)}/year${portClause} —
+          approximately ${fmt(absDiff)}/year below your current target of ${fmt(currentSpending)}/year.
+          Consider reducing discretionary spending or building a larger portfolio before retiring.`;
+      }
+
+      sustainHTML = `
+        <section class="mc-section mc-sustain ${sClass}">
+          <h4 class="mc-section-heading">Sustainable spending estimate</h4>
+          <p>${sustainBody}</p>
+          <p class="mc-sustain__note">Estimated via interpolation across three simulation runs. Accuracy ±5%.</p>
+        </section>`;
+    }
+
+    // ── 3. MEDIAN OUTCOME ─────────────────────────────────────────────────
     const p50Peak     = peak(p50);
     const p50Depletes = depletionYear(p50);
     let medianBody;
@@ -151,7 +196,7 @@
         <p>${medianBody}</p>
       </section>`;
 
-    // ── 3. STRESS CASE (10th percentile) ──────────────────────────────────
+    // ── 4. STRESS CASE (10th percentile) ──────────────────────────────────
     const p10Depletes = depletionYear(p10);
     let stressBody;
     if (p10Depletes) {
@@ -271,7 +316,7 @@
         All values shown in ${modeLabel} terms.</p>
       </section>`;
 
-    el.innerHTML = introHTML + verdictHTML + medianHTML + stressHTML +
+    el.innerHTML = introHTML + verdictHTML + sustainHTML + medianHTML + stressHTML +
                    optimisticHTML + iqrHTML + earliestHTML + ruinHTML + assumHTML;
   }
 

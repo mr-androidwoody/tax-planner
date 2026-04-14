@@ -751,12 +751,56 @@
     }
 
     try {
+      // ── Main run: 10,000 paths at current spending ─────────────────────
       const result = await MCE.run({
         inputs,
         simCount:     10_000,
         equityVol:    0.16,
         inflationVol: 0.015,
       });
+
+      // ── Bracketing runs: 2,000 paths at 85% and 115% of spending ───────
+      // Run in parallel for speed. Clone inputs with modified spending.
+      const TARGET_CONFIDENCE = 0.95;
+      const inputsLow  = { ...inputs, spending: inputs.spending * 0.85 };
+      const inputsHigh = { ...inputs, spending: inputs.spending * 1.15 };
+
+      const [resultLow, resultHigh] = await Promise.all([
+        MCE.run({ inputs: inputsLow,  simCount: 2_000, equityVol: 0.16, inflationVol: 0.015 }),
+        MCE.run({ inputs: inputsHigh, simCount: 2_000, equityVol: 0.16, inflationVol: 0.015 }),
+      ]);
+
+      // ── Interpolate to find spending level at TARGET_CONFIDENCE ─────────
+      // Three data points: (spendingLow, rateA), (spending, rate), (spendingHigh, rateB)
+      // Linear interpolation between the bracketing pair that straddles the target.
+      const S  = inputs.spending;
+      const sL = S * 0.85;
+      const sH = S * 1.15;
+      const rC = result.successRate;
+      const rL = resultLow.successRate;
+      const rH = resultHigh.successRate;
+
+      let sustainableSpending = null;
+
+      // Find which pair straddles TARGET_CONFIDENCE and interpolate.
+      if (rL <= TARGET_CONFIDENCE && rC >= TARGET_CONFIDENCE) {
+        // Target is between low and current
+        const t = (TARGET_CONFIDENCE - rL) / Math.max(rC - rL, 0.001);
+        sustainableSpending = sL + t * (S - sL);
+      } else if (rC >= TARGET_CONFIDENCE && rH <= TARGET_CONFIDENCE) {
+        // Target is between current and high
+        const t = (TARGET_CONFIDENCE - rC) / Math.max(rH - rC, -0.001);
+        sustainableSpending = S + t * (sH - S);
+      } else if (rL >= TARGET_CONFIDENCE) {
+        // Even 85% spending exceeds target confidence — very conservative plan
+        sustainableSpending = sL; // floor estimate
+      } else if (rH <= TARGET_CONFIDENCE) {
+        // Even 115% spending is below target confidence — extrapolate cautiously
+        const slope = (rH - rL) / (sH - sL);
+        if (Math.abs(slope) > 0.0001) {
+          sustainableSpending = sL + (TARGET_CONFIDENCE - rL) / slope;
+        }
+      }
 
       // Disable until next projection run.
       if (riskRunBtn) {
@@ -768,7 +812,13 @@
 
       const MCR = window.RetireMCRender;
       if (!MCR) throw new Error('RetireMCRender not loaded');
-      MCR.setResults(result, inputs.inflation);
+      MCR.setResults(result, inputs.inflation, {
+        currentSpending:     inputs.spending,
+        sustainableSpending: sustainableSpending != null ? Math.round(sustainableSpending) : null,
+        targetConfidence:    TARGET_CONFIDENCE,
+        openingPortfolio:    Object.values(inputs.p1Bal).reduce((s, v) => s + v, 0) +
+                             Object.values(inputs.p2Bal).reduce((s, v) => s + v, 0),
+      });
       MCR.render();
 
       // Switch to Results → Risk Outcomes sub-tab and mark ready (red).
