@@ -876,6 +876,11 @@
       const tab = el.dataset.tab;
       if (state.activeTab === 'setup') syncSetupToAssumptions();
       state.activeTab = tab;
+      // Restore metrics band when leaving results tab
+      if (tab !== 'results') {
+        const band = document.querySelector('.metrics-band');
+        if (band) band.style.display = '';
+      }
       return RetireTabs.switchTab(tab);
     }
 
@@ -1049,6 +1054,15 @@
   RetireTabs.init();
   CR.initResultsTabs();
   CR.initTableSelector();
+
+  // ── Hide metrics band when Risk Outcomes sub-tab is active ────────────────
+  document.querySelectorAll('.results-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const band = document.querySelector('.metrics-band');
+      if (!band) return;
+      band.style.display = btn.dataset.resultsTab === 'risk' ? 'none' : '';
+    });
+  });
 
   const savedPortfolio = localStorage.getItem(STORAGE_KEY);
   if (savedPortfolio) {

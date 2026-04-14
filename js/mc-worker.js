@@ -523,6 +523,30 @@ self.onmessage = function (e) {
     medTax[yi] = percentile(tCol, 50);
   }
 
+  // ── Per-year survival counts (portfolio > 0) ─────────────────────────────
+  // survivalByYear[yi] = number of paths still solvent at end of year yi.
+  // Used to compute decade-by-decade survival rates in mc-render.js.
+  const survivalByYear = new Int32Array(numYears);
+  for (let yi = 0; yi < numYears; yi++) {
+    // portfolioMatrix[yi] is already sorted ascending after percentile pass.
+    const col = portfolioMatrix[yi];
+    let solvent = 0;
+    for (let s = 0; s < simCount; s++) {
+      if (col[s] > 0) solvent++;
+    }
+    survivalByYear[yi] = solvent;
+  }
+
+  // ── Earliest depletion year across all paths ──────────────────────────────
+  // The first year where any path hits zero — i.e. the worst-case onset.
+  let earliestDepletion = null;
+  for (let yi = 0; yi < numYears; yi++) {
+    if (survivalByYear[yi] < simCount) {
+      earliestDepletion = inputs.startYear + yi;
+      break;
+    }
+  }
+
   const result = {
     mode:             'montecarlo',
     simCount,
@@ -534,6 +558,8 @@ self.onmessage = function (e) {
     p90Portfolio:     Array.from(p90),
     successRate:      successCount / simCount,
     medianTotalTax:   Array.from(medTax),
+    survivalByYear:   Array.from(survivalByYear),
+    earliestDepletion,
     equityVol,
     inflationVol,
   };

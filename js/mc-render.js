@@ -9,11 +9,8 @@
  *
  * Public API:
  *   RetireMCRender.setResults(result, meanInflation)
- *     — store result from mc-engine.js + mean inflation rate (decimal)
  *   RetireMCRender.render()
- *     — paint narrative (real or nominal per _useReal flag)
  *   RetireMCRender.setReal(bool)
- *     — switch real/nominal and re-render
  */
 
 (function () {
@@ -21,7 +18,6 @@
 
   const D = window.RetireData;
 
-  // ── Formatters ────────────────────────────────────────────────────────────
   function fmt(n) {
     if (D && D.formatMoney) return D.formatMoney(n);
     return '£' + Math.round(n).toLocaleString('en-GB');
@@ -33,67 +29,57 @@
 
   // ── State ─────────────────────────────────────────────────────────────────
   let _result        = null;
-  let _meanInflation = 0.025; // overwritten by setResults
-  let _useReal       = true;  // default real, matching other charts
+  let _meanInflation = 0.025;
+  let _useReal       = true;
 
   // ── Deflation ─────────────────────────────────────────────────────────────
-  // Real = Nominal / (1 + meanInflation)^yearIndex
-  function _deflate(nominalValue, yearIndex) {
-    if (!_useReal) return nominalValue;
-    return nominalValue / Math.pow(1 + _meanInflation, yearIndex);
+  function _deflate(v, i) {
+    return _useReal ? v / Math.pow(1 + _meanInflation, i) : v;
   }
+  function _deflateArr(arr) { return arr.map((v, i) => _deflate(v, i)); }
 
-  function _deflateArr(arr) {
-    return arr.map((v, i) => _deflate(v, i));
-  }
-
-  // ── Public: store result ──────────────────────────────────────────────────
+  // ── Public API ────────────────────────────────────────────────────────────
   function setResults(result, meanInflation) {
     _result        = result;
     _meanInflation = (typeof meanInflation === 'number' && !isNaN(meanInflation))
-      ? meanInflation
-      : 0.025;
+      ? meanInflation : 0.025;
   }
 
-  // ── Public: toggle real/nominal and re-render ─────────────────────────────
   function setReal(useReal) {
     _useReal = useReal;
     render();
   }
 
-  // ── Public: render ────────────────────────────────────────────────────────
   function render() {
     if (!_result) return;
     _syncToggleButtons();
     _renderNarrative();
   }
 
-  // ── Sync toggle button active states ─────────────────────────────────────
   function _syncToggleButtons() {
     document.querySelectorAll('[data-action="mc-real-on"],[data-action="mc-real-off"]')
       .forEach(b => b.classList.remove('is-active'));
-    const activeAction = _useReal ? 'mc-real-on' : 'mc-real-off';
-    document.querySelectorAll(`[data-action="${activeAction}"]`)
+    document.querySelectorAll(`[data-action="${_useReal ? 'mc-real-on' : 'mc-real-off'}"]`)
       .forEach(b => b.classList.add('is-active'));
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // NARRATIVE REPORT
+  // NARRATIVE
   // ─────────────────────────────────────────────────────────────────────────
   function _renderNarrative() {
     const el = document.getElementById('mc-narrative');
     if (!el) return;
 
-    const r        = _result;
-    const lastIdx  = r.years.length - 1;
-    const lastYear = r.years[lastIdx];
+    const r         = _result;
+    const lastIdx   = r.years.length - 1;
+    const lastYear  = r.years[lastIdx];
     const modeLabel = _useReal ? 'real' : 'nominal';
 
-    // Deflated percentile series
     const p10 = _deflateArr(r.p10Portfolio);
+    const p25 = _deflateArr(r.p25Portfolio);
     const p50 = _deflateArr(r.p50Portfolio);
+    const p75 = _deflateArr(r.p75Portfolio);
     const p90 = _deflateArr(r.p90Portfolio);
-    const tax = _deflateArr(r.medianTotalTax);
 
     // Update sim count in subtitle
     const simCountEl = document.getElementById('mc-sim-count');
@@ -112,6 +98,18 @@
       arr.forEach((v, i) => { if (v > maxVal) { maxVal = v; maxIdx = i; } });
       return { value: maxVal, year: r.years[maxIdx] };
     }
+
+    // ── INTRO ─────────────────────────────────────────────────────────────
+    const introHTML = `
+      <section class="mc-section mc-section--intro">
+        <p>Your retirement plan has been stress-tested across 10,000 simulated
+        futures, each with randomly varying investment returns and inflation.
+        Unlike the single-path projection, this analysis shows the range of
+        outcomes your plan could face — from favourable markets to sustained
+        downturns. Use it to understand how resilient your plan is, where the
+        risks concentrate, and whether you have enough buffer to weather a poor
+        sequence of returns early in retirement.</p>
+      </section>`;
 
     // ── 1. VERDICT ────────────────────────────────────────────────────────
     const successPaths = Math.round(r.successRate * r.simCount);
@@ -153,17 +151,17 @@
         <p>${medianBody}</p>
       </section>`;
 
-    // ── 3. STRESS CASE (p10) ──────────────────────────────────────────────
+    // ── 3. STRESS CASE (10th percentile) ──────────────────────────────────
     const p10Depletes = depletionYear(p10);
     let stressBody;
     if (p10Depletes) {
       const yearsEarly = lastYear - p10Depletes;
-      stressBody = `In the stress case (bottom 10% of outcomes), the portfolio
-        runs out by ${p10Depletes} — ${yearsEarly} year${yearsEarly !== 1 ? 's' : ''}
-        before the end of the projection. This scenario typically reflects a
-        combination of poor early returns and elevated inflation.`;
+      stressBody = `In the bottom 10% of outcomes, the portfolio runs out by
+        ${p10Depletes} — ${yearsEarly} year${yearsEarly !== 1 ? 's' : ''} before
+        the end of the projection. This scenario typically reflects a combination
+        of poor early returns and elevated inflation.`;
     } else {
-      stressBody = `In a poor returns environment (bottom 10%), your portfolio
+      stressBody = `In a poor returns environment (10th percentile), your portfolio
         retains ${fmt(p10[lastIdx])} by ${lastYear} (${modeLabel} terms). While
         significantly below the median, the plan remains solvent throughout the
         projection under this stress scenario.`;
@@ -171,55 +169,92 @@
 
     const stressHTML = `
       <section class="mc-section">
-        <h4 class="mc-section-heading">Stress case (p10)</h4>
+        <h4 class="mc-section-heading">10th percentile — stress case</h4>
         <p>${stressBody}</p>
       </section>`;
 
-    // ── 4. OPTIMISTIC CASE (p90) ──────────────────────────────────────────
+    // ── 4. OPTIMISTIC CASE (90th percentile) ──────────────────────────────
     const p90Final   = p90[lastIdx];
     const legacyNote = p90Final > 500_000
       ? ' This would leave meaningful wealth to pass on or deploy in later life.'
       : '';
+
     const optimisticHTML = `
       <section class="mc-section">
-        <h4 class="mc-section-heading">Optimistic case (p90)</h4>
-        <p>In a favourable environment (top 10% of outcomes), your portfolio
-        reaches ${fmt(p90Final)} by ${lastYear} (${modeLabel} terms).${legacyNote}</p>
+        <h4 class="mc-section-heading">90th percentile — optimistic case</h4>
+        <p>In a favourable environment (90th percentile), your portfolio reaches
+        ${fmt(p90Final)} by ${lastYear} (${modeLabel} terms).${legacyNote}</p>
       </section>`;
 
-    // ── 5. TAX DRAG ───────────────────────────────────────────────────────
-    const nonZeroTax = tax.filter(v => v > 0);
-    const avgTax     = nonZeroTax.length
-      ? nonZeroTax.reduce((s, v) => s + v, 0) / nonZeroTax.length
-      : 0;
-    const taxPeak     = peak(tax);
-    const taxPeakYear = taxPeak.value > 0 ? taxPeak.year : null;
+    // ── 5. INTERQUARTILE RANGE ────────────────────────────────────────────
+    const p25Final = p25[lastIdx];
+    const p75Final = p75[lastIdx];
+    const iqrHTML = `
+      <section class="mc-section">
+        <h4 class="mc-section-heading">Middle 50% of outcomes</h4>
+        <p>In the central half of all simulated paths, your portfolio finishes
+        between ${fmt(p25Final)} (25th percentile) and ${fmt(p75Final)}
+        (75th percentile) by ${lastYear} (${modeLabel} terms). A tight range
+        indicates lower dispersion risk; a wide range reflects sensitivity to
+        return sequence.${
+          (p75Final - p25Final) / Math.max(p50[lastIdx], 1) > 1.5
+            ? ' The spread here is wide — your outcome is highly sensitive to which sequence of returns materialises early in retirement.'
+            : ''
+        }</p>
+      </section>`;
 
-    let taxBody;
-    if (avgTax < 100) {
-      taxBody = `Across the median path, your household pays negligible income
-        tax — the withdrawal strategy keeps income within tax-free allowances
-        for most of the projection.`;
-    } else {
-      const peakClause = taxPeakYear
-        ? ` Tax drag peaks at ${fmt(taxPeak.value)}/year around ${taxPeakYear}, principally
-            reflecting the period of heaviest pension withdrawals.`
-        : '';
-      taxBody = `Across the median path, your household pays an average of
-        ${fmt(avgTax)}/year in income tax, principally on pension withdrawals.${peakClause}`;
+    // ── 6. EARLIEST DEPLETION ─────────────────────────────────────────────
+    let earliestHTML = '';
+    if (r.earliestDepletion) {
+      const yearsIn = r.earliestDepletion - r.years[0];
+      earliestHTML = `
+        <section class="mc-section">
+          <h4 class="mc-section-heading">Earliest depletion</h4>
+          <p>In the worst-case paths, funds could be exhausted as early as
+          ${r.earliestDepletion} — just ${yearsIn} year${yearsIn !== 1 ? 's' : ''}
+          into the projection. This typically occurs when a severe market downturn
+          coincides with high spending in the early years of retirement.</p>
+        </section>`;
     }
 
-    const taxHTML = `
-      <section class="mc-section">
-        <h4 class="mc-section-heading">Tax drag</h4>
-        <p>${taxBody}</p>
-      </section>`;
+    // ── 7. RUIN PROBABILITY BY DECADE ────────────────────────────────────
+    let decadeRows = '';
+    if (r.survivalByYear && r.years) {
+      // Pick one year per decade that falls within the projection
+      const decades = [2030, 2040, 2050, 2060, 2070].filter(
+        y => y >= r.years[0] && y <= lastYear
+      );
+      decadeRows = decades.map(decadeYear => {
+        const yi = r.years.indexOf(decadeYear);
+        if (yi === -1) return '';
+        const survivalRate = r.survivalByYear[yi] / r.simCount;
+        const colour =
+          survivalRate >= 0.95 ? 'var(--color-success, #16a34a)' :
+          survivalRate >= 0.80 ? 'var(--color-warn,    #d97706)' :
+                                 'var(--color-danger,  #dc2626)';
+        return `<div class="mc-decade-row">
+          <span class="mc-decade-row__year">${decadeYear}</span>
+          <span class="mc-decade-row__bar-wrap">
+            <span class="mc-decade-row__bar" style="width:${(survivalRate * 100).toFixed(1)}%;background:${colour}"></span>
+          </span>
+          <span class="mc-decade-row__pct" style="color:${colour}">${fmtPct(survivalRate)}</span>
+        </div>`;
+      }).join('');
+    }
 
-    // ── 6. ASSUMPTIONS NOTE ───────────────────────────────────────────────
-    const eVolRaw = r.equityVol  != null ? r.equityVol  : 0.16;
-    const iVolRaw = r.inflationVol != null ? r.inflationVol : 0.015;
-    const eVol = (eVolRaw * 100).toFixed(0);
-    const iVol = (iVolRaw * 100).toFixed(1);
+    const ruinHTML = decadeRows ? `
+      <section class="mc-section">
+        <h4 class="mc-section-heading">Portfolio survival by year</h4>
+        <p style="margin-bottom:12px">Percentage of the ${r.simCount.toLocaleString('en-GB')} simulated paths
+        where the portfolio remains above zero at each point in time.</p>
+        <div class="mc-decade-chart">${decadeRows}</div>
+      </section>` : '';
+
+    // ── 8. ASSUMPTIONS NOTE ───────────────────────────────────────────────
+    const eVolRaw  = r.equityVol    != null ? r.equityVol    : 0.16;
+    const iVolRaw  = r.inflationVol != null ? r.inflationVol : 0.015;
+    const eVol     = (eVolRaw * 100).toFixed(0);
+    const iVol     = (iVolRaw * 100).toFixed(1);
     const volLabel =
       eVolRaw >= 0.18 ? 'an aggressive set of assumptions reflecting very high uncertainty' :
       eVolRaw >= 0.14 ? 'a cautious set of assumptions reflecting elevated uncertainty in both markets and inflation' :
@@ -236,10 +271,10 @@
         All values shown in ${modeLabel} terms.</p>
       </section>`;
 
-    el.innerHTML = verdictHTML + medianHTML + stressHTML + optimisticHTML + taxHTML + assumHTML;
+    el.innerHTML = introHTML + verdictHTML + medianHTML + stressHTML +
+                   optimisticHTML + iqrHTML + earliestHTML + ruinHTML + assumHTML;
   }
 
-  // ── Register global ───────────────────────────────────────────────────────
   window.RetireMCRender = { setResults, render, setReal };
 
 })();
