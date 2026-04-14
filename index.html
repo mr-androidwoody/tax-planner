@@ -8,7 +8,6 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <script src="js/tax-core.js"></script>
   <link href="css/styles.css" rel="stylesheet"/>
   <link href="css/home-btn.css" rel="stylesheet"/>
 </head>
@@ -225,7 +224,7 @@
               <span class="wrapper-val" id="wt-ISA">£0</span>
             </div>
             <div class="wrapper-row">
-              <span class="wrapper-name">SIPP</span>
+              <span class="wrapper-name">SIPP/WPP</span>
               <span class="wrapper-val" id="wt-SIPP">£0</span>
             </div>
             <div class="wrapper-row">
@@ -253,11 +252,25 @@
         <div class="accounts-toolbar">
 
           <div class="accounts-toolbar-top">
-            <h2>Accounts</h2>
-            <p>
-              Add the accounts you hold, their current values, and how they're invested.
-            </p>
+            <div class="accounts-toolbar-top__left">
+              <div class="accounts-toolbar-top__title-row">
+                <h2>Accounts</h2>
+                <button class="chart-insight-btn" id="acct-help-btn" aria-label="Account field help"
+                  onclick="(function(btn){
+                    var pane = document.getElementById('acct-help-pane');
+                    var open = pane.style.display !== 'none';
+                    pane.style.display = open ? 'none' : 'block';
+                    btn.classList.toggle('is-active', !open);
+                  })(this)">
+                  <span class="chart-insight-btn__icon">ⓘ</span>
+                  <span class="chart-insight-btn__label">Help</span>
+                </button>
+              </div>
+              <p>Add the accounts you hold, their current values, and how they're invested.</p>
+            </div>
           </div>
+
+          <!-- Help pane — fixed centre of page -->
 
           <div class="accounts-toolbar-actions">
 
@@ -408,14 +421,14 @@
                 <div class="assump-info-block">
                   <p class="assump-section__label" data-p1>Person 1</p>
                   <div class="assump-info-row--boxed"><span class="assump-info-key">Cash</span><span class="assump-info-val" id="ai-p1cash">–</span></div>
-                  <div class="assump-info-row--boxed"><span class="assump-info-key">SIPP</span><span class="assump-info-val" id="ai-p1sipp">–</span></div>
+                  <div class="assump-info-row--boxed"><span class="assump-info-key">SIPP/WPP</span><span class="assump-info-val" id="ai-p1sipp">–</span></div>
                   <div class="assump-info-row--boxed"><span class="assump-info-key">ISA</span><span class="assump-info-val" id="ai-p1isa">–</span></div>
                   <div class="assump-info-row--boxed"><span class="assump-info-key">GIA</span><span class="assump-info-val" id="ai-p1gia">–</span></div>
                 </div>
                 <div class="assump-info-block p2-field">
                   <p class="assump-section__label" data-p2>Person 2</p>
                   <div class="assump-info-row--boxed"><span class="assump-info-key">Cash</span><span class="assump-info-val" id="ai-p2cash">–</span></div>
-                  <div class="assump-info-row--boxed"><span class="assump-info-key">SIPP</span><span class="assump-info-val" id="ai-p2sipp">–</span></div>
+                  <div class="assump-info-row--boxed"><span class="assump-info-key">SIPP/WPP</span><span class="assump-info-val" id="ai-p2sipp">–</span></div>
                   <div class="assump-info-row--boxed"><span class="assump-info-key">ISA</span><span class="assump-info-val" id="ai-p2isa">–</span></div>
                   <div class="assump-info-row--boxed"><span class="assump-info-key">GIA</span><span class="assump-info-val" id="ai-p2gia">–</span></div>
                 </div>
@@ -556,10 +569,9 @@
                   <input type="radio" name="thresholdMode" id="thresholdAlways" value="always"> <strong>Always uprated</strong> <span class="assump-inline-field__hint">with inflation</span>
                 </label>
               </div>
-              <div class="hint" style="margin-top:6px">Uprating affects the Personal Allowance, basic and higher-rate thresholds, and the CGT annual exempt amount.</div>
             </div>
             <div class="assump-section">
-              <p class="assump-section__label"><span class="assump-tooltip-anchor">GIA dividends<span class="assump-tooltip">The annual dividend yield on GIA equity holdings. Treated as taxable income each year — not reinvested. Drawn before any wrapper withdrawals are made. Note: currently assumes all GIA dividends are distributed. Accumulating funds that reinvest dividends into NAV are not yet modelled separately.</span></span></p>
+              <p class="assump-section__label"><span class="assump-tooltip-anchor">GIA dividends<span class="assump-tooltip">Pay out: dividends are taxable income each year, always paid regardless of whether they breach the spending target — any excess goes to cash. <br><br>Reinvest: dividends reinvested avoid immediate tax triggers and keep the entire balance compounding.</span></span></p>
               <div class="assump-section__body">
                 <div class="assump-inline-field">
                   <div class="assump-inline-field__input">
@@ -569,7 +581,15 @@
                       <button class="stepper-btn" data-step-for="dividendYield" data-step-direction="-1" type="button">&#x25BC;</button>
                     </div>
                   </div>
-                  <span class="assump-inline-field__hint">Dividends treated as taxable income each year (not reinvested).</span>
+                  <span class="assump-inline-field__hint">% annual dividend yield on GIA balance</span>
+                </div>
+                <div class="assump-radio-group" style="margin-top:8px">
+                  <label class="assump-radio-label">
+                    <input type="radio" name="dividendMode" id="dividendPayout" value="payout" checked> <strong>Pay out</strong> <span class="assump-inline-field__hint">taxable income each year</span>
+                  </label>
+                  <label class="assump-radio-label">
+                    <input type="radio" name="dividendMode" id="dividendReinvest" value="reinvest"> <strong>Reinvest</strong> <span class="assump-inline-field__hint">compound inside GIA (accumulation)</span>
+                  </label>
                 </div>
               </div>
             </div>
@@ -596,15 +616,15 @@
               <div class="assump-section__body">
                 <p class="assump-section__label" data-p1 style="margin-bottom:4px">Person 1</p>
                 <div class="order-row">
-                  <select id="p1Order1"><option value="GIA">GIA</option><option value="SIPP">SIPP</option><option value="ISA">ISA</option></select>
-                  <select id="p1Order2"><option value="SIPP">SIPP</option><option value="GIA">GIA</option><option value="ISA">ISA</option></select>
-                  <select id="p1Order3"><option value="ISA">ISA</option><option value="GIA">GIA</option><option value="SIPP">SIPP</option></select>
+                  <select id="p1Order1"><option value="GIA">GIA</option><option value="SIPP">SIPP/WPP</option><option value="ISA">ISA</option></select>
+                  <select id="p1Order2"><option value="SIPP">SIPP/WPP</option><option value="GIA">GIA</option><option value="ISA">ISA</option></select>
+                  <select id="p1Order3"><option value="ISA">ISA</option><option value="GIA">GIA</option><option value="SIPP">SIPP/WPP</option></select>
                 </div>
                 <p class="assump-section__label p2-field" data-p2 style="margin-top:8px;margin-bottom:4px">Person 2</p>
                 <div class="order-row p2-field">
-                  <select id="p2Order1"><option value="GIA">GIA</option><option value="SIPP">SIPP</option><option value="ISA">ISA</option></select>
-                  <select id="p2Order2"><option value="SIPP">SIPP</option><option value="GIA">GIA</option><option value="ISA">ISA</option></select>
-                  <select id="p2Order3"><option value="ISA">ISA</option><option value="GIA">GIA</option><option value="SIPP">SIPP</option></select>
+                  <select id="p2Order1"><option value="GIA">GIA</option><option value="SIPP">SIPP/WPP</option><option value="ISA">ISA</option></select>
+                  <select id="p2Order2"><option value="SIPP">SIPP/WPP</option><option value="GIA">GIA</option><option value="ISA">ISA</option></select>
+                  <select id="p2Order3"><option value="ISA">ISA</option><option value="GIA">GIA</option><option value="SIPP">SIPP/WPP</option></select>
                 </div>
               </div>
             </div>
@@ -707,7 +727,10 @@
           <div id="incomeLegend" class="sidebar-legend"></div>
         </div>
         <div class="chart-canvas-area">
-          <h2>Sources of income</h2>
+          <div class="chart-canvas-area__header">
+            <h2>Sources of income</h2>
+            <div id="income-insight-anchor"></div>
+          </div>
           <div class="chart-wrap"><canvas id="incomeChart"></canvas></div>
         </div>
       </div>
@@ -794,7 +817,10 @@
           <div id="wealthLegend" class="sidebar-legend"></div>
         </div>
         <div class="chart-canvas-area">
-          <h2>Wealth by type</h2>
+          <div class="chart-canvas-area__header">
+            <h2>Wealth by type</h2>
+            <div id="wealth-insight-anchor"></div>
+          </div>
           <div class="chart-wrap"><canvas id="wealthChart"></canvas></div>
         </div>
       </div>
@@ -828,9 +854,6 @@
         </div>
       </div>
 
-      <!-- Alerts — below the whole tab panel -->
-      <div id="alerts-container" class="alerts"></div>
-
     </div><!-- /#tab-results -->
 
   </div><!-- /.page-content -->
@@ -841,10 +864,115 @@
 <script src="js/calculator.js"></script>
 <script src="js/render.js"></script>
 <script src="js/engine.js"></script>
+<script src="js/calc-render-logic.js"></script>
 <script src="js/calc-render.js"></script>
 <script src="js/excel-loader.js"></script>
 <script src="js/tabs.js"></script>
 <script src="js/app.js"></script>
+
+    <!-- Account help pane — placed at body level so fixed positioning is not broken by ancestor transforms -->
+    <div id="acct-help-pane" class="chart-insight-pane acct-help-pane" style="display:none">
+      <div class="chart-insight-pane__header">
+        <span class="chart-insight-pane__title">Setting up your accounts</span>
+        <button class="chart-insight-pane__close" aria-label="Close"
+          onclick="document.getElementById('acct-help-pane').style.display='none';document.getElementById('acct-help-btn').classList.remove('is-active')">✕</button>
+      </div>
+    
+      <div class="chart-insight-pane__body">
+        <p class="chart-insight-note" style="margin-top:0">
+          Each row represents a single account or investment wrapper. Add one row per account — for example, a Vanguard ISA, a workplace pension, and a trading account would each be separate rows.
+        </p>
+    
+        <!-- Wrapper -->
+        <div class="chart-insight-group">
+          <div class="chart-insight-group__heading">Wrapper</div>
+          <div class="chart-insight-summary">
+            The tax wrapper this account sits in. ISAs are tax-free. SIPP/WPPs are taxed as income on withdrawal (with 25% typically tax-free). GIAs are subject to dividend tax and CGT. Cash accounts earn interest within their structure.
+          </div>
+        </div>
+    
+        <!-- Individual wrapper types (separate, not nested) -->
+        <div class="chart-insight-group">
+          <div class="chart-insight-group__heading">SIPP/Workplace pension</div>
+          <div class="chart-insight-summary">
+            Pension wrappers. Contributions receive tax relief. Withdrawals are typically 25% tax-free and 75% taxed as income. Access is usually restricted until pension age.
+          </div>
+        </div>
+    
+        <div class="chart-insight-group">
+          <div class="chart-insight-group__heading">ISA (Stocks & Shares)</div>
+          <div class="chart-insight-summary">
+            Fully tax-free wrapper. No tax on income or gains, and no tax on withdrawals. Annual contribution limits apply.
+          </div>
+        </div>
+    
+        <div class="chart-insight-group">
+          <div class="chart-insight-group__heading">Cash ISA</div>
+          <div class="chart-insight-summary">
+            Tax-free cash savings. Interest is not taxed. Typically used for short-term savings or cash buffers.
+          </div>
+        </div>
+    
+        <div class="chart-insight-group">
+          <div class="chart-insight-group__heading">GIA (General Investment Account)</div>
+          <div class="chart-insight-summary">
+            No tax shelter. Dividends, interest, and capital gains are taxable, with allowances available. Fully flexible access.
+          </div>
+        </div>
+    
+        <div class="chart-insight-group">
+          <div class="chart-insight-group__heading">Cash</div>
+          <div class="chart-insight-summary">
+            Standard cash holdings used for liquidity, spending, or short-term reserves rather than long-term growth.
+          </div>
+        </div>
+    
+        <!-- Cashlike -->
+        <div class="chart-insight-group">
+          <div class="chart-insight-group__heading">Cashlike</div>
+          <div class="chart-insight-summary">
+            Low-risk, interest-bearing assets such as money market funds. These sit between cash and bonds — typically offering modest returns with low volatility. Often used as a cash buffer within an investment portfolio.
+          </div>
+        </div>
+    
+        <div class="chart-insight-group">
+          <div class="chart-insight-group__heading">Value (£)</div>
+          <div class="chart-insight-summary">
+            The current market value of this account. This is the starting balance the engine uses — enter what it's worth right now.
+          </div>
+        </div>
+    
+        <div class="chart-insight-group">
+          <div class="chart-insight-group__heading">Equities % / Bonds % / Cashlike %</div>
+          <div class="chart-insight-summary">
+            How this account is invested. Equities drive growth, bonds provide stability, cashlike assets sit between the two. These should add up to 100% along with Cash %.
+          </div>
+        </div>
+    
+        <div class="chart-insight-group">
+          <div class="chart-insight-group__heading">Cash %</div>
+          <div class="chart-insight-summary">
+            The proportion held as uninvested cash. Cash earns no investment return — keep this low unless the account is genuinely held as cash.
+          </div>
+        </div>
+    
+        <div class="chart-insight-group">
+          <div class="chart-insight-group__heading">Rate % AER</div>
+          <div class="chart-insight-summary">
+            For interest-bearing holdings such as savings or cashlike assets. Sets the annual rate the engine uses to calculate income. Leave blank for purely invested accounts.
+          </div>
+        </div>
+    
+        <div class="chart-insight-group">
+          <div class="chart-insight-group__heading">Draw £/mo</div>
+          <div class="chart-insight-summary">
+            A fixed monthly amount drawn from this account before other wrappers are touched. Useful for modelling a regular income stream from a cash or cashlike pot. Leave blank to let the engine manage withdrawals automatically.
+          </div>
+        </div>
+    
+      </div>
+    </div>
+</div>
 
 </body>
 </html>
