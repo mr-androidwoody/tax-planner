@@ -720,6 +720,7 @@
     const tabBtn = document.querySelector('.results-tab[data-results-tab="risk"]');
     if (!tabBtn) return;
     tabBtn.classList.toggle('results-tab--risk-ready', ready);
+    if (ready) tabBtn.classList.remove('results-tab--hidden');
   }
 
   async function runRisk() {
