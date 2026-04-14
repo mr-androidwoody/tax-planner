@@ -1,25 +1,15 @@
 /**
  * mc-render.js
  *
- * Renders Monte Carlo results into the Outcomes tab.
+ * Renders Monte Carlo results into the Risk Outcomes sub-tab.
  * Registers window.RetireMCRender.
  *
  * Depends on:
  *   window.RetireData  — for D.formatMoney
- *   Chart.js           — already loaded globally
  *
  * Public API:
  *   RetireMCRender.setResults(result)  — store result from mc-engine.js
- *   RetireMCRender.render()            — paint stat cards + both charts
- *
- * Chart anatomy:
- *   Fan chart  (#mcFanChart) — line chart with five filled bands:
- *     outer band  p10–p90  (lightest fill)
- *     inner band  p25–p75  (medium fill)
- *     median line p50      (solid line, no fill)
- *   Achieved via Chart.js 'line' type with 'fill' referencing dataset indices.
- *
- *   Tax chart (#mcTaxChart) — bar chart of medianTotalTax per year.
+ *   RetireMCRender.render()            — paint stat cards + narrative report
  */
 
 (function () {
@@ -27,9 +17,7 @@
 
   const D = window.RetireData;
 
-  // ── Formatter ─────────────────────────────────────────────────────────────
-  // Graceful fallback if RetireData isn't loaded yet (shouldn't happen in
-  // normal load order, but guards against test harnesses).
+  // ── Formatters ────────────────────────────────────────────────────────────
   function fmt(n) {
     if (D && D.formatMoney) return D.formatMoney(n);
     return '£' + Math.round(n).toLocaleString('en-GB');
@@ -40,16 +28,7 @@
   }
 
   // ── State ─────────────────────────────────────────────────────────────────
-  let _result      = null;
-  let _fanChart    = null;
-  let _taxChart    = null;
-
-  // ── Colour tokens — consistent with the app's blue/red palette ───────────
-  const BLUE      = 'rgb(59,130,246)';
-  const BLUE_25   = 'rgba(59,130,246,0.25)';
-  const BLUE_15   = 'rgba(59,130,246,0.15)';
-  const RED_70    = 'rgba(239,68,68,0.70)';
-  const RED_90    = 'rgba(239,68,68,0.90)';
+  let _result = null;
 
   // ── Public: store result ──────────────────────────────────────────────────
   function setResults(result) {
@@ -60,8 +39,7 @@
   function render() {
     if (!_result) return;
     _renderStatCards();
-    _renderFanChart();
-    _renderTaxChart();
+    _renderNarrative();
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -71,7 +49,7 @@
     const r    = _result;
     const last = r.years.length - 1;
 
-    _setText('mc-sim-count',   r.simCount.toLocaleString('en-GB'));
+    _setText('mc-sim-count',    r.simCount.toLocaleString('en-GB'));
     _setText('mc-success-rate', fmtPct(r.successRate));
     _setText('mc-median-final', fmt(r.p50Portfolio[last]));
     _setText('mc-p10-final',    fmt(r.p10Portfolio[last]));
@@ -93,187 +71,153 @@
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // FAN CHART
-  // Five datasets in draw order so 'fill' references work correctly:
-  //   [0] p10  — lower bound of outer band; filled TO [4] p90
-  //   [1] p25  — lower bound of inner band; filled TO [3] p75
-  //   [2] p50  — median line (no fill)
-  //   [3] p75  — upper bound of inner band; filled TO [1] p25
-  //   [4] p90  — upper bound of outer band; filled TO [0] p10
-  //
-  // Chart.js 'fill' with a dataset index fills the area between that dataset
-  // and the referenced one.  We stack fills from the outside in so the
-  // lighter outer band sits behind the darker inner band.
+  // NARRATIVE REPORT
+  // Six labelled sections injected into #mc-narrative.
   // ─────────────────────────────────────────────────────────────────────────
-  function _renderFanChart() {
-    const r      = _result;
-    // Values in £k so the y-axis labels stay compact (matching existing charts)
-    const toK    = arr => arr.map(v => Math.round(v / 1000));
-    const labels = r.years.map(String);
+  function _renderNarrative() {
+    const el = document.getElementById('mc-narrative');
+    if (!el) return;
 
-    const datasets = [
-      // [0] p10 — paired with [4] p90 for outer fill
-      {
-        label:           'p10',
-        data:            toK(r.p10Portfolio),
-        borderColor:     'transparent',
-        backgroundColor: BLUE_15,
-        fill:            '+4',      // fill up to dataset index+4 (p90)
-        pointRadius:     0,
-        tension:         0.3,
-        order:           5,
-      },
-      // [1] p25 — paired with [3] p75 for inner fill
-      {
-        label:           'p25',
-        data:            toK(r.p25Portfolio),
-        borderColor:     'transparent',
-        backgroundColor: BLUE_25,
-        fill:            '+2',      // fill up to dataset index+2 (p75)
-        pointRadius:     0,
-        tension:         0.3,
-        order:           4,
-      },
-      // [2] p50 — median line, no fill
-      {
-        label:           'Median (p50)',
-        data:            toK(r.p50Portfolio),
-        borderColor:     BLUE,
-        backgroundColor: 'transparent',
-        fill:            false,
-        pointRadius:     0,
-        borderWidth:     2,
-        tension:         0.3,
-        order:           1,
-      },
-      // [3] p75 — upper inner boundary (no visible border, fill handled by p25)
-      {
-        label:           'p75',
-        data:            toK(r.p75Portfolio),
-        borderColor:     'transparent',
-        backgroundColor: BLUE_25,
-        fill:            false,
-        pointRadius:     0,
-        tension:         0.3,
-        order:           3,
-      },
-      // [4] p90 — upper outer boundary (no visible border, fill handled by p10)
-      {
-        label:           'p90',
-        data:            toK(r.p90Portfolio),
-        borderColor:     'transparent',
-        backgroundColor: BLUE_15,
-        fill:            false,
-        pointRadius:     0,
-        tension:         0.3,
-        order:           2,
-      },
-    ];
+    const r         = _result;
+    const lastIdx   = r.years.length - 1;
+    const lastYear  = r.years[lastIdx];
 
-    const ctx = document.getElementById('mcFanChart')?.getContext('2d');
-    if (!ctx) return;
-    if (_fanChart) _fanChart.destroy();
+    // ── Helper: find first year a percentile array hits zero (depletion) ──
+    function depletionYear(arr) {
+      for (let i = 0; i < arr.length; i++) {
+        if (arr[i] <= 0) return r.years[i];
+      }
+      return null;
+    }
 
-    _fanChart = new Chart(ctx, {
-      type: 'line',
-      data: { labels, datasets },
-      options: {
-        responsive:          true,
-        maintainAspectRatio: false,
-        interaction: {
-          mode:      'index',
-          intersect: false,
-        },
-        plugins: {
-          legend: { display: false },
-          tooltip: {
-            filter: item => ['p10', 'Median (p50)', 'p90'].includes(item.dataset.label),
-            callbacks: {
-              label: ctx => {
-                const val = (ctx.parsed.y || 0) * 1000;
-                return `${ctx.dataset.label}: ${fmt(val)}`;
-              },
-            },
-          },
-        },
-        scales: {
-          x: {
-            ticks: { font: { size: 10 }, maxRotation: 45 },
-          },
-          y: {
-            title: {
-              display: true,
-              text:    '£k (nominal)',
-              font:    { size: 11 },
-            },
-            ticks: {
-              font:     { size: 11 },
-              callback: v => v + 'k',
-            },
-            min: 0,
-          },
-        },
-      },
-    });
-  }
+    // ── Helper: find peak value and year in an array ──────────────────────
+    function peak(arr) {
+      let maxVal = -Infinity, maxIdx = 0;
+      arr.forEach((v, i) => { if (v > maxVal) { maxVal = v; maxIdx = i; } });
+      return { value: maxVal, year: r.years[maxIdx] };
+    }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // MEDIAN TAX BAR CHART
-  // ─────────────────────────────────────────────────────────────────────────
-  function _renderTaxChart() {
-    const r      = _result;
-    const toK    = arr => arr.map(v => Math.round(v / 1000));
-    const labels = r.years.map(String);
+    // ── 1. VERDICT ────────────────────────────────────────────────────────
+    const successPaths = Math.round(r.successRate * r.simCount);
+    const verdictClass =
+      r.successRate >= 0.90 ? 'mc-verdict--strong' :
+      r.successRate >= 0.75 ? 'mc-verdict--moderate' :
+                              'mc-verdict--weak';
+    const verdictLabel =
+      r.successRate >= 0.90 ? 'This is a strong result.' :
+      r.successRate >= 0.75 ? 'This is a moderate result — some vulnerability to poor sequences.' :
+                              'This result warrants attention — a significant proportion of paths fail.';
 
-    const ctx = document.getElementById('mcTaxChart')?.getContext('2d');
-    if (!ctx) return;
-    if (_taxChart) _taxChart.destroy();
+    const verdictHTML = `
+      <section class="mc-section mc-verdict ${verdictClass}">
+        <h4 class="mc-section-heading">Verdict</h4>
+        <p>Your plan succeeds in ${successPaths.toLocaleString('en-GB')} of
+        ${r.simCount.toLocaleString('en-GB')} simulations
+        (${fmtPct(r.successRate)}). ${verdictLabel}</p>
+      </section>`;
 
-    _taxChart = new Chart(ctx, {
-      type: 'bar',
-      data: {
-        labels,
-        datasets: [{
-          label:           'Median tax paid',
-          data:            toK(r.medianTotalTax),
-          backgroundColor: RED_70,
-          hoverBackgroundColor: RED_90,
-          borderRadius:    2,
-        }],
-      },
-      options: {
-        responsive:          true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { display: false },
-          tooltip: {
-            callbacks: {
-              label: ctx => {
-                const val = (ctx.parsed.y || 0) * 1000;
-                return `Median tax: ${fmt(val)}`;
-              },
-            },
-          },
-        },
-        scales: {
-          x: {
-            ticks: { font: { size: 10 }, maxRotation: 45 },
-          },
-          y: {
-            title: {
-              display: true,
-              text:    '£k (nominal)',
-              font:    { size: 11 },
-            },
-            ticks: {
-              font:     { size: 11 },
-              callback: v => v + 'k',
-            },
-            min: 0,
-          },
-        },
-      },
-    });
+    // ── 2. MEDIAN OUTCOME ─────────────────────────────────────────────────
+    const p50Peak     = peak(r.p50Portfolio);
+    const p50Depletes = depletionYear(r.p50Portfolio);
+    let medianBody;
+    if (p50Depletes) {
+      const yearsEarly = lastYear - p50Depletes;
+      medianBody = `In the median scenario, the portfolio is exhausted by
+        ${p50Depletes} — ${yearsEarly} year${yearsEarly !== 1 ? 's' : ''} before
+        the end of the projection.`;
+    } else {
+      medianBody = `In the median scenario, your portfolio peaks at
+        ${fmt(p50Peak.value)} around ${p50Peak.year} and finishes at
+        ${fmt(r.p50Portfolio[lastIdx])} in ${lastYear}.`;
+    }
+
+    const medianHTML = `
+      <section class="mc-section">
+        <h4 class="mc-section-heading">Median outcome</h4>
+        <p>${medianBody}</p>
+      </section>`;
+
+    // ── 3. STRESS CASE (p10) ──────────────────────────────────────────────
+    const p10Depletes = depletionYear(r.p10Portfolio);
+    let stressBody;
+    if (p10Depletes) {
+      const yearsEarly = lastYear - p10Depletes;
+      stressBody = `In the stress case (bottom 10% of outcomes), the portfolio
+        runs out by ${p10Depletes} — ${yearsEarly} year${yearsEarly !== 1 ? 's' : ''}
+        before the end of the projection. This scenario typically reflects a
+        combination of poor early returns and elevated inflation.`;
+    } else {
+      stressBody = `In a poor returns environment (bottom 10%), your portfolio
+        retains ${fmt(r.p10Portfolio[lastIdx])} by ${lastYear}. While significantly
+        below the median, the plan remains solvent throughout the projection under
+        this stress scenario.`;
+    }
+
+    const stressHTML = `
+      <section class="mc-section">
+        <h4 class="mc-section-heading">Stress case (p10)</h4>
+        <p>${stressBody}</p>
+      </section>`;
+
+    // ── 4. OPTIMISTIC CASE (p90) ──────────────────────────────────────────
+    const p90Final    = r.p90Portfolio[lastIdx];
+    const legacyNote  = p90Final > 500_000
+      ? ' This would leave meaningful wealth to pass on or deploy in later life.'
+      : '';
+    const optimisticHTML = `
+      <section class="mc-section">
+        <h4 class="mc-section-heading">Optimistic case (p90)</h4>
+        <p>In a favourable environment (top 10% of outcomes), your portfolio
+        reaches ${fmt(p90Final)} by ${lastYear}.${legacyNote}</p>
+      </section>`;
+
+    // ── 5. TAX DRAG ───────────────────────────────────────────────────────
+    const nonZeroTax  = r.medianTotalTax.filter(v => v > 0);
+    const avgTax      = nonZeroTax.length
+      ? nonZeroTax.reduce((s, v) => s + v, 0) / nonZeroTax.length
+      : 0;
+    const taxPeak     = peak(r.medianTotalTax);
+    const taxPeakYear = taxPeak.value > 0 ? taxPeak.year : null;
+
+    let taxBody;
+    if (avgTax < 100) {
+      taxBody = `Across the median path, your household pays negligible income
+        tax — the withdrawal strategy keeps income within tax-free allowances
+        for most of the projection.`;
+    } else {
+      const peakClause = taxPeakYear
+        ? ` Tax drag peaks at ${fmt(taxPeak.value)}/year around ${taxPeakYear}, principally
+            reflecting the period of heaviest pension withdrawals.`
+        : '';
+      taxBody = `Across the median path, your household pays an average of
+        ${fmt(avgTax)}/year in income tax, principally on pension withdrawals.${peakClause}`;
+    }
+
+    const taxHTML = `
+      <section class="mc-section">
+        <h4 class="mc-section-heading">Tax drag</h4>
+        <p>${taxBody}</p>
+      </section>`;
+
+    // ── 6. ASSUMPTIONS NOTE ───────────────────────────────────────────────
+    const eVol = (r.equityVol * 100).toFixed(0);
+    const iVol = (r.inflationVol * 100).toFixed(1);
+    const volLabel =
+      r.equityVol >= 0.18 ? 'an aggressive set of assumptions reflecting very high uncertainty' :
+      r.equityVol >= 0.14 ? 'a cautious set of assumptions reflecting elevated uncertainty in both markets and inflation' :
+                            'a moderate set of assumptions broadly consistent with long-run historical ranges';
+
+    const assumHTML = `
+      <section class="mc-section mc-section--muted">
+        <h4 class="mc-section-heading">Assumptions</h4>
+        <p>This stress test uses ${eVol}% equity volatility and ${iVol}% inflation
+        volatility — ${volLabel}. Each of the
+        ${r.simCount.toLocaleString('en-GB')} paths independently samples annual
+        returns and inflation, compounding uncertainty across the full
+        ${r.years.length}-year projection.</p>
+      </section>`;
+
+    el.innerHTML = verdictHTML + medianHTML + stressHTML + optimisticHTML + taxHTML + assumHTML;
   }
 
   // ── Register global ───────────────────────────────────────────────────────

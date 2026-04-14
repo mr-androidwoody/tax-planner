@@ -736,8 +736,11 @@
         if (!MCR) throw new Error('RetireMCRender not loaded — check mc-render.js script tag.');
         MCR.setResults(result);
         MCR.render();
-        RetireTabs.switchTab('outcomes');
-        state.activeTab = 'outcomes';
+        RetireTabs.switchTab('results');
+        state.activeTab = 'results';
+        // Activate the Risk Outcomes sub-tab
+        const riskBtn = document.querySelector('.results-tab[data-results-tab="risk"]');
+        if (riskBtn) riskBtn.click();
 
       } else {
         // ── Deterministic path (unchanged) ───────────────────────────────
