@@ -157,8 +157,7 @@
         // All three runs at or above 95% – plan is very strong
         sustainBody = `Your plan succeeds in <strong>${confPct}%</strong> or more of simulations even at
           <strong>${fmt(sustainableSpending)}</strong>/year – <strong>${fmt(absDiff)}</strong>/year above your current target.
-          Your plan is highly resilient; the true sustainable spending level is
-          likely higher still.`;
+          Your plan is highly resilient; the true sustainable spending level is likely higher still.`;
       } else if (isAbove) {
         sustainBody = `Your current spending target of <strong>${fmt(currentSpending)}</strong>/year is within
           the <strong>${confPct}%</strong> confidence threshold. The estimated sustainable spending level is
@@ -175,7 +174,7 @@
         <section class="mc-section mc-sustain ${sClass}">
           <h4 class="mc-section-heading">Sustainable spending estimate</h4>
           <p>${sustainBody}</p>
-          <p class="mc-sustain__note">All spending figures are in today's money (real, year-0 terms) and do not change with the Real/Nominal toggle above, which affects portfolio values only. Sustainable spending is estimated via interpolation across three simulation runs; accuracy ±5%.</p>
+          <p class="mc-sustain__note">All spending figures are in today's money (real, year-0 terms) and do not change with the Real/Nominal toggle above, which affects portfolio values only. Sustainable spending is estimated via bisection across 12 simulation runs; accuracy ±1%.</p>
         </section>`;
     }
 

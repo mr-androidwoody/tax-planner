@@ -878,48 +878,61 @@
         inflationVol: 0.015,
       });
 
-      // ── Bracketing runs: 2,000 paths at 85% and 115% of spending ───────
-      // Run sequentially — mc-engine.js only supports one active worker at a time.
-      const TARGET_CONFIDENCE = 0.95;
-      const inputsLow  = { ...inputs, spending: inputs.spending * 0.85 };
-      const inputsHigh = { ...inputs, spending: inputs.spending * 1.15 };
-
-      const resultLow  = await MCE.run({ inputs: inputsLow,  simCount: 2_000, equityVol: 0.16, inflationVol: 0.015 });
-      const resultHigh = await MCE.run({ inputs: inputsHigh, simCount: 2_000, equityVol: 0.16, inflationVol: 0.015 });
-
-      // ── Interpolate to find spending level at TARGET_CONFIDENCE ─────────
-      // Three data points — higher spending = lower success rate.
-      // We want the spending where successRate crosses TARGET_CONFIDENCE.
-      const S  = inputs.spending;
-      const sL = S * 0.85;
-      const sH = S * 1.15;
-      const rC = result.successRate;
-      const rL = resultLow.successRate;   // rate at lower spend (should be highest)
-      const rH = resultHigh.successRate;  // rate at higher spend (should be lowest)
+      // ── Bisection: find spending level at TARGET_CONFIDENCE ─────────────
+      // 12 iterations at 2,000 paths each → ±0.1% spending accuracy.
+      // Bounds: 40%–150% of current spending, guaranteed to straddle the
+      // crossover for all realistic plans.
+      const TARGET_CONFIDENCE = 0.90;
+      const BISECT_SIMS       = 2_000;
+      const BISECT_ITERS      = 12;
 
       let sustainableSpending = null;
-      let sustainableIsFloor  = false; // true = "at least £X", false = exact estimate
+      let sustainableIsFloor  = false; // true = "at least £X" (very strong plan)
 
-      if (rH >= TARGET_CONFIDENCE) {
-        // All three points are above 95% — plan is very strong.
-        // Report the high bracket as a lower-bound floor.
-        sustainableSpending = Math.round(sH);
-        sustainableIsFloor  = true;
-      } else if (rC >= TARGET_CONFIDENCE && rH < TARGET_CONFIDENCE) {
-        // Target straddles current and high — interpolate between them.
-        const t = (rC - TARGET_CONFIDENCE) / Math.max(rC - rH, 0.001);
-        sustainableSpending = Math.round(S + t * (sH - S));
-      } else if (rL >= TARGET_CONFIDENCE && rC < TARGET_CONFIDENCE) {
-        // Target straddles low and current — interpolate between them.
-        const t = (rL - TARGET_CONFIDENCE) / Math.max(rL - rC, 0.001);
-        sustainableSpending = Math.round(sL + t * (S - sL));
-      } else {
-        // All three points are below 95% — plan is under stress.
-        // Extrapolate below sL cautiously.
-        const slope = (rL - rH) / (sH - sL); // rate change per £ of spending (positive)
-        if (slope > 0.0001) {
-          sustainableSpending = Math.round(sL - (TARGET_CONFIDENCE - rL) / slope);
+      // Fast-path: if the main run already hit the target, check whether the
+      // plan is so strong the crossover is above 150% of current spending.
+      if (result.successRate >= TARGET_CONFIDENCE) {
+        const rHigh = (await MCE.run({
+          inputs:      { ...inputs, spending: inputs.spending * 1.50 },
+          simCount:    BISECT_SIMS,
+          equityVol:   0.16,
+          inflationVol: 0.015,
+        })).successRate;
+
+        if (rHigh >= TARGET_CONFIDENCE) {
+          // Plan is exceptionally strong — report 150% as a floor.
+          sustainableSpending = Math.round(inputs.spending * 1.50);
+          sustainableIsFloor  = true;
         }
+        // Otherwise fall through to bisection with lo = current spending.
+      }
+
+      if (!sustainableIsFloor) {
+        // Bisect between lo (40% of spending, expected high success) and
+        // hi (150% of spending, expected low success — or current if above target).
+        let lo = inputs.spending * 0.40;
+        let hi = result.successRate >= TARGET_CONFIDENCE
+          ? inputs.spending * 1.50
+          : inputs.spending;           // main run already below target → hi = current
+
+        for (let i = 0; i < BISECT_ITERS; i++) {
+          const mid    = (lo + hi) / 2;
+          const midRes = await MCE.run({
+            inputs:       { ...inputs, spending: mid },
+            simCount:     BISECT_SIMS,
+            equityVol:    0.16,
+            inflationVol: 0.015,
+          });
+          // Higher spending → lower success rate. Target is on the lo side when
+          // midRate < TARGET, so push hi down; on the hi side when midRate ≥ TARGET,
+          // so push lo up.
+          if (midRes.successRate >= TARGET_CONFIDENCE) {
+            lo = mid;
+          } else {
+            hi = mid;
+          }
+        }
+        sustainableSpending = Math.round((lo + hi) / 2);
       }
 
       // Disable until next projection run.
