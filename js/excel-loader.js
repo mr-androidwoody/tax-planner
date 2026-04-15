@@ -295,157 +295,169 @@
 
   // ─────────────────────────────────────────────
   // TEMPLATE DOWNLOAD
-  // Generates a two-sheet .xlsx with headers,
-  // example rows, and a Notes column on each sheet.
+  // Generates a formatted two-sheet .xlsx.
+  // SheetJS CE does not support cell styles via
+  // aoa_to_sheet, so we build styled HTML tables
+  // and parse them — the only CE-compatible way
+  // to get background colours into the workbook.
   // ─────────────────────────────────────────────
   function downloadTemplate() {
+
+    // ── Style constants ──────────────────────────
+    const S = {
+      title:   'background:#1F3864;color:#ffffff;font-family:Arial;font-size:13pt;font-weight:bold;',
+      header:  'background:#2E75B6;color:#ffffff;font-family:Arial;font-size:9pt;font-weight:bold;text-align:center;',
+      section: 'background:#D6E4F0;color:#1F3864;font-family:Arial;font-size:9pt;font-weight:bold;',
+      input:   'background:#FFF2CC;font-family:Arial;font-size:9pt;',
+      body:    'background:#ffffff;font-family:Arial;font-size:9pt;',
+      note:    'background:#FAFAFA;color:#595959;font-family:Arial;font-size:8pt;font-style:italic;',
+      legend:  'background:#F2F2F2;color:#595959;font-family:Arial;font-size:8pt;font-style:italic;',
+    };
+
+    // ── Helper: td/th element string ─────────────
+    function td(content, style, tag) {
+      tag = tag || 'td';
+      return `<${tag} style="${style}">${content}</${tag}>`;
+    }
+
+    // ════════════════════════════════════════════
+    // ACCOUNTS SHEET
+    // ════════════════════════════════════════════
+    const acHeaders = [
+      'Account name', 'Wrapper', 'Owner', 'Value (£)',
+      'Equities %', 'Bonds %', 'Cash-like %', 'Cash %',
+      'Interest rate %', 'Monthly draw (£)', 'Notes',
+    ];
+
+    const acBlankRows = Array.from({ length: 10 }, () => `
+      <tr>
+        ${td('', S.input)}
+        ${td('', S.input)}
+        ${td('', S.input)}
+        ${td('', S.input)}
+        ${td('', S.input)}
+        ${td('', S.input)}
+        ${td('', S.input)}
+        ${td('', S.input)}
+        ${td('', S.input)}
+        ${td('', S.input)}
+        ${td('', S.body)}
+      </tr>`).join('');
+
+    const acLegend =
+      'Wrapper: ISA  |  SIPP (self-invested personal pension)  |  ' +
+      'SIPP/WP (workplace pension \u2014 same tax treatment)  |  GIA  |  Cash     ' +
+      'Owner: p1 or p2     ' +
+      'Allocation % columns must total 100 \u2014 leave ALL four blank for defaults ' +
+      '(100% equities for ISA / SIPP / GIA; 100% cash for Cash)';
+
+    const acHtml = `<table>
+      <tr>${td('Accounts \u2014 UK Retirement Tax Planner', S.title, 'th')}${Array(10).fill(td('', S.title, 'th')).join('')}</tr>
+      <tr>${acHeaders.map(h => td(h, S.header, 'th')).join('')}</tr>
+      ${acBlankRows}
+      <tr>${td(acLegend, S.legend)}${Array(10).fill(td('', S.legend)).join('')}</tr>
+    </table>`;
+
+    // ════════════════════════════════════════════
+    // PARAMETERS SHEET
+    // ════════════════════════════════════════════
+    function sectionRow(label) {
+      return `<tr>${td(label, S.section)}${td('', S.section)}${td('', S.section)}</tr>`;
+    }
+    function paramRow(label, note, required) {
+      const labelText = required ? `${label} *` : label;
+      return `<tr>
+        ${td(labelText, S.body)}
+        ${td('', S.input)}
+        ${td(note, S.note)}
+      </tr>`;
+    }
+
+    const paHtml = `<table>
+      <tr>${td('Parameters \u2014 UK Retirement Tax Planner', S.title, 'th')}${td('', S.title, 'th')}${td('', S.title, 'th')}</tr>
+      <tr>
+        ${td('Parameter', S.header, 'th')}
+        ${td('Value', S.header, 'th')}
+        ${td('Notes', S.header, 'th')}
+      </tr>
+
+      ${sectionRow('People')}
+      ${paramRow('Person 1 name',                                  'First name or any label, e.g. Woody',                                false)}
+      ${paramRow('Person 2 name',                                  'First name or any label, e.g. Heidi',                                false)}
+      ${paramRow('Person 1 \u2013 birth year',                     'Required. Four-digit year, e.g. 1,967',                             true)}
+      ${paramRow('Person 2 \u2013 birth year',                     'Required. Four-digit year, e.g. 1,966',                             true)}
+
+      ${sectionRow('Projection dates')}
+      ${paramRow('Start year',                                     'Required. First year of projection, e.g. 2,025',                    true)}
+      ${paramRow('End year',                                       'Required. Final year of projection, e.g. 2,055',                    true)}
+
+      ${sectionRow('Spending')}
+      ${paramRow('Annual household spending (\u00a3)',             'Required. Total net household spending per year, e.g. 45,000',      true)}
+      ${paramRow('Step-down at age 75 (%)',                        'Optional. % reduction in spending from age 75, e.g. 20',            false)}
+
+      ${sectionRow('Salary')}
+      ${paramRow('Person 1 \u2013 gross annual salary (\u00a3)',   'Optional. Leave blank if not working',                              false)}
+      ${paramRow('Person 1 \u2013 salary stop age',                'Optional. Age at which Person 1 salary stops, e.g. 60',             false)}
+      ${paramRow('Gross annual salary (\u00a3)',                   'Optional. Person 2 gross salary, e.g. 15,000',                      false)}
+      ${paramRow('Stop age',                                       'Optional. Age at which Person 2 salary stops, e.g. 63',             false)}
+
+      ${sectionRow('State Pension')}
+      ${paramRow('Person 1 \u2013 start age',                      'State Pension start age for Person 1, e.g. 67',                     false)}
+      ${paramRow('Person 1 \u2013 annual amount (\u00a3)',          'Full new State Pension 2025/26 is \u00a311,502',                    false)}
+      ${paramRow('Person 2 \u2013 start age',                      'State Pension start age for Person 2, e.g. 67',                     false)}
+      ${paramRow('Person 2 \u2013 annual amount (\u00a3)',          'Full new State Pension 2025/26 is \u00a311,502',                    false)}
+
+      ${sectionRow('Growth & inflation')}
+      ${paramRow('Portfolio growth (%/yr)',                        'Nominal annual portfolio growth rate, e.g. 5',                      false)}
+      ${paramRow('Inflation (%/yr)',                               'Annual inflation assumption, e.g. 2.5',                             false)}
+      ${paramRow('Threshold uprating mode',                        'How tax thresholds uprate: frozen, cpi, or wages',                  false)}
+      ${paramRow('Uprate from year',                               'Year from which uprating applies, e.g. 2,028',                      false)}
+
+      ${sectionRow('Bed and ISA')}
+      ${paramRow('Enable bed-and-ISA',                            'yes or no \u2014 model annual GIA\u2192ISA transfers',              false)}
+      ${paramRow('Person 1 GIA\u2192ISA per year (\u00a3)',        'Annual GIA to ISA transfer for Person 1, e.g. 20,000',             false)}
+      ${paramRow('Person 2 GIA\u2192ISA per year (\u00a3)',        'Annual GIA to ISA transfer for Person 2, e.g. 20,000',             false)}
+    </table>`;
+
+    // ── Parse HTML tables into SheetJS sheets ────
+    const acWb = XLSX.read(acHtml,  { type: 'string' });
+    const paWb = XLSX.read(paHtml,  { type: 'string' });
+
+    const acSheet = acWb.Sheets[acWb.SheetNames[0]];
+    const paSheet = paWb.Sheets[paWb.SheetNames[0]];
+
+    // Column widths
+    acSheet['!cols'] = [
+      { wch: 28 }, { wch: 11 }, { wch: 7  }, { wch: 14 },
+      { wch: 10 }, { wch: 8  }, { wch: 11 }, { wch: 8  },
+      { wch: 14 }, { wch: 15 }, { wch: 72 },
+    ];
+    paSheet['!cols'] = [
+      { wch: 40 }, { wch: 18 }, { wch: 65 },
+    ];
+
+    // Apply comma-separated number format to numeric input columns
+    // on Accounts sheet: Value (col D=3) and Monthly draw (col J=9)
+    const acRange = XLSX.utils.decode_range(acSheet['!ref']);
+    for (let r = 2; r <= acRange.e.r - 1; r++) {
+      const vCell = acSheet[XLSX.utils.encode_cell({ r, c: 3 })];
+      if (vCell) vCell.z = '#,##0';
+      const mCell = acSheet[XLSX.utils.encode_cell({ r, c: 9 })];
+      if (mCell) mCell.z = '#,##0';
+    }
+
+    // Apply comma-separated number format to Value column on Parameters sheet
+    const paRange = XLSX.utils.decode_range(paSheet['!ref']);
+    for (let r = 2; r <= paRange.e.r; r++) {
+      const cell = paSheet[XLSX.utils.encode_cell({ r, c: 1 })];
+      if (cell && cell.t === 'n') cell.z = '#,##0';
+    }
+
+    // Build final workbook
     const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, acSheet, 'Accounts');
+    XLSX.utils.book_append_sheet(wb, paSheet, 'Parameters');
 
-    // ── Accounts sheet ──────────────────────────
-    const accountsData = [
-      // Row 1: title
-      ['Accounts — UK Retirement Tax Planner'],
-      // Row 2: headers
-      [
-        'Name',
-        'Wrapper',
-        'Owner',
-        'Value (£)',
-        'Equities %',
-        'Bonds %',
-        'Cash-like %',
-        'Cash %',
-        'Interest rate %',
-        'Monthly draw (£)',
-        'Notes',
-      ],
-      // Example row 1: SIPP
-      [
-        'Woody SIPP',
-        'SIPP',
-        'p1',
-        481423,
-        100, 0, 0, 0,
-        '',
-        '',
-        'SIPP = Self-Invested Personal Pension. Use SIPP/WP for a Workplace Pension. Owner: p1 or p2. Allocation % must total 100 — leave all blank to use default (100% equities for SIPP/ISA/GIA, 100% cash for Cash).',
-      ],
-      // Example row 2: ISA
-      [
-        'Woody ISA',
-        'ISA',
-        'p1',
-        273585,
-        100, 0, 0, 0,
-        '',
-        '',
-        '',
-      ],
-      // Example row 3: Workplace pension
-      [
-        'Heidi Workplace Pension',
-        'SIPP/WP',
-        'p2',
-        201891,
-        100, 0, 0, 0,
-        '',
-        '',
-        'SIPP/WP = Workplace Pension — treated identically to SIPP for tax purposes.',
-      ],
-      // Example row 4: GIA
-      [
-        'Woody GIA',
-        'GIA',
-        'p1',
-        154208,
-        100, 0, 0, 0,
-        '',
-        '',
-        '',
-      ],
-      // Example row 5: Cash savings
-      [
-        'Woody Cash',
-        'Cash',
-        'p1',
-        96264,
-        0, 0, 0, 100,
-        4.5,
-        '',
-        'Cash accounts: set Interest rate % for savings accounts. Allocation defaults to 100% cash if all % columns are left blank.',
-      ],
-    ];
-
-    const accountsSheet = XLSX.utils.aoa_to_sheet(accountsData);
-
-    // Set column widths for readability
-    accountsSheet['!cols'] = [
-      { wch: 28 }, // Name
-      { wch: 10 }, // Wrapper
-      { wch: 7  }, // Owner
-      { wch: 12 }, // Value
-      { wch: 10 }, // Equities %
-      { wch: 8  }, // Bonds %
-      { wch: 11 }, // Cash-like %
-      { wch: 8  }, // Cash %
-      { wch: 14 }, // Interest rate
-      { wch: 14 }, // Monthly draw
-      { wch: 80 }, // Notes
-    ];
-
-    XLSX.utils.book_append_sheet(wb, accountsSheet, 'Accounts');
-
-    // ── Parameters sheet ────────────────────────
-    const paramRows = [
-      // Row 1: title
-      ['Parameters — UK Retirement Tax Planner'],
-      // Row 2: headers
-      ['Parameter', 'Value', 'Notes'],
-      // People
-      ['Person 1 name',                         '',   'First name or any label, e.g. Woody'],
-      ['Person 2 name',                         '',   'First name or any label, e.g. Heidi'],
-      ['Person 1 – birth year',                 '',   'Required. Four-digit year, e.g. 1967'],
-      ['Person 2 – birth year',                 '',   'Required. Four-digit year, e.g. 1966'],
-      // Projection dates
-      ['Start year',                            '',   'Required. First year of projection, e.g. 2025'],
-      ['End year',                              '',   'Required. Last year of projection, e.g. 2055'],
-      // Spending
-      ['Annual household spending (£)',         '',   'Required. Total annual net household spending target, e.g. 45000'],
-      ['Step-down at age 75 (%)',               '',   'Optional. % reduction in spending from age 75, e.g. 20'],
-      // Salary — Person 1
-      ['Person 1 – gross annual salary (£)',    '',   'Optional. Leave blank if not working'],
-      ['Person 1 – salary stop age',            '',   'Optional. Age at which salary stops, e.g. 60'],
-      // Salary — Person 2
-      ['Gross annual salary (£)',               '',   'Optional. Person 2 gross salary'],
-      ['Stop age',                              '',   'Optional. Person 2 salary stop age'],
-      // State Pension — Person 1
-      ['Person 1 – start age',                  '',   'State Pension start age, e.g. 67'],
-      ['Person 1 – annual amount (£)',          '',   'State Pension annual amount, e.g. 11502'],
-      // State Pension — Person 2
-      ['Person 2 – start age',                  '',   'State Pension start age, e.g. 67'],
-      ['Person 2 – annual amount (£)',          '',   'State Pension annual amount, e.g. 11502'],
-      // Growth & inflation
-      ['Portfolio growth (%/yr)',               '',   'Nominal annual portfolio growth rate, e.g. 5'],
-      ['Inflation (%/yr)',                      '',   'Annual inflation assumption, e.g. 2.5'],
-      ['Threshold uprating mode',               '',   'How tax thresholds are uprated: frozen, cpi, or wages'],
-      ['Uprate from year',                      '',   'Year from which uprating applies, e.g. 2028'],
-      // Bed and ISA
-      ['Enable bed-and-ISA',                   '',   'yes or no — whether to model annual GIA→ISA transfers'],
-      ['Person 1 GIA→ISA per year (£)',         '',   'Annual GIA to ISA transfer amount for Person 1, e.g. 20000'],
-      ['Person 2 GIA→ISA per year (£)',         '',   'Annual GIA to ISA transfer amount for Person 2, e.g. 20000'],
-    ];
-
-    const paramsSheet = XLSX.utils.aoa_to_sheet(paramRows);
-
-    paramsSheet['!cols'] = [
-      { wch: 38 }, // Parameter
-      { wch: 16 }, // Value
-      { wch: 70 }, // Notes
-    ];
-
-    XLSX.utils.book_append_sheet(wb, paramsSheet, 'Parameters');
-
-    // Write and trigger download
     XLSX.writeFile(wb, 'retirement-planner-template.xlsx');
   }
 
