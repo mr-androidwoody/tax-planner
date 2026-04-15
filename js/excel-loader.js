@@ -413,6 +413,7 @@
       'Yellow rows = cells to fill in';
 
     // Example rows matching the screenshots
+    // Interest rate stored as plain number (3.8), displayed with literal % via format '0.0"%"'
     const exampleAccounts = [
       ['Harry SIPP',          'SIPP',    'Person 1', 300000, 100, 0, 0, 0,   null, null, ''],
       ['Harry ISA',           'ISA',     'Person 1', 150000, 100, 0, 0, 0,   null, null, ''],
@@ -431,7 +432,7 @@
       cell(r[5],  ST.input),
       cell(r[6],  ST.input),
       cell(r[7],  ST.input),
-      r[8]  !== null ? cell(r[8],  ST.input, '0.0%') : cell('', ST.input),
+      r[8]  !== null ? cell(r[8],  ST.input, '0.0"%"') : cell('', ST.input),
       r[9]  !== null ? cell(r[9],  ST.input, '#,##0') : cell('', ST.input),
       cell(r[10], ST.note),
     ]);
@@ -446,7 +447,7 @@
       cell('', ST.input),
       cell('', ST.input),
       cell('', ST.input),
-      cell('', ST.input),
+      cell('', ST.input, '0.0"%"'),
       cell('', ST.input, '#,##0'),
       cell('', ST.body),
     ]);
@@ -461,6 +462,14 @@
 
     const acSheet = buildSheet(acRows, [24, 11, 12, 14, 10, 8, 11, 8, 14, 15, 52]);
 
+    // Merge title row across all 11 cols (A1:K1)
+    // Merge legend/footer row across all 11 cols
+    const acLastDataRow = 1 + exampleAccounts.length + 6; // 0-indexed row of legend
+    acSheet['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 10 } },              // title
+      { s: { r: acLastDataRow, c: 0 }, e: { r: acLastDataRow, c: 10 } }, // legend
+    ];
+
     acSheet['!rows'] = [
       { hpt: 24 },
       { hpt: 30 },
@@ -470,8 +479,7 @@
 
     acSheet['!freeze'] = { xSplit: 0, ySplit: 2 };
 
-    // Dropdown validation: Wrapper (col B=1) and Owner (col C=2)
-    // rows 3 to 3+examples+blanks (0-indexed rows 2 to 2+11)
+    // Dropdown validation: Wrapper (col B=1) and Owner (col C=2) on all data rows
     const acDataRows = exampleAccounts.length + 6;
     const acValidations = [];
     for (let r = 2; r < 2 + acDataRows; r++) {
@@ -506,7 +514,7 @@
     }
 
     const paRows = [
-      [cell('Parameters \u2014 UK Retirement Tax Planner', ST.title), cell('', ST.title), cell('', ST.title)],
+      [cell('Personal details \u2014 UK Retirement Tax Planner', ST.title), cell('', ST.title), cell('', ST.title)],
       [cell('Parameter', ST.header), cell('Value', ST.header), cell('Notes', ST.header)],
 
       secRow('People'),
@@ -549,6 +557,11 @@
 
     const paSheet = buildSheet(paRows, [40, 18, 65]);
 
+    // Merge title row across all 3 cols (A1:C1)
+    paSheet['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 2 } },
+    ];
+
     paSheet['!rows'] = [
       { hpt: 24 },
       { hpt: 22 },
@@ -557,10 +570,10 @@
 
     paSheet['!freeze'] = { xSplit: 0, ySplit: 2 };
 
-    // ── Assemble and write ───────────────────────
+    // ── Assemble: Personal details first, Accounts second ───────────
     const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, paSheet, 'Personal details');
     XLSX.utils.book_append_sheet(wb, acSheet, 'Accounts');
-    XLSX.utils.book_append_sheet(wb, paSheet, 'Parameters');
     XLSX.writeFile(wb, 'retirement-planner-template.xlsx');
   }
 
