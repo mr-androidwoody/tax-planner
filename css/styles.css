@@ -2479,6 +2479,7 @@ input[type="radio"] { accent-color: var(--accent); }
 }
 
 /* Verdict — strong (≥90%) */
+/* Verdict — strong (≥95%) */
 .mc-verdict.mc-verdict--strong {
   background: #f0fdf4;
   border-color: #86efac;
@@ -2486,7 +2487,15 @@ input[type="radio"] { accent-color: var(--accent); }
 }
 .mc-verdict.mc-verdict--strong .mc-section-heading { color: #15803d; }
 
-/* Verdict — moderate (75–90%) */
+/* Verdict — good (90–94%) */
+.mc-verdict.mc-verdict--good {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  border-left: 4px solid #22c55e;
+}
+.mc-verdict.mc-verdict--good .mc-section-heading { color: #15803d; }
+
+/* Verdict — moderate (80–89%) */
 .mc-verdict.mc-verdict--moderate {
   background: #fffbeb;
   border-color: #fde68a;
@@ -2494,7 +2503,7 @@ input[type="radio"] { accent-color: var(--accent); }
 }
 .mc-verdict.mc-verdict--moderate .mc-section-heading { color: #b45309; }
 
-/* Verdict — weak (<75%) */
+/* Verdict — weak (<80%) */
 .mc-verdict.mc-verdict--weak {
   background: #fef2f2;
   border-color: #fecaca;
