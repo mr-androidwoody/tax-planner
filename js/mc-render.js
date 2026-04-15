@@ -116,12 +116,14 @@
     // ── 1. VERDICT ────────────────────────────────────────────────────────
     const successPaths = Math.round(r.successRate * r.simCount);
     const verdictClass =
-      r.successRate >= 0.90 ? 'mc-verdict--strong' :
-      r.successRate >= 0.75 ? 'mc-verdict--moderate' :
+      r.successRate >= 0.95 ? 'mc-verdict--strong' :
+      r.successRate >= 0.90 ? 'mc-verdict--good' :
+      r.successRate >= 0.80 ? 'mc-verdict--moderate' :
                               'mc-verdict--weak';
     const verdictLabel =
-      r.successRate >= 0.90 ? 'This is a strong result.' :
-      r.successRate >= 0.75 ? 'This is a moderate result – some vulnerability to poor sequences.' :
+      r.successRate >= 0.95 ? 'This is a strong result.' :
+      r.successRate >= 0.90 ? 'This is a good result – well within acceptable confidence bounds.' :
+      r.successRate >= 0.80 ? 'This is a moderate result – some vulnerability to poor sequences.' :
                               'This result warrants attention – a significant proportion of paths fail.';
 
     const verdictHTML = `
