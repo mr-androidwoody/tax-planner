@@ -123,30 +123,8 @@
         sequence of returns early in retirement.</p>
       </section>`;
 
-    // ── KEY FIGURES ROW ───────────────────────────────────────────────────
+    // ── DEPLETION (used by stress case and actions) ───────────────────────
     const p10Depletes = depletionYear(p10);
-    const p10Label    = p10Depletes ? `Depletes ${p10Depletes}` : fmt(p10[lastIdx]);
-    const p10Sub      = p10Depletes ? 'Portfolio exhausted' : `by ${lastYear} (${modeLabel})`;
-    const p10Colour   = p10Depletes ? 'var(--danger, #dc2626)' : 'var(--text, #111827)';
-
-    const keyFiguresHTML = `
-      <div class="mc-key-figures">
-        <div class="mc-key-figure">
-          <span class="mc-key-figure__label">Stress case (10th %ile)</span>
-          <span class="mc-key-figure__value" style="color:${p10Colour}">${p10Label}</span>
-          <span class="mc-key-figure__sub">${p10Sub}</span>
-        </div>
-        <div class="mc-key-figure">
-          <span class="mc-key-figure__label">Median outcome (50th %ile)</span>
-          <span class="mc-key-figure__value">${fmt(p50[lastIdx])}</span>
-          <span class="mc-key-figure__sub">by ${lastYear} (${modeLabel})</span>
-        </div>
-        <div class="mc-key-figure">
-          <span class="mc-key-figure__label">Optimistic case (90th %ile)</span>
-          <span class="mc-key-figure__value" style="color:var(--green-2, #16a34a)">${fmt(p90[lastIdx])}</span>
-          <span class="mc-key-figure__sub">by ${lastYear} (${modeLabel})</span>
-        </div>
-      </div>`;
 
     // ── 1. VERDICT ────────────────────────────────────────────────────────
     const successPaths = Math.round(r.successRate * r.simCount);
@@ -431,7 +409,7 @@
         All values shown in ${modeLabel} terms.</p>
       </section>`;
 
-    el.innerHTML = introHTML + keyFiguresHTML + verdictHTML + sustainHTML +
+    el.innerHTML = introHTML + verdictHTML + sustainHTML +
                    medianHTML + stressHTML + optimisticHTML + iqrHTML +
                    earliestHTML + ruinHTML + actionsHTML + assumHTML;
   }
