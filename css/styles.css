@@ -3024,7 +3024,7 @@ input[type="radio"] { accent-color: var(--accent); }
 .wiz-grid {
   display: grid;
   gap: 32px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .wiz-grid--2 {
