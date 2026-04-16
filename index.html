@@ -615,27 +615,26 @@
 
           <!-- Withdrawal Strategy -->
           <div class="assump-card">
-            <div class="assump-card-title">
-              <span class="assump-tooltip-anchor">Withdrawal Strategy<span class="assump-tooltip">Controls how the engine draws from GIA, SIPP, and ISA each year. All strategies use GIA → SIPP → ISA as the default order, then apply tax-aware logic on top. The choice affects pension depletion speed and lifetime tax paid.</span></span>
-            </div>
+            <div class="assump-card-title">Withdrawal Strategy</div>
             <div class="assump-section">
+              <p class="assump-inline-field__hint" style="margin-bottom:10px">Choose how your portfolio is drawn down each year. The best strategy depends on your wrapper mix, when State Pension starts, and your IHT goals.</p>
               <div class="assump-radio-group">
                 <label class="assump-radio-label">
                   <input type="radio" name="withdrawalStrategy" value="balanced" checked>
                   <span>
-                    <strong>Balanced</strong> <span class="assump-inline-field__hint">Recommended — draws SIPP steadily to fill tax-free allowances each year, switches GIA to ISA before higher-rate tax</span>
+                    <strong>Blended</strong> <span class="assump-inline-field__hint">Draws SIPP to fill tax-free allowances each year; balances GIA and ISA within the basic-rate band. Suits a mixed wrapper portfolio.</span>
                   </span>
                 </label>
                 <label class="assump-radio-label">
                   <input type="radio" name="withdrawalStrategy" value="isaFirst">
                   <span>
-                    <strong>ISA-first</strong> <span class="assump-inline-field__hint">Preserves pension as long as possible — draws ISA and GIA preferentially, defers SIPP to fill PA only</span>
+                    <strong>ISA Shield</strong> <span class="assump-inline-field__hint">Spends ISA and GIA first; preserves pension for IHT planning or when State Pension will soon fill your personal allowance.</span>
                   </span>
                 </label>
                 <label class="assump-radio-label">
                   <input type="radio" name="withdrawalStrategy" value="sippFirst">
                   <span>
-                    <strong>SIPP-first</strong> <span class="assump-inline-field__hint">Accelerates pension depletion — maximises SIPP draw within the basic-rate band, useful pre-State Pension</span>
+                    <strong>Pension Drain</strong> <span class="assump-inline-field__hint">Maximises SIPP draw each year; surplus recycled into ISA. Best used pre-State Pension when the basic-rate band is wide open.</span>
                   </span>
                 </label>
               </div>
@@ -853,7 +852,6 @@
               <div class="sidebar-toggle sidebar-toggle--row">
                 <button class="is-active" data-table-select="tax">Tax by year</button>
                 <button data-table-select="wealth">Wealth by year</button>
-                <button data-table-select="drawdown">Drawdown by year</button>
               </div>
             </div>
             <div class="table-toolbar__right">
@@ -871,10 +869,6 @@
           <div id="tables-wealth-view" style="display:none">
             <h2>Portfolio values by year</h2>
             <div style="overflow-x:auto"><table id="wealth-table" class="data-table"></table></div>
-          </div>
-          <div id="tables-drawdown-view" style="display:none">
-            <h2>Drawdown by year</h2>
-            <div style="overflow-x:auto"><table id="drawdown-table" class="data-table"></table></div>
           </div>
         </div>
       </div>
