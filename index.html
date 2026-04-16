@@ -528,7 +528,6 @@
           <div class="assump-card">
             <div class="assump-card-title">Growth &amp; Inflation</div>
             <div class="assump-section">
-              <p class="assump-inline-field__hint" style="margin-bottom:10px">Sets the nominal portfolio growth rate and inflation assumption used across all projection years.</p>
               <p class="assump-section__label">Rates</p>
               <div class="assump-section__body">
                 <div class="two-col">
@@ -553,7 +552,9 @@
               </div>
             </div>
             <div class="assump-section">
-              <p class="assump-section__label"><span class="assump-tooltip-anchor">Growth presets<span class="assump-tooltip">Sets the nominal portfolio growth rate. Real return equals growth minus inflation.</span></span></p>
+              <p class="assump-section__label"><span class="assump-tooltip-anchor">Growth presets<span class="assump-tooltip">Sets the nominal portfolio growth rate and inflation used across all projection years. Growth affects how quickly your portfolio compounds; inflation determines how far your spending target rises each year. Use the presets as a starting point.
+
+</span></span></p>
               <div class="assump-radio-group">
                 <label class="assump-radio-label">
                   <input type="radio" name="growthPreset" value="3" onchange="document.getElementById('growth').value='3'"> <strong>Conservative</strong> <span class="assump-inline-field__hint">3%, ~0.5% real return</span>
@@ -618,7 +619,7 @@
           <div class="assump-card">
             <div class="assump-card-title">Withdrawal Strategy</div>
             <div class="assump-section">
-              <p class="assump-inline-field__hint" style="margin-bottom:10px">Choose how your portfolio is drawn down each year. The best strategy depends on your wrapper mix, when State Pension starts, and your IHT goals. Run the projection with each to compare lifetime tax and final portfolio value.</p>
+              <p class="assump-inline-field__hint" style="margin-bottom:10px"><p>Choose how your portfolio is drawn down each year. The best strategy depends on your wrapper mix, when State Pension starts, and your IHT goals.</p><p>Run the projection with each to compare lifetime tax and final portfolio value. The best strategy depends on your wrapper mix, when State Pension starts, and your IHT goals.</p>
               <div class="assump-radio-group">
                 <label class="assump-radio-label">
                   <input type="radio" name="withdrawalStrategy" value="balanced" checked>
@@ -644,9 +645,12 @@
 
           <!-- Bed & ISA -->
           <div class="assump-card">
-            <div class="assump-card-title">Bed &amp; ISA</div>
+            <div class="assump-card-title">
+              <span class="assump-tooltip-anchor">Bed &amp; ISA<span class="assump-tooltip">Annually sells GIA holdings and repurchases inside an ISA, sheltering future growth from CGT and dividend tax. Most effective when GIA gains are within the annual CGT exemption, keeping the transfer cost-free. Capped at £20,000 per person per year.
+
+</span></span>
+            </div>
             <div class="assump-section">
-              <p class="assump-inline-field__hint" style="margin-bottom:10px">Annually sells GIA holdings and repurchases inside an ISA, sheltering future growth from CGT and dividend tax. Capped at £20,000 per person per year.</p>
               <p class="assump-section__label">Strategy</p>
               <div class="assump-radio-group" style="margin-bottom:10px">
                 <label class="assump-radio-label">
