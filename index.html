@@ -694,34 +694,35 @@
             <div class="wiz-col-heading">
               <span class="assump-tooltip-anchor">Tax<span class="assump-tooltip">Controls how UK tax thresholds are uprated over the projection. Frozen means fiscal drag erodes real allowances each year; uprating preserves them in line with inflation.</span></span>
             </div>
-            <p class="wiz-body-text">Controls tax drag by setting whether allowances grow with inflation or stay frozen.</p>
+            <p class="wiz-body-text">When tax allowances don't rise with inflation, more of your income is taxed at higher rates each year. Set whether you expect allowances to stay frozen or start tracking inflation at some point.</p>
             <div class="wiz-cards" style="margin-bottom:16px">
               <label class="wiz-card">
                 <input type="radio" name="thresholdMode" id="thresholdFrozen" value="frozen" checked>
                 <span class="wiz-card__title">Frozen</span>
-                <span class="wiz-card__hint">Allowances stay fixed in nominal terms — fiscal drag erodes their real value each year.</span>
+                <span class="wiz-card__hint">Allowances stay fixed in cash terms throughout the projection. As income rises with inflation, a growing share is taxed at higher rates. This reflects current UK policy.</span>
               </label>
               <label class="wiz-card">
                 <input type="radio" name="thresholdMode" id="thresholdFromYear" value="fromYear">
                 <span class="wiz-card__title">Uprated from year</span>
                 <span class="wiz-card__hint" style="display:flex;align-items:center;gap:8px">
-                  Allowances grow with inflation from the year you choose.
+                  Allowances stay frozen until the year you set, then rise with inflation from that point onward.
                   <input type="number" id="thresholdFromYearVal" class="wiz-card__inline-input" value="2028" min="2026" max="2060" onfocus="document.getElementById('thresholdFromYear').checked=true" style="margin-top:0;flex-shrink:0">
                 </span>
               </label>
               <label class="wiz-card">
                 <input type="radio" name="thresholdMode" id="thresholdAlways" value="always">
                 <span class="wiz-card__title">Always uprated</span>
-                <span class="wiz-card__hint">Allowances grow with inflation throughout the entire projection.</span>
+                <span class="wiz-card__hint">Allowances rise with inflation from the start of the projection, preserving their real value throughout.</span>
               </label>
             </div>
             <div class="wiz-section-divider"></div>
             <div class="wiz-col-heading wiz-col-heading--sub">
               <span class="assump-tooltip-anchor">GIA dividends<span class="assump-tooltip">Pay out: dividends are taxable income each year. Reinvest: dividends compound inside GIA avoiding immediate tax.</span></span>
             </div>
+            <p class="wiz-body-text" style="margin-bottom:8px">Set the expected yield on your GIA holdings and choose whether dividends are paid out as taxable income or reinvested back into the account.</p>
             <table class="wiz-table">
               <tr>
-                <td class="wiz-label">Dividend yield (%/yr)</td>
+                <td class="wiz-label">Expected dividend yield (%/yr)</td>
                 <td class="wiz-val" style="text-align:right">
                   <div class="stepper-input" style="max-width:50%;margin-left:auto">
                     <input type="number" id="dividendYield" value="1.5" min="0" max="10" step="0.1">
