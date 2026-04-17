@@ -2685,41 +2685,47 @@ input[type="radio"] { accent-color: var(--accent); }
 .mc-decade-chart {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
+  margin-top: 4px;
 }
 
 .mc-decade-row {
   display: grid;
-  grid-template-columns: 48px 1fr 52px;
+  grid-template-columns: 56px 1fr 56px;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .mc-decade-row__year {
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text, #374151);
   text-align: right;
 }
 
 .mc-decade-row__bar-wrap {
-  height: 10px;
+  height: 18px;
   background: var(--border, #e5e7eb);
-  border-radius: 99px;
+  border-radius: 4px;
   overflow: hidden;
 }
 
 .mc-decade-row__bar {
   display: block;
   height: 100%;
-  border-radius: 99px;
-  transition: width 400ms ease;
+  border-radius: 4px;
+  transition: width 500ms ease;
 }
 
 .mc-decade-row__pct {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   text-align: right;
+}
+
+/* First non-green bar gets a highlight marker */
+.mc-decade-row--rising .mc-decade-row__year {
+  color: var(--mc-dot-warn, #BA7517);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -3620,12 +3626,12 @@ input[type="radio"] { accent-color: var(--accent); }
 }
 
 .mc-outlook-card {
-  padding: 28px 20px 24px 24px;
+  padding: 32px 24px 28px 28px;
   background: transparent;
   border: none;
-  border-left: 5px solid transparent;
+  border-left: 6px solid transparent;
   border-radius: 0;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 .mc-verdict-row {
@@ -3643,10 +3649,10 @@ input[type="radio"] { accent-color: var(--accent); }
 }
 
 .mc-outlook-verdict {
-  font-size: 40px;
+  font-size: 44px;
   font-weight: 700;
   line-height: 1.1;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.025em;
 }
 
 .mc-outlook-sentence {
@@ -3684,10 +3690,10 @@ input[type="radio"] { accent-color: var(--accent); }
 }
 
 .mc-stat-value {
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 18px;
+  font-weight: 700;
   line-height: 1.2;
-  color: var(--text, #374151);
+  color: var(--text, #111827);
 }
 
 .mc-stat-value--secondary {
@@ -3764,14 +3770,15 @@ input[type="radio"] { accent-color: var(--accent); }
 }
 
 .mc-lever-row--primary {
-  background: var(--surface-2, #f9fafb);
+  background: var(--surface-2, #f3f4f6);
   margin: 0 -14px;
-  padding: 10px 14px;
+  padding: 11px 14px;
   border-radius: var(--radius-sm, 8px);
+  border-left: 3px solid var(--border, #d1d5db);
 }
 
 .mc-lever-row--secondary {
-  opacity: 0.55;
+  opacity: 0.5;
 }
 
 .mc-lever-row--secondary .mc-lever-pill {
@@ -3783,9 +3790,9 @@ input[type="radio"] { accent-color: var(--accent); }
    ═══════════════════════════════════════════════════════════════ */
 
 .mc-primary-action {
-  margin-top: 16px;
-  padding: 18px 20px;
-  border-left: 5px solid #3B6D11;
+  margin-top: 20px;
+  padding: 20px 22px;
+  border-left: 6px solid #3B6D11;
   border-radius: 0 var(--radius-sm, 8px) var(--radius-sm, 8px) 0;
   background: var(--surface-2, #f9fafb);
 }
@@ -3814,9 +3821,10 @@ input[type="radio"] { accent-color: var(--accent); }
 }
 
 .mc-sim-footnote {
-  font-size: 11px;
-  color: var(--muted, #9ca3af);
+  font-size: 10px;
+  color: var(--muted, #b0b8c4);
   margin: 10px 0 0;
+  letter-spacing: 0.01em;
 }
 
 .mc-survival-note {
@@ -3827,10 +3835,10 @@ input[type="radio"] { accent-color: var(--accent); }
 }
 
 .mc-bridge-note {
-  margin-top: 20px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border, #e5e7eb);
+  margin-top: 28px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border, #d1d5db);
   font-size: 13px;
-  color: var(--muted, #6b7280);
+  color: var(--text, #4b5563);
   font-style: normal;
 }
