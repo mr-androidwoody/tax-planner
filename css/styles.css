@@ -3619,6 +3619,8 @@ input[type="radio"] { accent-color: var(--accent); }
   border-radius: 14px;
   padding: 36px 40px 28px;
   margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
 }
 
 .mc-verdict-eyebrow {
@@ -3628,6 +3630,7 @@ input[type="radio"] { accent-color: var(--accent); }
   text-transform: uppercase;
   color: rgba(255,255,255,0.55);
   margin-bottom: 20px;
+  flex-shrink: 0;
 }
 
 .mc-verdict-body {
@@ -3635,6 +3638,7 @@ input[type="radio"] { accent-color: var(--accent); }
   flex-direction: row;
   gap: 32px;
   align-items: stretch;
+  flex: 1;
 }
 
 .mc-verdict-left {
@@ -3665,8 +3669,7 @@ input[type="radio"] { accent-color: var(--accent); }
   flex-direction: column;
   gap: 10px;
   align-items: stretch;
-  padding-top: 6px;
-  min-width: 180px;
+  min-width: 190px;
   flex-shrink: 0;
 }
 
@@ -3675,8 +3678,10 @@ input[type="radio"] { accent-color: var(--accent); }
   background: #fff;
   border-radius: 10px;
   padding: 16px 20px;
-  min-width: 180px;
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .mc-vstat-label {
@@ -3705,8 +3710,9 @@ input[type="radio"] { accent-color: var(--accent); }
 .mc-verdict-meta {
   font-size: 11px;
   color: rgba(255,255,255,0.35);
-  margin-top: 28px;
+  margin-top: 20px;
   letter-spacing: .01em;
+  flex-shrink: 0;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -3904,6 +3910,23 @@ input[type="radio"] { accent-color: var(--accent); }
   padding: 28px 32px 24px;
 }
 
+.mc-primary-action__body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+  align-items: start;
+}
+
+.mc-primary-action__left {
+  display: flex;
+  flex-direction: column;
+}
+
+.mc-primary-action__right {
+  padding-left: 32px;
+  border-left: 1px solid rgba(0,0,0,0.10);
+}
+
 .mc-primary-action__label {
   font-size: 10px;
   font-weight: 700;
@@ -3924,6 +3947,34 @@ input[type="radio"] { accent-color: var(--accent); }
   font-size: 14px;
   line-height: 1.6;
   margin: 0;
+}
+
+.mc-action-bullets {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mc-action-bullet {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text, #374151);
+  padding-left: 16px;
+  position: relative;
+}
+
+.mc-action-bullet::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 7px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--bullet-colour, #3B6D11);
 }
 
 /* ═══════════════════════════════════════════════════════════════
