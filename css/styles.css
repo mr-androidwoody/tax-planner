@@ -2645,9 +2645,9 @@ input[type="radio"] { accent-color: var(--accent); }
 
 .results-tab--risk-ready {
   background: var(--panel-solid);
-  color: #dc2626;
+  color: var(--tab-verdict-colour, #dc2626);
   font-weight: 700;
-  border-top: 3px solid #dc2626;
+  border-top: 3px solid var(--tab-verdict-colour, #dc2626);
   border-bottom: 1px solid var(--panel-solid);
   margin-bottom: -5px;
   padding-bottom: 12px;
@@ -3583,8 +3583,8 @@ input[type="radio"] { accent-color: var(--accent); }
 
 .results-tab--outlook.results-tab--active,
 .results-tab--outlook.results-tab--risk-ready {
-  color: #185FA5;
-  border-top-color: #185FA5;
+  color: var(--tab-verdict-colour, #185FA5);
+  border-top-color: var(--tab-verdict-colour, #185FA5);
   font-weight: 700;
 }
 
