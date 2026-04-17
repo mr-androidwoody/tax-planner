@@ -811,29 +811,64 @@
     tabBtn.classList.toggle('results-tab--risk-ready', ready);
   }
 
+  // ── MC loader state ───────────────────────────────────────────────────────
+  let _loaderMsgInterval = null;
+
+  const _LOADER_MESSAGES = [
+    'Simulating 10,000 retirement paths…',
+    'Stress-testing against poor sequence returns…',
+    'Calculating sustainable spending level…',
+    'Running delay perturbation scenarios…',
+    'Preparing your outlook…',
+  ];
+
   function _setLoadingPhase(text) {
     const el = safeEl('mc-loading-phase');
-    if (el) el.textContent = text;
+    if (!el) return;
+    el.style.opacity = '0';
+    setTimeout(() => {
+      el.textContent = text;
+      el.style.opacity = '1';
+    }, 200);
   }
 
   function _setLoadingProgress(pct) {
     const bar = safeEl('mc-loading-bar-fill');
     if (bar) bar.style.width = pct + '%';
-    const label = safeEl('mc-loading-bar-pct');
-    if (label) label.textContent = Math.round(pct) + '%';
   }
 
   function _showLoadingState() {
     const el = safeEl('mc-narrative');
     if (!el) return;
+
     el.innerHTML = `
       <div class="mc-loading">
-        <p class="mc-loading__phase" id="mc-loading-phase">Simulating 10,000 futures…</p>
+        <svg class="mc-loading__wave" viewBox="0 0 300 60" preserveAspectRatio="none" aria-hidden="true">
+          <path class="mc-loading__wave-path mc-loading__wave-path--back"
+            d="M-300,30 C-225,10 -175,50 -100,30 C-25,10 25,50 100,30 C175,10 225,50 300,30 C375,10 425,50 500,30 C575,10 625,50 700,30"/>
+          <path class="mc-loading__wave-path mc-loading__wave-path--front"
+            d="M-300,30 C-225,15 -175,45 -100,30 C-25,15 25,45 100,30 C175,15 225,45 300,30 C375,15 425,45 500,30 C575,15 625,45 700,30"/>
+        </svg>
+        <p class="mc-loading__phase" id="mc-loading-phase">${_LOADER_MESSAGES[0]}</p>
         <div class="mc-loading__bar-wrap">
           <div class="mc-loading__bar-fill" id="mc-loading-bar-fill"></div>
         </div>
-        <span class="mc-loading__pct" id="mc-loading-bar-pct">0%</span>
       </div>`;
+
+    // Cycle through messages on an interval, cross-fading each
+    let msgIdx = 0;
+    if (_loaderMsgInterval) clearInterval(_loaderMsgInterval);
+    _loaderMsgInterval = setInterval(() => {
+      msgIdx = (msgIdx + 1) % _LOADER_MESSAGES.length;
+      _setLoadingPhase(_LOADER_MESSAGES[msgIdx]);
+    }, 2200);
+  }
+
+  function _hideLoader() {
+    if (_loaderMsgInterval) {
+      clearInterval(_loaderMsgInterval);
+      _loaderMsgInterval = null;
+    }
   }
 
   async function runRisk() {
@@ -942,6 +977,7 @@
 
       const MCR = window.RetireMCRender;
       if (!MCR) throw new Error('RetireMCRender not loaded');
+      _hideLoader();
       MCR.setResults(result, inputs.inflation, {
         currentSpending:     inputs.spending,
         sustainableSpending: sustainableSpending,
@@ -956,6 +992,7 @@
       if (_outlookTab) _outlookTab.classList.remove('results-tab--simulating');
 
     } catch (err) {
+      _hideLoader();
       if (_outlookTab) _outlookTab.classList.remove('results-tab--simulating');
       _setLoadingPhase('Simulation failed — please try running the projection again.');
       console.error('runRisk error:', err);
