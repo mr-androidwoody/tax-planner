@@ -3612,121 +3612,119 @@ input[type="radio"] { accent-color: var(--accent); }
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   YOUR OUTLOOK — verdict header (full-bleed, no card border)
+   YOUR OUTLOOK — verdict hero (full-bleed colour band)
    ═══════════════════════════════════════════════════════════════ */
 
 .mc-verdict-header {
-  border-left: 6px solid #BA7517;
-  background: rgba(186,117,23,0.06);
-  padding: 28px 32px 24px 28px;
-  margin-bottom: 24px;
-  display: grid;
-  grid-template-columns: 1fr auto;
-  grid-template-rows: auto auto auto;
-  column-gap: 32px;
-  align-items: start;
+  border-radius: 14px;
+  padding: 40px 40px 32px;
+  margin-bottom: 20px;
 }
 
 .mc-verdict-eyebrow {
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: .08em;
+  letter-spacing: .10em;
   text-transform: uppercase;
-  color: #854F0B;
-  margin-bottom: 10px;
-  grid-column: 1 / -1;
+  color: rgba(255,255,255,0.55);
+  margin-bottom: 20px;
+}
+
+.mc-verdict-body {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 32px;
+  align-items: start;
 }
 
 .mc-verdict-left {
   display: flex;
   flex-direction: column;
-  gap: 0;
-}
-
-.mc-verdict-main {
-  display: flex;
-  align-items: baseline;
-  gap: 14px;
-  margin-bottom: 10px;
 }
 
 .mc-verdict-word {
-  font-size: 48px;
+  font-size: 72px;
   font-weight: 700;
   letter-spacing: -.03em;
   line-height: 1;
-}
-
-.mc-verdict-rate {
-  font-size: 24px;
-  font-weight: 700;
-  line-height: 1;
-  opacity: .7;
+  color: #fff;
+  margin: 0 0 16px;
 }
 
 .mc-verdict-sentence {
-  font-size: 14px;
-  line-height: 1.65;
-  color: var(--muted, #6b7280);
+  font-size: 15px;
+  line-height: 1.7;
+  color: rgba(255,255,255,0.75);
   margin: 0;
+  max-width: 500px;
 }
 
 .mc-verdict-right {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   align-items: flex-end;
-  padding-top: 4px;
+  padding-top: 6px;
 }
 
 .mc-vstat {
   text-align: right;
-  background: #fff;
-  border: 1px solid rgba(0,0,0,0.12);
-  border-radius: 8px;
-  padding: 10px 16px;
-  min-width: 160px;
+  background: rgba(0,0,0,0.22);
+  border-radius: 10px;
+  padding: 14px 20px;
+  min-width: 172px;
 }
 
 .mc-vstat-label {
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: .07em;
-  color: var(--muted, #9ca3af);
-  margin-bottom: 5px;
+  letter-spacing: .08em;
+  color: rgba(255,255,255,0.45);
+  margin-bottom: 6px;
 }
 
 .mc-vstat-primary {
-  font-size: 28px;
+  font-size: 26px;
   font-weight: 700;
   line-height: 1;
+  color: #fff;
 }
 
 .mc-vstat-secondary {
   font-size: 18px;
   font-weight: 600;
   line-height: 1;
+  color: rgba(255,255,255,0.88);
 }
 
 .mc-verdict-meta {
-  font-size: 10px;
-  color: var(--muted, #b0b8c4);
-  margin-top: 16px;
+  font-size: 11px;
+  color: rgba(255,255,255,0.35);
+  margin-top: 28px;
   letter-spacing: .01em;
-  grid-column: 1 / -1;
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   YOUR OUTLOOK — supporting sections (light cards)
+   YOUR OUTLOOK — two-column evidence card
    ═══════════════════════════════════════════════════════════════ */
 
-.mc-section {
+.mc-evidence-card {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  background: #fff;
   border: 1px solid rgba(0,0,0,0.07);
-  border-radius: 10px;
-  background: var(--surface-1, #fff);
-  padding: 24px 24px;
-  margin-bottom: 14px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.mc-evidence-pane {
+  padding: 26px 28px;
+}
+
+.mc-evidence-pane--left {
+  border-right: 1px solid rgba(0,0,0,0.07);
 }
 
 .mc-section-label {
@@ -3735,14 +3733,14 @@ input[type="radio"] { accent-color: var(--accent); }
   text-transform: uppercase;
   letter-spacing: .09em;
   color: var(--muted, #888);
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 .mc-outlook-sentence {
   font-size: 13px;
   line-height: 1.65;
   color: var(--muted, #6b7280);
-  margin: 0 0 14px;
+  margin: 0 0 18px;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -3752,15 +3750,14 @@ input[type="radio"] { accent-color: var(--accent); }
 .mc-decade-chart {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  margin-top: 8px;
+  gap: 10px;
 }
 
 .mc-decade-row {
   display: grid;
-  grid-template-columns: 64px 1fr 58px;
+  grid-template-columns: 60px 1fr 48px;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
 }
 
 .mc-decade-row__year {
@@ -3776,21 +3773,21 @@ input[type="radio"] { accent-color: var(--accent); }
 }
 
 .mc-decade-row__bar-wrap {
-  height: 22px;
-  background: #E2E8F0;
-  border-radius: 0;
+  height: 28px;
+  background: rgba(0,0,0,0.06);
+  border-radius: 4px;
   overflow: hidden;
 }
 
 .mc-decade-row__bar {
   display: block;
   height: 100%;
-  border-radius: 0;
+  border-radius: 4px;
   transition: width 500ms ease;
 }
 
 .mc-decade-row__pct {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   text-align: right;
 }
@@ -3798,12 +3795,12 @@ input[type="radio"] { accent-color: var(--accent); }
 .mc-survival-note {
   font-size: 12px;
   color: var(--muted, #6b7280);
-  margin-top: 14px;
+  margin-top: 12px;
   font-style: italic;
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   YOUR OUTLOOK — lever table
+   YOUR OUTLOOK — lever blocks (stacked, no grid columns)
    ═══════════════════════════════════════════════════════════════ */
 
 .mc-lever-table {
@@ -3811,40 +3808,43 @@ input[type="radio"] { accent-color: var(--accent); }
   flex-direction: column;
 }
 
-.mc-lever-row {
-  display: grid;
-  grid-template-columns: 120px 110px 1fr;
-  align-items: start;
-  gap: 14px;
-  padding: 11px 0;
+.mc-lever {
+  padding: 10px 0;
   border-bottom: 1px solid rgba(0,0,0,0.06);
 }
 
-.mc-lever-row:last-child {
+.mc-lever:last-child {
   border-bottom: none;
+  padding-bottom: 0;
 }
 
-.mc-lever-row--primary {
+.mc-lever--primary {
   background: #F1EFE8;
-  margin: 0 -24px;
-  padding: 12px 24px;
-  border-radius: 6px;
+  border-radius: 8px;
   border-bottom: none;
-  margin-bottom: 2px;
+  border-left: 3px solid #5F5E5A;
+  padding: 12px 14px;
+  margin: 0 -14px 4px;
 }
 
-.mc-lever-row--secondary {
-  opacity: 0.7;
+.mc-lever--secondary {
+  opacity: 0.6;
+}
+
+.mc-lever-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
 }
 
 .mc-lever-name {
   font-size: 13px;
   font-weight: 500;
   color: var(--text, #111827);
-  padding-top: 3px;
 }
 
-.mc-lever-row--secondary .mc-lever-name {
+.mc-lever--secondary .mc-lever-name {
   font-weight: 400;
 }
 
@@ -3854,65 +3854,35 @@ input[type="radio"] { accent-color: var(--accent); }
   font-weight: 700;
   letter-spacing: .05em;
   text-transform: uppercase;
-  padding: 3px 9px;
+  padding: 2px 8px;
   border-radius: 99px;
   white-space: nowrap;
-  margin-top: 2px;
 }
 
-.mc-lever-pill--safe    { background: #EAF3DE; color: #27500A; }
-.mc-lever-pill--warn    { background: #FAEEDA; color: #633806; }
-.mc-lever-pill--risk    { background: #FCEBEB; color: #791F1F; }
-.mc-lever-pill--neutral { background: #F1EFE8; color: #5F5E5A; }
+.mc-lever-pill--safe    { background: #C0DD97; color: #27500A; }
+.mc-lever-pill--warn    { background: #FAC775; color: #633806; }
+.mc-lever-pill--risk    { background: #F7C1C1; color: #791F1F; }
+.mc-lever-pill--neutral { background: #D3D1C7; color: #5F5E5A; }
 
 .mc-lever-outcome {
-  font-size: 13px;
-  line-height: 1.6;
+  font-size: 12px;
+  line-height: 1.55;
   color: var(--muted, #6b7280);
-  padding-top: 3px;
+  margin: 0;
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   YOUR OUTLOOK — reassurance block (strong plan, no action needed)
-   ═══════════════════════════════════════════════════════════════ */
-
-.mc-reassurance {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.mc-reassurance-item {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  font-size: 14px;
-  line-height: 1.6;
+.mc-lever--primary .mc-lever-outcome {
   color: var(--text, #374151);
 }
 
-.mc-reassurance-item::before {
-  content: '';
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #3B6D11;
-  flex-shrink: 0;
-  position: relative;
-  top: -1px;
-}
-
 /* ═══════════════════════════════════════════════════════════════
-   YOUR OUTLOOK — primary action (terminal block)
+   YOUR OUTLOOK — primary action (terminal block, top border)
    ═══════════════════════════════════════════════════════════════ */
 
 .mc-primary-action {
-  margin-top: 20px;
-  border-left: 6px solid #BA7517;
-  border-radius: 0 10px 10px 0;
-  padding: 20px 24px;
-  background: rgba(186,117,23,0.08);
+  border-top: 3px solid #3B6D11;
+  border-radius: 12px;
+  padding: 28px 32px 24px;
 }
 
 .mc-primary-action__label {
@@ -3920,30 +3890,32 @@ input[type="radio"] { accent-color: var(--accent); }
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: .09em;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .mc-primary-action__text {
-  font-size: 16px;
-  font-weight: 600;
-  line-height: 1.4;
-  margin: 0 0 5px;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -.01em;
+  line-height: 1.25;
+  margin: 0 0 8px;
 }
 
 .mc-primary-action__impact {
-  font-size: 13px;
-  line-height: 1.55;
+  font-size: 14px;
+  line-height: 1.6;
   margin: 0;
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   YOUR OUTLOOK — bridge note
+   YOUR OUTLOOK — bridge note (inside action block)
    ═══════════════════════════════════════════════════════════════ */
 
 .mc-bridge-note {
-  margin-top: 32px;
-  padding-top: 20px;
-  border-top: 1px solid rgba(0,0,0,0.1);
-  font-size: 13px;
-  color: var(--text, #4b5563);
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(0,0,0,0.10);
+  font-size: 12px;
+  color: var(--muted, #6b7280);
+  line-height: 1.65;
 }
