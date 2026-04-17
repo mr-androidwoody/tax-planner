@@ -3617,10 +3617,16 @@ input[type="radio"] { accent-color: var(--accent); }
 
 .mc-verdict-header {
   border-radius: 14px;
-  padding: 36px 40px 28px;
+  padding: 28px 40px 28px;
   margin-bottom: 20px;
-  display: flex;
-  flex-direction: column;
+}
+
+.mc-verdict-grid {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  column-gap: 32px;
+  margin-bottom: 16px;
 }
 
 .mc-verdict-eyebrow {
@@ -3629,22 +3635,11 @@ input[type="radio"] { accent-color: var(--accent); }
   letter-spacing: .10em;
   text-transform: uppercase;
   color: rgba(255,255,255,0.55);
-  margin-bottom: 20px;
-  flex-shrink: 0;
+  margin-bottom: 6px;
 }
 
-.mc-verdict-body {
-  display: flex;
-  flex-direction: row;
-  gap: 32px;
-  align-items: stretch;
-  flex: 1;
-}
-
-.mc-verdict-left {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
+.mc-verdict-eyebrow--right {
+  text-align: right;
 }
 
 .mc-verdict-word {
@@ -3653,7 +3648,34 @@ input[type="radio"] { accent-color: var(--accent); }
   letter-spacing: -.03em;
   line-height: 1;
   color: #fff;
-  margin: 0 0 16px;
+  margin: 0;
+}
+
+.mc-verdict-bignum {
+  font-size: 72px;
+  font-weight: 700;
+  letter-spacing: -.03em;
+  line-height: 1;
+  color: #fff;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.mc-verdict-lower {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  column-gap: 32px;
+  align-items: end;
+}
+
+.mc-verdict-lower__left {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.mc-verdict-lower__right {
+  text-align: right;
 }
 
 .mc-verdict-sentence {
@@ -3664,14 +3686,10 @@ input[type="radio"] { accent-color: var(--accent); }
   max-width: 500px;
 }
 
-.mc-verdict-right {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-  align-items: flex-end;
-  justify-content: center;
-  min-width: 190px;
-  flex-shrink: 0;
+.mc-verdict-meta {
+  font-size: 11px;
+  color: rgba(255,255,255,0.35);
+  letter-spacing: .01em;
 }
 
 .mc-vstat {
@@ -3693,14 +3711,6 @@ input[type="radio"] { accent-color: var(--accent); }
   letter-spacing: -.02em;
   line-height: 1;
   color: #fff;
-}
-
-.mc-verdict-meta {
-  font-size: 11px;
-  color: rgba(255,255,255,0.35);
-  margin-top: 20px;
-  letter-spacing: .01em;
-  flex-shrink: 0;
 }
 
 /* ═══════════════════════════════════════════════════════════════
