@@ -115,10 +115,10 @@
       rate >= 0.80 ? 'color:var(--mc-dot-warn,  #BA7517)' :
                      'color:var(--mc-dot-risk,  #A32D2D)';
     const verdictSentence =
-      rate >= 0.95 ? 'Your plan is on track to support your lifestyle throughout retirement, with room to absorb a sustained run of poor returns.' :
-      rate >= 0.90 ? 'Your plan looks well-founded — it succeeds in the large majority of scenarios, with only modest vulnerability at the edges.' :
-      rate >= 0.80 ? 'Your plan needs a modest adjustment — it succeeds in most scenarios but is exposed to a meaningful minority of poor outcomes.' :
-                     'Your plan requires attention — a significant share of simulated paths end in depletion before the end of retirement.';
+      rate >= 0.95 ? 'Your plan is on track throughout retirement, with room to absorb a sustained run of poor returns.' :
+      rate >= 0.90 ? 'Your plan is well-founded — it holds in the large majority of scenarios, with only modest vulnerability at the edges.' :
+      rate >= 0.80 ? 'Your plan needs a small adjustment — it holds in most scenarios but carries real risk in a meaningful share of poor sequences.' :
+                     'Your plan needs attention — a significant share of simulated paths end in depletion before retirement ends.';
 
     // ── Headroom / gap ────────────────────────────────────────────────────
     let headroomHTML = '';
@@ -207,16 +207,20 @@
       const decadeYrs = [2030, 2040, 2050, 2060, 2070].filter(
         y => y >= firstYear && y <= lastYear
       );
+      // Find first decade where survival drops below 95% — mark as rising risk
+      let risingMarked = false;
       decadeRowsHTML = decadeYrs.map(dy => {
         const yi = r.years.indexOf(dy);
         if (yi === -1) return '';
         const survRate  = r.survivalByYear[yi] / r.simCount;
         const barColour =
-          survRate >= 0.95 ? 'var(--mc-dot-strong,#3B6D11)' :
-          survRate >= 0.80 ? 'var(--mc-dot-warn,  #BA7517)' :
-                             'var(--mc-dot-risk,  #A32D2D)';
+          survRate >= 0.95 ? '#3B6D11' :
+          survRate >= 0.80 ? '#BA7517' : '#A32D2D';
+        const isRising  = !risingMarked && survRate < 0.95;
+        if (isRising) risingMarked = true;
+        const rowClass  = isRising ? 'mc-decade-row mc-decade-row--rising' : 'mc-decade-row';
         return `
-          <div class="mc-decade-row">
+          <div class="${rowClass}">
             <span class="mc-decade-row__year">${decadeAgeLabel(dy)}</span>
             <span class="mc-decade-row__bar-wrap">
               <span class="mc-decade-row__bar" style="width:${(survRate * 100).toFixed(1)}%;background:${barColour}"></span>
@@ -244,11 +248,11 @@
         }
       }
       if (minSurv >= 0.95) {
-        survivalNote = 'Risk remains low throughout the projection.';
+        survivalNote = 'Risk remains low throughout.';
       } else if (minSurv >= 0.80) {
-        survivalNote = 'Risk is low early in retirement but increases meaningfully in later years.';
+        survivalNote = 'Risk is low early in retirement but rises in later years.';
       } else {
-        survivalNote = 'Risk builds significantly — later years carry substantial pressure.';
+        survivalNote = 'Risk builds significantly — later years carry real pressure.';
       }
     }
 
