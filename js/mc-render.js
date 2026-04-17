@@ -142,21 +142,21 @@
         shortfallHTML = `
           <div class="mc-vstat">
             <div class="mc-vstat-label">Spending headroom</div>
-            <div class="mc-vstat-secondary">Substantial</div>
+            <div class="mc-vstat-value">Substantial</div>
           </div>`;
       } else if (headroom >= 0) {
         const hr = roundToNearest(headroom, 500);
         shortfallHTML = `
           <div class="mc-vstat">
             <div class="mc-vstat-label">Typical headroom</div>
-            <div class="mc-vstat-secondary">+${fmt(hr)} / yr</div>
+            <div class="mc-vstat-value">+${fmt(hr)} / yr</div>
           </div>`;
       } else {
         const gap = roundToNearest(Math.abs(headroom), 500);
         shortfallHTML = `
           <div class="mc-vstat">
             <div class="mc-vstat-label">Typical shortfall</div>
-            <div class="mc-vstat-secondary">${fmt(gap)} / yr</div>
+            <div class="mc-vstat-value">${fmt(gap)} / yr</div>
           </div>`;
       }
     // shortfallHTML is empty string if no spending context — right column shows only success rate
@@ -174,7 +174,7 @@
           <div class="mc-verdict-right">
             <div class="mc-vstat">
               <div class="mc-vstat-label">Success rate</div>
-              <div class="mc-vstat-primary">${fmtPct(rate)}</div>
+              <div class="mc-vstat-value">${fmtPct(rate)}</div>
             </div>
             ${shortfallHTML}
           </div>
