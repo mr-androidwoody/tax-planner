@@ -3592,40 +3592,93 @@ input[type="radio"] { accent-color: var(--accent); }
    MC LOADING STATE
    ═══════════════════════════════════════════════════════════════ */
 
-.mc-loading {
+/* ── Legacy mc-loading (kept for safety, superseded by mc-loader-wrap) ── */
+.mc-loading { display: none; }
+
+/* ══════════════════════════════════════════════════════════════════════
+   MONTE CARLO — full-panel loader
+   ══════════════════════════════════════════════════════════════════════ */
+
+.mc-loader-wrap {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 32px 0 24px;
-  max-width: 480px;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  min-height: calc(100vh - var(--header-height, 130px) - 80px);
+  padding: 40px 24px;
+  opacity: 1;
+  transition: opacity 300ms ease;
 }
 
-.mc-loading__phase {
+.mc-loader-wrap--fade-out {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Sine wave SVG */
+.mc-loader-wave {
+  width: min(400px, 90%);
+  height: 60px;
+  overflow: visible;
+}
+
+.mc-loader-wave__path {
+  stroke-dasharray: 800;
+  stroke-dashoffset: 800;
+  animation: mc-wave-travel 4s linear forwards, mc-wave-shimmer 1.8s ease-in-out infinite;
+}
+
+@keyframes mc-wave-travel {
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes mc-wave-shimmer {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.45; }
+}
+
+/* Cycling message */
+.mc-loader-msg {
   font-size: 14px;
-  color: var(--muted, #6b7280);
+  color: var(--muted);
+  letter-spacing: 0.01em;
   margin: 0;
   min-height: 1.5em;
+  text-align: center;
+  opacity: 0;
+  transition: opacity 150ms ease;
 }
 
-.mc-loading__bar-wrap {
-  height: 6px;
-  background: var(--border, #e5e7eb);
+.mc-loader-msg--visible {
+  opacity: 1;
+}
+
+/* Progress bar */
+.mc-loader-bar-wrap {
+  width: min(320px, 80%);
+  height: 3px;
+  background: var(--border);
   border-radius: 99px;
   overflow: hidden;
 }
 
-.mc-loading__bar-fill {
+.mc-loader-bar-fill {
   height: 100%;
   width: 0%;
-  background: #185FA5;
+  background: var(--accent);
   border-radius: 99px;
-  transition: width 300ms ease;
+  transition: width 50ms linear;
 }
 
-.mc-loading__pct {
-  font-size: 12px;
-  color: var(--muted, #9ca3af);
-  font-variant-numeric: tabular-nums;
+/* Narrative fade-in after loader */
+#mc-narrative.mc-narrative--fade-in {
+  opacity: 0;
+  transition: opacity 400ms ease;
+}
+
+#mc-narrative.mc-narrative--fade-in.mc-narrative--visible {
+  opacity: 1;
 }
 
 .results-tab--outlook.results-tab--simulating::after {
