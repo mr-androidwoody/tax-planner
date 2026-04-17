@@ -37,11 +37,119 @@
   let _useReal         = true;
   let _spendingContext = null; // { currentSpending, sustainableSpending, targetConfidence, openingPortfolio }
 
+  // ── Loader state ──────────────────────────────────────────────────────────
+  const LOADER_DURATION_MS = 4000;
+  const LOADER_MESSAGES = [
+    'Simulating 10,000 retirement paths…',
+    'Stress-testing against poor sequence returns…',
+    'Calculating sustainable spending…',
+    'Preparing your outlook…',
+  ];
+  let _loaderTimer      = null;  // setTimeout handle for the 4s reveal
+  let _loaderInterval   = null;  // setInterval handle for progress bar
+  let _resultReady      = false; // true once worker has posted its result
+  let _loaderActive     = false; // true while loader is showing
+
   // ── Deflation ─────────────────────────────────────────────────────────────
   function _deflate(v, i) {
     return _useReal ? v / Math.pow(1 + _meanInflation, i) : v;
   }
   function _deflateArr(arr) { return arr.map((v, i) => _deflate(v, i)); }
+
+  // ── Loader ────────────────────────────────────────────────────────────────
+  function showLoader() {
+    const el = document.getElementById('mc-narrative');
+    if (!el) return;
+
+    // Reset state
+    _resultReady  = false;
+    _loaderActive = true;
+    clearTimeout(_loaderTimer);
+    clearInterval(_loaderInterval);
+
+    // Wave SVG — a sine path that animates via stroke-dashoffset
+    const waveSVG = `
+      <svg class="mc-loader-wave" viewBox="0 0 400 60" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path class="mc-loader-wave__path"
+          d="M0 30 C33 10, 67 10, 100 30 S167 50, 200 30 S267 10, 300 30 S367 50, 400 30 S467 10, 500 30 S567 50, 600 30"
+          fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round"/>
+      </svg>`;
+
+    el.innerHTML = `
+      <div class="mc-loader-wrap">
+        ${waveSVG}
+        <p class="mc-loader-msg"></p>
+        <div class="mc-loader-bar-wrap">
+          <div class="mc-loader-bar-fill" id="mc-loader-bar"></div>
+        </div>
+      </div>`;
+
+    // Message cycling — cross-fade every (LOADER_DURATION_MS / messages.length) ms
+    const msgEl      = el.querySelector('.mc-loader-msg');
+    const msgDelay   = LOADER_DURATION_MS / LOADER_MESSAGES.length;
+    let   msgIdx     = 0;
+
+    function showMessage(idx) {
+      if (!msgEl) return;
+      msgEl.classList.remove('mc-loader-msg--visible');
+      // Short gap lets opacity reach 0 before text swaps
+      setTimeout(() => {
+        msgEl.textContent = LOADER_MESSAGES[idx] || '';
+        msgEl.classList.add('mc-loader-msg--visible');
+      }, 150);
+    }
+    showMessage(0);
+    const msgTimer = setInterval(() => {
+      msgIdx = (msgIdx + 1) % LOADER_MESSAGES.length;
+      showMessage(msgIdx);
+    }, msgDelay);
+
+    // Progress bar — fills linearly over LOADER_DURATION_MS
+    const barEl     = document.getElementById('mc-loader-bar');
+    const tickMs    = 50;
+    const ticks     = LOADER_DURATION_MS / tickMs;
+    let   tickCount = 0;
+    _loaderInterval = setInterval(() => {
+      tickCount++;
+      const pct = Math.min((tickCount / ticks) * 100, 100);
+      if (barEl) barEl.style.width = pct + '%';
+      if (tickCount >= ticks) clearInterval(_loaderInterval);
+    }, tickMs);
+
+    // 4s reveal timer
+    _loaderTimer = setTimeout(() => {
+      clearInterval(msgTimer);
+      clearInterval(_loaderInterval);
+      _loaderActive = false;
+      if (_resultReady) {
+        _revealNarrative(el);
+      }
+      // else: setResults will call _revealNarrative when it arrives
+    }, LOADER_DURATION_MS);
+  }
+
+  function _revealNarrative(el) {
+    if (!el) el = document.getElementById('mc-narrative');
+    if (!el) return;
+
+    // Fade the loader wrap out, then render
+    const wrap = el.querySelector('.mc-loader-wrap');
+    if (wrap) {
+      wrap.classList.add('mc-loader-wrap--fade-out');
+      setTimeout(() => {
+        _syncToggleButtons();
+        _renderNarrative();
+        // Fade narrative in
+        el.classList.add('mc-narrative--fade-in');
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => el.classList.add('mc-narrative--visible'));
+        });
+      }, 300);
+    } else {
+      _syncToggleButtons();
+      _renderNarrative();
+    }
+  }
 
   // ── Public API ────────────────────────────────────────────────────────────
   function setResults(result, meanInflation, spendingContext) {
@@ -49,6 +157,13 @@
     _meanInflation   = (typeof meanInflation === 'number' && !isNaN(meanInflation))
       ? meanInflation : 0.025;
     _spendingContext = spendingContext || null;
+    _resultReady     = true;
+
+    // If loader has already finished its 4s, reveal immediately
+    if (!_loaderActive) {
+      _revealNarrative();
+    }
+    // else: the _loaderTimer callback will call _revealNarrative
   }
 
   function setReal(useReal) {
@@ -513,6 +628,6 @@
       outlookBtn.classList.add('results-tab--risk-ready');
     }
   }
-  window.RetireMCRender = { setResults, render, setReal };
+  window.RetireMCRender = { setResults, render, setReal, showLoader };
 
 })();
