@@ -1011,7 +1011,12 @@
         </div>
       </div>
 
-      <!-- ── Your outlook tab (Monte Carlo narrative) ── -->
+      <!-- Deterministic disclaimer - hidden on outlook tab -->
+      <div class="det-disclaimer" id="det-disclaimer">
+        &#x2139; Single-path projection using fixed return assumptions &middot; For probability-weighted outcomes across 10,000 scenarios, see <button class="det-disclaimer__link" data-results-tab="outlook">Your outlook</button>
+      </div>
+
+      <!-- Your outlook tab (Monte Carlo narrative) -->
       <div id="results-panel-outlook" class="chart-panel chart-panel--full">
         <div class="chart-canvas-area" id="outlook-panel">
 
@@ -1109,7 +1114,7 @@
           <div id="taxLegend" class="sidebar-legend"></div>
         </div>
         <div class="chart-canvas-area">
-          <h2>Tax paid &amp; effective rate</h2>
+          <h2 id="taxChartTitle">Tax paid &amp; effective rate</h2>
           <div class="chart-wrap"><canvas id="taxChart"></canvas></div>
         </div>
       </div>
@@ -1139,7 +1144,7 @@
         </div>
         <div class="chart-canvas-area">
           <div class="chart-canvas-area__header">
-            <h2>Wealth by type</h2>
+            <h2 id="wealthChartTitle">Wealth by type</h2>
             <div id="wealth-insight-anchor"></div>
           </div>
           <div class="chart-wrap"><canvas id="wealthChart"></canvas></div>
