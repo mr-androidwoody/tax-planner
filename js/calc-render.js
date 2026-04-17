@@ -1221,7 +1221,8 @@
           return `<td ${wcs(col)}${adjVal < 1 && snapVal > 0 ? ' class="depleted"' : ''}>${f(adjVal)}</td>`;
         };
         body += `<tr>
-          <td>${year}</td><td>${p1Age}</td><td ${wcs(WCOL.p2)}>${_p2enabled ? p2Age : '—'}</td>   s.p1Cash   ?? 0)}${cell(WCOL.p1, p1IntBal, s.p1IntBal ?? 0)}${cell(WCOL.p1, p1GIA,   s.p1GIA   ?? 0)}${cell(WCOL.p1, p1SIPP, s.p1SIPP ?? 0)}${cell(WCOL.p1, p1ISA, s.p1ISA ?? 0)}
+          <td>${year}</td><td>${p1Age}</td><td ${wcs(WCOL.p2)}>${_p2enabled ? p2Age : '—'}</td>
+          ${cell(WCOL.p1, p1Cash,   s.p1Cash   ?? 0)}${cell(WCOL.p1, p1IntBal, s.p1IntBal ?? 0)}${cell(WCOL.p1, p1GIA,   s.p1GIA   ?? 0)}${cell(WCOL.p1, p1SIPP, s.p1SIPP ?? 0)}${cell(WCOL.p1, p1ISA, s.p1ISA ?? 0)}
           ${cell(WCOL.p2, p2Cash,   s.p2Cash   ?? 0)}${cell(WCOL.p2, p2IntBal, s.p2IntBal ?? 0)}${cell(WCOL.p2, p2GIA,   s.p2GIA   ?? 0)}${cell(WCOL.p2, p2SIPP, s.p2SIPP ?? 0)}${cell(WCOL.p2, p2ISA, s.p2ISA ?? 0)}
           <td ${wcs(WCOL.total)}><strong>${f(total)}</strong></td>
         </tr>`;
@@ -1289,7 +1290,8 @@
           : `<td style="background:${COL.total.bg}">—</td>`;
 
         body += `<tr>
-          <td>${year}</td><td>${p1Age}</td><td ${cs(COL.p2)}>${_p2enabled ? p2Age : '—'}</td><td ${cs(COL.sp)}>${dp2(p2SP)}</td>
+          <td>${year}</td><td>${p1Age}</td><td ${cs(COL.p2)}>${_p2enabled ? p2Age : '—'}</td>
+          <td ${cs(COL.sp)}>${f(p1SP)}</td><td ${cs(COL.sp)}>${dp2(p2SP)}</td>
           <td ${cs(COL.sal)}>${f(p1Sal)}</td><td ${cs(COL.sal)}>${dp2(p2Sal)}</td>
           <td ${cs(COL.int)}>${f(p1Int)}</td><td ${cs(COL.int)}>${dp2(p2Int)}</td>
           <td ${cs(COL.div)}>${f(p1Divs)}</td><td ${cs(COL.div)}>${dp2(p2Divs)}</td>
