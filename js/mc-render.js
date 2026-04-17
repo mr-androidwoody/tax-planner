@@ -104,25 +104,25 @@
       rate >= 0.90 ? 'Good'       :
       rate >= 0.80 ? 'Borderline' : 'At risk';
 
-    // heroBg: solid 800-stop fill for the full-bleed hero band
+    // heroBg: solid 600-stop fill for the full-bleed hero band
     // actionBg / actionBorder / actionLabel / actionText / actionImpact: terminal block colours
     const verdictColour =
       rate >= 0.95 ? {
-        heroBg: '#27500A',
+        heroBg: '#3B6D11',
         actionBg: '#EAF3DE', actionBorder: '#3B6D11',
         actionLabel: '#27500A', actionText: '#173404', actionImpact: '#3B6D11'
       } :
       rate >= 0.90 ? {
-        heroBg: '#0C447C',
+        heroBg: '#185FA5',
         actionBg: '#E6F1FB', actionBorder: '#185FA5',
         actionLabel: '#0C447C', actionText: '#042C53', actionImpact: '#185FA5'
       } :
       rate >= 0.80 ? {
-        heroBg: '#854F0B',
+        heroBg: '#BA7517',
         actionBg: '#FAEEDA', actionBorder: '#BA7517',
         actionLabel: '#854F0B', actionText: '#412402', actionImpact: '#633806'
       } : {
-        heroBg: '#791F1F',
+        heroBg: '#A32D2D',
         actionBg: '#FCEBEB', actionBorder: '#A32D2D',
         actionLabel: '#791F1F', actionText: '#501313', actionImpact: '#A32D2D'
       };
@@ -356,7 +356,7 @@
         <div class="mc-evidence-pane">
           <div class="mc-section-label">What changes this</div>
           <div class="mc-lever-table">
-            ${items.map(it => leverBlock(it.name, it.pill, it.pillClass, it.outcome, false, true)).join('')}
+            ${items.map((it, idx) => leverBlock(it.name, it.pill, it.pillClass, it.outcome, idx === 0, true)).join('')}
           </div>
         </div>`;
     } else {
@@ -400,11 +400,107 @@
       actionImpact = `Your plan is resilient across all tested scenarios.`;
     }
 
+    // ── Contextual bullets (right half of action block) ───────────────
+    // Worst-case depletion age from p10 portfolio
+    let p10DepletesAge = null;
+    if (r.p1StartAge != null) {
+      for (let i = 0; i < r.p10Portfolio.length; i++) {
+        if (r.p10Portfolio[i] <= 0) { p10DepletesAge = r.p1StartAge + i; break; }
+      }
+    }
+
+    // Median and p90 end-of-projection values (deflated)
+    const p50End = _deflate(r.p50Portfolio[lastIdx], lastIdx);
+    const p90End = _deflate(r.p90Portfolio[lastIdx], lastIdx);
+    const p10End = _deflate(r.p10Portfolio[lastIdx], lastIdx);
+
+    // Midpoint age (roughly age 80 equivalent index)
+    const midIdx = p1StartAge !== null
+      ? Math.min(r.years.indexOf(r.years.find(y => y >= firstYear + (80 - p1StartAge)) ?? lastYear), lastIdx)
+      : Math.floor(lastIdx / 2);
+    const p50Mid = _deflate(r.p50Portfolio[Math.max(midIdx, 0)], Math.max(midIdx, 0));
+
+    const age80label = p1StartAge !== null ? `age ${Math.min(80, p1StartAge + lastIdx)}` : 'mid-retirement';
+
+    let bulletItems = [];
+
+    if (rate >= 0.95) {
+      // Strong
+      if (sustainableSpending !== null && !sustainableIsFloor && headroom !== null && headroom >= 0) {
+        const ceil = roundToNearest(sustainableSpending, 500);
+        bulletItems.push(`Your plan supports up to ${fmt(ceil)} / yr at ${confPct}% confidence — ${fmt(roundToNearest(headroom, 500))} above your current spending.`);
+      }
+      if (p50Mid > 0) {
+        bulletItems.push(`In a typical market, your portfolio is around ${fmt(roundToNearest(p50Mid, 10000))} at ${age80label}.`);
+      }
+      if (p10DepletesAge !== null) {
+        bulletItems.push(`In the worst 1 in 10 paths, funds run low around age ${p10DepletesAge}.`);
+      } else {
+        bulletItems.push(`Even in the worst 1 in 10 paths, your portfolio remains intact throughout the projection.`);
+      }
+    } else if (rate >= 0.90) {
+      // Good
+      if (sustainableSpending !== null && !sustainableIsFloor && headroom !== null && headroom >= 0) {
+        const ceil = roundToNearest(sustainableSpending, 500);
+        bulletItems.push(`Sustainable spending ceiling is ${fmt(ceil)} — ${fmt(roundToNearest(headroom, 500))} above where you are now.`);
+      }
+      if (p50End > 0) {
+        bulletItems.push(`Median portfolio at end of projection: ${fmt(roundToNearest(p50End, 10000))}.`);
+      }
+      if (p10DepletesAge !== null) {
+        bulletItems.push(`In the worst 1 in 10 paths, funds run low around age ${p10DepletesAge} — late enough that adjustments remain possible.`);
+      } else {
+        bulletItems.push(`Even in the worst 1 in 10 paths, the portfolio survives the full projection.`);
+      }
+    } else if (rate >= 0.80) {
+      // Borderline
+      if (hasGap) {
+        const gap = roundToNearest(Math.abs(headroom), 500);
+        bulletItems.push(`A ${fmt(gap)} / yr reduction fully closes the gap to the ${confPct}% threshold.`);
+      }
+      if (p10DepletesAge !== null) {
+        bulletItems.push(`In the worst 1 in 10 paths, funds run out around age ${p10DepletesAge} — while spending flexibility still exists.`);
+      }
+      if (p50End > 0) {
+        bulletItems.push(`Median portfolio at end of projection: ${fmt(roundToNearest(p50End, 10000))} — the plan works in most scenarios.`);
+      }
+    } else {
+      // At risk
+      if (p10DepletesAge !== null) {
+        bulletItems.push(`In the worst 1 in 10 paths, funds are exhausted by age ${p10DepletesAge}.`);
+      }
+      if (p50End > 0) {
+        bulletItems.push(`Median portfolio at end of projection: ${fmt(roundToNearest(p50End, 10000))} — depletion is a likely outcome, not just a tail risk.`);
+      }
+      if (hasGap && delayEffective) {
+        const gap = roundToNearest(Math.abs(headroom), 500);
+        const newTarget = roundToNearest(currentSpending - gap, 500);
+        bulletItems.push(`Cutting spending to ${fmt(newTarget)} and delaying by ${delayMin.yearsDelay} year${delayMin.yearsDelay > 1 ? 's' : ''} together lift success to ${fmtPct(delayMin.successRate)}.`);
+      } else if (hasGap) {
+        const gap = roundToNearest(Math.abs(headroom), 500);
+        bulletItems.push(`Reducing spending by ${fmt(gap)} / yr would bring your plan to the ${confPct}% confidence threshold.`);
+      }
+    }
+
+    // Cap at 3 bullets
+    bulletItems = bulletItems.slice(0, 3);
+    const bulletsHTML = bulletItems.map(b => `<li class="mc-action-bullet">${b}</li>`).join('');
+
     const s4 = `
       <div class="mc-primary-action" style="border-top-color:${verdictColour.actionBorder};background:${verdictColour.actionBg}">
-        <div class="mc-primary-action__label" style="color:${verdictColour.actionLabel}">Recommended action</div>
-        <p class="mc-primary-action__text" style="color:${verdictColour.actionText}">${actionLine}</p>
-        <p class="mc-primary-action__impact" style="color:${verdictColour.actionImpact}">${actionImpact}</p>
+        <div class="mc-primary-action__body">
+          <div class="mc-primary-action__left">
+            <div class="mc-primary-action__label" style="color:${verdictColour.actionLabel}">Recommended action</div>
+            <p class="mc-primary-action__text" style="color:${verdictColour.actionText}">${actionLine}</p>
+            <p class="mc-primary-action__impact" style="color:${verdictColour.actionImpact}">${actionImpact}</p>
+          </div>
+          ${bulletsHTML ? `
+          <div class="mc-primary-action__right">
+            <ul class="mc-action-bullets" style="--bullet-colour:${verdictColour.actionBorder}">
+              ${bulletsHTML}
+            </ul>
+          </div>` : ''}
+        </div>
       </div>
       <p class="mc-bridge-note">Use the tabs above to explore charts and tables showing how your plan unfolds year by year under fixed assumptions.</p>`;
 
