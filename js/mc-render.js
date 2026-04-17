@@ -505,6 +505,13 @@
       <p class="mc-bridge-note">Use the tabs above to explore charts and tables showing how your plan unfolds year by year under fixed assumptions.</p>`;
 
     el.innerHTML = s1 + s23 + s4;
+
+    // Push verdict colour onto the outlook tab button
+    const outlookBtn = document.querySelector('.results-tab--outlook');
+    if (outlookBtn) {
+      outlookBtn.style.setProperty('--tab-verdict-colour', verdictColour.heroBg);
+      outlookBtn.classList.add('results-tab--risk-ready');
+    }
   }
   window.RetireMCRender = { setResults, render, setReal };
 
