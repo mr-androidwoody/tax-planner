@@ -3263,8 +3263,29 @@ input[type="radio"] { accent-color: var(--accent); }
   margin-left: auto;
   display: block;
   text-align: center;
+  height: 32px;
+  min-height: 32px;
+  border: 1px solid #bcc7d7;
+  border-radius: 7px;
+  background: #fff;
+  padding: 0 9px;
+  font-size: 0.78rem;
+  color: #334155;
 }
 
+.wiz-table input[type="number"]:focus,
+.wiz-table input[type="text"]:focus,
+.wiz-table select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(45,91,255,0.12);
+}
+
+.wiz-table input:disabled {
+  background: #f0f3f7;
+  color: #aaa;
+  border-color: #dde3ec;
+}
 .wiz-val .assump-radio-group {
   text-align: left;
 }
