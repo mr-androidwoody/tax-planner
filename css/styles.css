@@ -1514,6 +1514,7 @@ input[type="radio"] { accent-color: var(--accent); }
   grid-template-rows: auto auto;
   gap: 0 12px;
   margin-bottom: 16px;
+  border-bottom: 1px solid var(--border);
 }
 
 .results-intro {
@@ -4067,7 +4068,6 @@ input[type="radio"] { accent-color: var(--accent); }
   padding-bottom: 4px;
   position: relative;
   z-index: 1;
-  border-bottom: 1px solid var(--border);
 }
 
 /* ═══════════════════════════════════════════════════════════════
