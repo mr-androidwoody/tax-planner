@@ -202,6 +202,7 @@
         el.innerHTML = `
           <div class="status status-ok">
             <span class="value">100%</span>
+            <span class="status-text">Ready</span>
           </div>
         `;
         return;
