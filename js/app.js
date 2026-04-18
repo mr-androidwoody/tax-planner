@@ -1340,6 +1340,23 @@
   R.initialiseCurrencyInputs();
   applyBniState(false);
   RetireTabs.init();
+
+  // ── Splash screen ────────────────────────────
+  (function initSplash() {
+    const splash  = document.getElementById('splash-screen');
+    const getStartedBtn = document.getElementById('splashGetStarted');
+    const aboutBtn      = document.getElementById('footerAboutBtn');
+
+    function hideSplash() {
+      if (splash) splash.classList.add('splash-hidden');
+    }
+    function showSplash() {
+      if (splash) splash.classList.remove('splash-hidden');
+    }
+
+    if (getStartedBtn) getStartedBtn.addEventListener('click', hideSplash);
+    if (aboutBtn)      aboutBtn.addEventListener('click', showSplash);
+  })();
   CR.initResultsTabs();
   CR.initTableSelector();
 
