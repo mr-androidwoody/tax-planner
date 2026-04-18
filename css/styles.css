@@ -3869,7 +3869,7 @@ input[type="radio"] { accent-color: var(--accent); }
 
 .mc-decade-row {
   display: grid;
-  grid-template-columns: 60px 1fr 48px;
+  grid-template-columns: 60px 1fr 56px;
   align-items: center;
   gap: 12px;
 }
@@ -3912,6 +3912,19 @@ input[type="radio"] { accent-color: var(--accent); }
   margin-top: 12px;
   font-style: italic;
 }
+
+/* Decade row sub-label (Ready / Watch / Risk) */
+.mc-decade-row__sublabel {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-align: right;
+  margin-top: 1px;
+}
+.mc-decade-row__sublabel--safe { color: #3B6D11; }
+.mc-decade-row__sublabel--warn { color: #BA7517; }
+.mc-decade-row__sublabel--risk { color: #A32D2D; }
 
 /* ═══════════════════════════════════════════════════════════════
    YOUR OUTLOOK — lever blocks (stacked, no grid columns)
