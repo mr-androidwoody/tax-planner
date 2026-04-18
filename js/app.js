@@ -1095,7 +1095,13 @@
 
       if (field === 'wrapper') {
         const acc = state.portfolioAccounts.find(a => a.id === Number(accountId));
-        if (acc) { R.applyWrapperFieldState(acc); syncAccountsFromDOM(); }
+        if (acc) {
+          R.applyWrapperFieldState(acc);
+          // Re-sync after applyWrapperFieldState has corrected the DOM values
+          // so state reflects the fixed alloc (e.g. Cash % = 100)
+          syncAccountsFromDOM();
+          refreshSetupSummary();
+        }
       }
       if (field === 'owner') {
         R.refreshOwnerOptions(state.portfolioAccounts, getOwnerNames());
