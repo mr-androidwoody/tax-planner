@@ -192,6 +192,48 @@
     if (mRate)   mRate.textContent   = (avgRate * 100).toFixed(1) + '%';
     if (mTarget) mTarget.textContent = incomeTargetStr;
     if (mPort)   mPort.textContent   = fmt(_lp);
+
+    // ── MC comparison badge ────────────────────────────────────────────
+    // Compare raw nominal end values so real/nominal toggle differences don't distort the gap.
+    // window.RetireMCResults is written by mc-render.js after each MC run.
+    if (mPort) {
+      const nominalDetEnd = _rows.length ? (_rows[_rows.length - 1]?.totalPortfolio || 0) : 0;
+      const mcNominal     = window.RetireMCResults?.medianEndPortfolioNominal ?? null;
+      let badge = document.getElementById('m-port-mc-badge');
+
+      if (mcNominal !== null && nominalDetEnd > 0) {
+        const gap = (nominalDetEnd - mcNominal) / nominalDetEnd; // positive = MC lower
+        if (!badge) {
+          badge = document.createElement('div');
+          badge.id = 'm-port-mc-badge';
+          badge.style.cssText = [
+            'margin-top:6px',
+            'padding:4px 8px',
+            'border-radius:4px',
+            'font-size:0.78rem',
+            'line-height:1.35',
+            'background:#faeeda',
+            'color:#854f0b',
+          ].join(';');
+          mPort.insertAdjacentElement('afterend', badge);
+        }
+        if (gap >= 0.25) {
+          const gapPct = Math.round(gap * 100);
+          badge.textContent = `Based on fixed return assumptions — real markets vary. Typical market outcome is ${gapPct}% lower. See Plan Outlook for a market-adjusted view.`;
+          badge.style.display = '';
+        } else {
+          // Gap < 25%: show a neutral note, no alarm
+          badge.textContent = 'Consistent with market-adjusted estimate.';
+          badge.style.cssText = badge.style.cssText
+            .replace('background:#faeeda', 'background:#f0f0f0')
+            .replace('color:#854f0b', 'color:#555');
+          badge.style.display = '';
+        }
+      } else if (badge) {
+        // MC not yet run: hide any existing badge
+        badge.style.display = 'none';
+      }
+    }
   }
 
   // ─────────────────────────────────────────────

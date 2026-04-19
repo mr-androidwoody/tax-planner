@@ -71,6 +71,9 @@
     clearTimeout(_loaderTimer);
     clearInterval(_loaderInterval);
 
+    // Clear the shared results object so the deterministic badge hides during the run
+    window.RetireMCResults = null;
+
     // Wave SVG — a sine path that animates via stroke-dashoffset
     const waveSVG = `
       <svg class="mc-loader-wave" viewBox="0 0 400 60" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -357,7 +360,7 @@
     const s1 = `
       <div class="mc-verdict-header" style="background:${verdictColour.heroBg}">
         <div class="mc-verdict-grid">
-          <div class="mc-verdict-eyebrow">Your retirement outlook</div>
+          <div class="mc-verdict-eyebrow">Market-adjusted outlook</div>
           <div class="mc-verdict-eyebrow mc-verdict-eyebrow--right">Success rate</div>
           <div class="mc-verdict-word">${verdictWord}</div>
           <div class="mc-verdict-bignum">${Math.round(rate * 100)}%</div>
@@ -365,7 +368,7 @@
         <div class="mc-verdict-lower">
           <div class="mc-verdict-lower__left">
             <p class="mc-verdict-sentence">${verdictSentence}</p>
-            <div class="mc-verdict-meta">Based on ${r.simCount.toLocaleString('en-GB')} simulations · ${firstYear} → ${lastYear}</div>
+            <div class="mc-verdict-meta">Based on ${r.simCount.toLocaleString('en-GB')} simulations · ${firstYear} – ${lastYear}</div><div class="mc-verdict-framing">Fixed return assumptions produce a straight-line estimate. These simulations show how real market variability affects your plan — the median path is your most realistic planning figure.</div>
           </div>
           <div class="mc-verdict-lower__right">
             ${shortfallHTML}
@@ -637,6 +640,11 @@
     const p90End = _deflate(r.p90Portfolio[lastIdx], lastIdx);
     const p10End = _deflate(r.p10Portfolio[lastIdx], lastIdx);
 
+    // Expose nominal median end value for the deterministic metrics badge.
+    // Always nominal (no deflation) so calc-render.js can compare apples-to-apples
+    // against the raw nominal totalPortfolio from the engine rows.
+    window.RetireMCResults = { medianEndPortfolioNominal: r.p50Portfolio[lastIdx] };
+
     // Midpoint age (roughly age 80 equivalent index)
     const _midYearMatch = p1StartAge !== null
       ? r.years.find(y => y >= firstYear + (80 - p1StartAge))
@@ -676,7 +684,7 @@
         bulletItems.push(`Sustainable spending ceiling is ${fmtB(ceil)}, ${fmtB(roundToNearest(headroom, 500))} above where you are now.`);
       }
       if (p50End > 0) {
-        bulletItems.push(`Median portfolio at end of projection: ${fmtB(roundToNearest(p50End, 10000))}.`);
+        bulletItems.push(`In a typical market, your plan ends with ${fmtB(roundToNearest(p50End, 10000))}. This is the central planning estimate, after accounting for market variability.`);
       }
     } else if (rate >= 0.80) {
       // Borderline
@@ -687,7 +695,7 @@
         bulletItems.push(`In the worst 1 in 10 paths, funds run out around age ${p10DepletesAge}, while spending flexibility still exists.`);
       }
       if (p50End > 0) {
-        bulletItems.push(`Median portfolio at end of projection: ${fmtB(roundToNearest(p50End, 10000))}. The plan works in most scenarios.`);
+        bulletItems.push(`In a typical market, the portfolio reaches ${fmtB(roundToNearest(p50End, 10000))} by end of projection. The plan works in most scenarios, though the margin matters.`);
       }
     } else {
       // At risk
@@ -695,7 +703,7 @@
         bulletItems.push(`In the worst 1 in 10 paths, funds are exhausted by age ${p10DepletesAge}.`);
       }
       if (p50End > 0) {
-        bulletItems.push(`Median portfolio at end of projection: ${fmtB(roundToNearest(p50End, 10000))}. Depletion is a likely outcome, not just a tail risk.`);
+        bulletItems.push(`In a typical market, the portfolio reaches ${fmtB(roundToNearest(p50End, 10000))} by end of projection. Depletion is a likely outcome, not just a tail risk.`);
       }
       if (hasGap && delayEffective) {
         const newTarget = roundToNearest(currentSpending - roundedGap, 500);
