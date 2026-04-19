@@ -1929,17 +1929,19 @@ input[type="radio"] { accent-color: var(--accent); }
 #legend-tooltip {
   position: absolute;
   z-index: 9999;
-  max-width: 260px;
-  padding: 10px 13px;
-  background: #1a2236;
-  color: #f0f4ff;
+  max-width: 280px;
+  padding: 0;
+  background: #ffffff;
+  color: #1a2236;
   font-size: 0.78rem;
   font-family: Inter, system-ui, sans-serif;
   line-height: 1.45;
   border-radius: 10px;
-  box-shadow: 0 6px 24px rgba(0,0,0,0.28);
+  border: 1px solid #2348c4;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.18);
   pointer-events: none;
   opacity: 0;
+  overflow: hidden;
   transform: translateY(4px);
   transition: opacity 140ms ease, transform 140ms ease;
 }
@@ -1947,6 +1949,31 @@ input[type="radio"] { accent-color: var(--accent); }
 #legend-tooltip.is-visible {
   opacity: 1;
   transform: translateY(0);
+}
+
+.tooltip-header {
+  display: flex;
+  align-items: center;
+  background: #3460e8;
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 0.78rem;
+  padding: 7px 11px;
+  border-radius: 9px 9px 0 0;
+  gap: 4px;
+}
+
+.tooltip-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tooltip-body {
+  padding: 9px 11px;
+  color: #1a2236;
+  font-size: 0.77rem;
+  line-height: 1.5;
 }
 
 /* ─────────────────────────────
