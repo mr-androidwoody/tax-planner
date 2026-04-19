@@ -1069,7 +1069,8 @@
 
         <!-- Results chart tab bar -->
         <div class="results-tab-bar">
-          <button class="results-tab results-tab--active" data-results-tab="income">Sources of income</button>
+          <button class="results-tab results-tab--active" data-results-tab="summary">Plan summary</button>
+          <button class="results-tab results-tab--inactive" data-results-tab="income">Sources of income</button>
           <button class="results-tab results-tab--inactive" data-results-tab="spending">Gross vs net</button>
           <button class="results-tab results-tab--inactive" data-results-tab="tax">Tax paid</button>
           <button class="results-tab results-tab--inactive" data-results-tab="wealth">Wealth by type</button>
@@ -1097,8 +1098,20 @@
         This projection follows a single path using your fixed return assumptions. For a fuller picture, use <strong>Test my plan</strong> to stress-test your plan across 10,000 simulated market scenarios.
       </div>
 
+      <!-- ── Plan summary tab ── -->
+      <div id="results-panel-summary" class="chart-panel chart-panel--full">
+        <div class="chart-canvas-area" id="summary-panel">
+          <div id="plan-summary-content">
+            <div class="ps-empty">
+              <strong>No projection run yet</strong>
+              Run a projection to see a summary of your plan assumptions and verdicts.
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- ── Income tab ── -->
-      <div id="results-panel-income" class="chart-panel">
+      <div id="results-panel-income" class="chart-panel" style="display:none">
         <div class="chart-sidebar">
           <div class="sidebar-controls">
             <div class="sidebar-controls__col">
@@ -1125,7 +1138,7 @@
             <h2 id="income-chart-title">Sources of income</h2>
             <div id="income-insight-anchor"></div>
           </div>
-          <div class="chart-wrap"><canvas id="incomeChart"></canvas></div>
+          <div class="chart-wrap" id="income-chart-wrap"><canvas id="incomeChart"></canvas></div>
         </div>
       </div>
 
@@ -1290,6 +1303,7 @@
 <script src="js/mc-render.js"></script>
 <script src="js/excel-loader.js"></script>
 <script src="js/tabs.js"></script>
+<script src="js/summary-render.js"></script>
 <script src="js/app.js"></script>
 <script>
   (function () {
