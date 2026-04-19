@@ -173,7 +173,17 @@
     var p2GIA   = dual ? ((inputs.p2Bal.GIAeq || 0) + (inputs.p2Bal.GIAcash || 0)) : 0;
     var giaTotal = p1GIA + p2GIA;
 
-    var wrRate    = totalPort > 0 ? (inputs.spending / totalPort) * 100 : 0;
+    var initialRate   = totalPort > 0 ? (inputs.spending / totalPort) * 100 : 0;
+    var stepDownPct   = inputs.stepDownPct || 0;
+    var reducedRate   = totalPort > 0 ? (inputs.spending * (1 - stepDownPct / 100) / totalPort) * 100 : 0;
+    var wrRate        = initialRate;
+    if (stepDownPct > 0 && inputs.p1DOB && inputs.startYear && inputs.endYear && inputs.endYear > inputs.startYear) {
+      var p1Age75Year = inputs.p1DOB + 75;
+      var yearsBefore = Math.max(0, Math.min(p1Age75Year, inputs.endYear) - inputs.startYear);
+      var yearsAfter  = Math.max(0, inputs.endYear - Math.max(p1Age75Year, inputs.startYear));
+      var totalYears  = yearsBefore + yearsAfter;
+      if (totalYears > 0) wrRate = (initialRate * yearsBefore + reducedRate * yearsAfter) / totalYears;
+    }
     var wrRateStr = wrRate.toFixed(1);
     var wrV = wrRate < 3.5 ? ['green','Low risk'] : wrRate < 4.5 ? ['amber','Moderate'] : ['red','High risk'];
     var wrNote = wrRate < 3.5
@@ -384,7 +394,7 @@
       ) +
 
       row('Withdrawal rate',
-        vline(wrRateStr + '% of ' + money(totalPort)),
+        vline(wrRateStr + '% of ' + money(totalPort) + (stepDownPct > 0 ? ' (lifetime blended)' : '')),
         chip.apply(null, wrV),
         wrNote
       ) +
