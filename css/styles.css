@@ -4598,11 +4598,11 @@ input[type="radio"] { accent-color: var(--accent); }
 
 /* Card section heading — single consistent size throughout */
 .ps-card__heading {
-  font-size: 10px;
+  font-size: 0.78rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text);
+  letter-spacing: 0.06em;
+  color: var(--muted);
   margin-bottom: 8px;
   padding-bottom: 6px;
   border-bottom: 1px solid var(--border);
@@ -4632,7 +4632,7 @@ input[type="radio"] { accent-color: var(--accent); }
 
 /* Col 1: row label */
 .ps-row__label {
-  font-size: 11px;
+  font-size: 0.82rem;
   color: var(--muted);
   padding-top: 2px;
   line-height: 1.4;
@@ -4655,7 +4655,7 @@ input[type="radio"] { accent-color: var(--accent); }
 
 /* Person name prefix */
 .ps-pname {
-  font-size: 11px;
+  font-size: 0.82rem;
   font-weight: 600;
   color: var(--muted);
   min-width: 32px;
@@ -4664,7 +4664,7 @@ input[type="radio"] { accent-color: var(--accent); }
 
 /* Value text */
 .ps-val {
-  font-size: 12px;
+  font-size: 0.86rem;
   font-weight: 600;
   color: var(--text);
   min-width: 0;
@@ -4688,7 +4688,7 @@ input[type="radio"] { accent-color: var(--accent); }
 
 /* Note text beneath the verdict header */
 .ps-note {
-  font-size: 11px;
+  font-size: 0.8rem;
   color: var(--muted);
   line-height: 1.45;
 }
@@ -4697,7 +4697,7 @@ input[type="radio"] { accent-color: var(--accent); }
    Coloured text label, no background, no border-radius.
    Acts as a section heading for the note beneath it. */
 .ps-chip {
-  font-size: 10px;
+  font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
