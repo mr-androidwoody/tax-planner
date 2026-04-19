@@ -4543,7 +4543,6 @@ input[type="radio"] { accent-color: var(--accent); }
 .ps-val-line {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
   gap: 6px;
   min-width: 0;
 }
@@ -4557,14 +4556,12 @@ input[type="radio"] { accent-color: var(--accent); }
   flex-shrink: 0;
 }
 
-/* Value text — right-aligned for accounting-style column readability */
+/* Value text */
 .ps-val {
   font-size: 12px;
   font-weight: 600;
   color: var(--text);
   min-width: 0;
-  text-align: right;
-  flex: 1;
 }
 
 /* Secondary muted text — used for projection end ages */
