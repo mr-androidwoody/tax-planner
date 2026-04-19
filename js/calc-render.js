@@ -185,7 +185,7 @@
     if (stepDownPct > 0) {
       const reduced = spending * (1 - stepDownPct / 100);
       incomeTargetStr = fmtK(spending) + ' reducing to ' + fmtK(reduced);
-      incomeTargetSub = 'at age 75';
+      incomeTargetSub = 'Income steps down at age 75';
     } else {
       incomeTargetStr = fmtK(spending) + ' per year';
     }
