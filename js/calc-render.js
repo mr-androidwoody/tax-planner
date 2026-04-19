@@ -7,7 +7,7 @@
   let _annotations = [];
   let _depletions  = {};
   let _viewPerson = 'both';
-  let _useReal    = true;
+  let _useReal    = false;
   let _p2enabled  = true;
   let _activeResultsTab = 'income';
   let _incomeChart     = null;
@@ -121,7 +121,7 @@
         const disclaimer = document.getElementById('det-disclaimer');
         if (disclaimer) disclaimer.classList.toggle('det-disclaimer--hidden', tab === 'outlook' || tab === 'summary');
 
-        // Hide metrics band on outlook tab only
+        // Hide metrics band on summary and outlook tabs
         const metricsBand = document.querySelector('.metrics-band');
         if (metricsBand) metricsBand.style.display = (tab === 'outlook') ? 'none' : '';
 
