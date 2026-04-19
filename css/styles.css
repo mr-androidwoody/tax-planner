@@ -2060,10 +2060,14 @@ input[type="radio"] { accent-color: var(--accent); }
 
 .ps-nav__link {
   display: block;
+  width: 100%;
+  text-align: left;
   font-size: 0.78rem;
   font-weight: 500;
   color: var(--muted);
-  text-decoration: none;
+  background: none;
+  border: none;
+  cursor: pointer;
   padding: 5px 8px;
   border-radius: 5px;
   transition: background 0.12s, color 0.12s;
@@ -2078,11 +2082,6 @@ input[type="radio"] { accent-color: var(--accent); }
   background: var(--panel-soft);
   color: var(--accent, #3460e8);
   font-weight: 600;
-}
-
-/* Scroll anchor offset for each card */
-.ps-card[id] {
-  scroll-margin-top: 16px;
 }
 
 /* Table toolbar — sits above table content */
