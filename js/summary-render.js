@@ -185,11 +185,11 @@
       if (totalYears > 0) wrRate = (initialRate * yearsBefore + reducedRate * yearsAfter) / totalYears;
     }
     var wrRateStr = wrRate.toFixed(1);
-    var wrV = wrRate < 3.5 ? ['green','Low risk'] : wrRate < 4.5 ? ['amber','Moderate'] : ['red','High risk'];
-    var wrNote = wrRate < 3.5
-      ? 'At ' + wrRateStr + '%, the plan should grow or hold steady in most market environments. The portfolio has room to absorb a run of poor returns without threatening income.'
-      : wrRate < 4.5
-        ? 'At ' + wrRateStr + '%, the plan is workable but not conservative. A sustained period of below-average returns or higher-than-expected spending could erode the portfolio faster than expected. Test my plan will show how often this holds up across 10,000 scenarios.'
+    var wrV = wrRate < 4 ? ['green','Sustainable'] : wrRate < 5 ? ['amber','Monitor closely'] : ['red','At risk'];
+    var wrNote = wrRate < 4
+      ? 'At ' + wrRateStr + '%, the plan is within a sustainable range. The portfolio should hold up well across most market environments, with room to absorb a run of below-average returns.'
+      : wrRate < 5
+        ? 'At ' + wrRateStr + '%, the plan is workable but worth watching. A sustained period of below-average returns or higher-than-expected spending could erode the portfolio faster than expected. Test my plan will show how often this holds up across 10,000 scenarios.'
         : 'At ' + wrRateStr + '%, the plan is drawing faster than most historical safe withdrawal rates support. The portfolio is at meaningful risk of running low in later years, particularly if markets underperform in the first decade of retirement. Reducing spending or deferring retirement would have the most impact here.';
 
     var gPct  = (inputs.growth || 0) * 100;
