@@ -875,6 +875,7 @@
       refreshTabGating(_isPortfolioValid());
       CR.setResults(result, inputs.strategy, inputs.p2enabled);
       window.RetireSummary?.setData(inputs, result, state.portfolioAccounts);
+      window._debugResult = result;
       CR.renderMetrics();
       CR.renderCharts();
       RetireTabs.switchTab('results');
