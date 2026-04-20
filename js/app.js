@@ -300,6 +300,8 @@
 
     updateSidebarNames();
     applyP2State();
+    const _summary = C.summarisePortfolio(state.portfolioAccounts);
+    refreshDrawdownRates(_summary.total);
   }
 
   // ─────────────────────────────
@@ -1433,9 +1435,6 @@
       console.error(e);
     }
   }
-
-  // Recalculate drawdown rates now that spending/stepDownPct are restored
-  refreshSetupSummary();
 
   // Gate tabs after everything is loaded — must run after RetireTabs.init()
   // so our disabled state wins over any defaults set by the tab system
