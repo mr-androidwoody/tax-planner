@@ -787,13 +787,16 @@
           </div>` : ''}
         </div>
       </div>
-      <p class="mc-bridge-note">The Plan summary tab shows your inputs and planning assumptions. These simulations test those assumptions across thousands of market scenarios with real return variability, showing how your plan holds up when markets don't behave as expected.</p>
+      <p class="mc-bridge-note">The Plan summary tab shows your inputs and planning assumptions. These simulations test those assumptions across thousands of market scenarios with realistic return variability, showing how your plan holds up when markets don't behave as expected.</p>
       <p class="mc-bridge-note">Use the tabs above to explore charts and tables showing how your plan unfolds year by year under your planning assumptions.</p>`;
+
+    const inflationPct = (_meanInflation * 100).toFixed(1);
+    const basisNote = `<p class="mc-basis-note">All £ figures on this tab are in today's money, adjusted for ${inflationPct}% annual inflation.</p>`;
 
     const staleBanner = _stale
       ? `<div class="mc-stale-banner">⚠ Based on previous inputs. Re-run to update.</div>`
       : '';
-    el.innerHTML = staleBanner + s1 + s23 + s4;
+    el.innerHTML = staleBanner + s1 + basisNote + s23 + s4;
 
     // Push verdict colour onto the outlook tab button
     const outlookBtn = document.querySelector('.results-tab--outlook');
