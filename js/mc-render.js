@@ -219,6 +219,26 @@
     const firstYear = r.years[0];
     const lastYear  = r.years[lastIdx];
 
+    // ══════════════════ TEMPORARY DIAGNOSTIC ══════════════════
+    // Remove once nominal-vs-real question is resolved.
+    console.log('[MC DIAG]', {
+      useReal:        _useReal,
+      meanInflation:  _meanInflation,
+      firstYear,
+      lastYear,
+      lastIdx,
+      deflator:       Math.pow(1 + _meanInflation, lastIdx),
+      p10_nominal_end: r.p10Portfolio[lastIdx],
+      p10_real_end:    _deflate(r.p10Portfolio[lastIdx], lastIdx),
+      p50_nominal_end: r.p50Portfolio[lastIdx],
+      p50_real_end:    _deflate(r.p50Portfolio[lastIdx], lastIdx),
+      p90_nominal_end: r.p90Portfolio[lastIdx],
+      p90_real_end:    _deflate(r.p90Portfolio[lastIdx], lastIdx),
+      p50_nominal_start: r.p50Portfolio[0],
+      p50_real_start:    _deflate(r.p50Portfolio[0], 0),
+    });
+    // ══════════════════════════════════════════════════════════
+
     const p25 = _deflateArr(r.p25Portfolio);
     const p50 = _deflateArr(r.p50Portfolio);
     const p75 = _deflateArr(r.p75Portfolio);
