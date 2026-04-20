@@ -49,8 +49,8 @@
   'use strict';
 
   // ── Asset class return assumptions (nominal, annualised) ──────────────────
-  const EQ_RETURN  = 0.065;   // Global equities
-  const BD_RETURN  = 0.040;   // Global bonds
+  const EQ_RETURN  = 0.080;   // Global equities
+  const BD_RETURN  = 0.045;   // Global bonds
   const CL_RETURN  = 0.030;   // Cashlike / money market
   const CA_RETURN  = 0.000;   // Uninvested cash
 
