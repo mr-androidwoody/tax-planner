@@ -4390,6 +4390,7 @@ input[type="radio"] { accent-color: var(--accent); }
   margin: 24px auto 0;
   width: 100%;
   max-width: 1200px;
+  background: var(--shell);
   border: 1px solid var(--shell-border);
   border-radius: var(--radius-xl);
   box-shadow: 0 6px 16px rgba(22,39,67,0.04);
@@ -4571,12 +4572,15 @@ input[type="radio"] { accent-color: var(--accent); }
   padding-right: 0;
   width: 100%;
   max-width: 1065px;
+  background: transparent;
+  margin: 0 auto;
   box-sizing: border-box;
 }
 
 #splash-screen .app-footer-wrap {
   width: 100%;
   max-width: 1200px;
+  margin: 0 auto;
   box-sizing: border-box;
 }
 
