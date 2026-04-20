@@ -451,6 +451,71 @@
   function refreshSetupSummary() {
     const summary = C.summarisePortfolio(state.portfolioAccounts);
     R.renderSetupSummary(summary);
+    refreshDrawdownRates(summary.total);
+  }
+
+  function refreshDrawdownRates(portfolioTotal) {
+    const spending    = D.parseCurrency(safeValue('spending')) || 0;
+    const stepDownPct = parseFloat(safeValue('stepDownPct'))   || 0;
+    const p1dob       = safeNumber(safeValue('sp-p1dob'));
+    const startYear   = safeNumber(safeValue('sp-startYear'));
+    const endYear     = safeNumber(safeValue('sp-endYear'));
+
+    const elInitial  = document.getElementById('dwr-initial');
+    const elPost     = document.getElementById('dwr-post');
+    const elLifetime = document.getElementById('dwr-lifetime');
+    const elPostSub  = document.getElementById('dwr-post-sub');
+
+    if (!elInitial || !elPost || !elLifetime) return;
+
+    if (!portfolioTotal || !spending) {
+      [elInitial, elPost, elLifetime].forEach(el => {
+        el.textContent = '–';
+        el.className = 'drawdown-rate-card__value';
+      });
+      return;
+    }
+
+    function rateClass(r) {
+      if (r < 4) return 'drawdown-rate-card__value drawdown-rate-card__value--ok';
+      if (r < 5) return 'drawdown-rate-card__value drawdown-rate-card__value--warn';
+      return 'drawdown-rate-card__value drawdown-rate-card__value--err';
+    }
+
+    function fmt(r) { return r.toFixed(1) + '%'; }
+
+    const initialRate = (spending / portfolioTotal) * 100;
+
+    if (!stepDownPct) {
+      elInitial.textContent  = fmt(initialRate);
+      elInitial.className    = rateClass(initialRate);
+      elPost.textContent     = '–';
+      elPost.className       = 'drawdown-rate-card__value';
+      elLifetime.textContent = fmt(initialRate);
+      elLifetime.className   = rateClass(initialRate);
+      if (elPostSub) elPostSub.textContent = 'No step-down set';
+      return;
+    }
+
+    const reducedSpending = spending * (1 - stepDownPct / 100);
+    const postRate        = (reducedSpending / portfolioTotal) * 100;
+
+    let lifetimeRate = initialRate;
+    if (p1dob && startYear && endYear && endYear > startYear) {
+      const p1Age75Year = p1dob + 75;
+      const yearsBefore = Math.max(0, Math.min(p1Age75Year, endYear) - startYear);
+      const yearsAfter  = Math.max(0, endYear - Math.max(p1Age75Year, startYear));
+      const totalYears  = yearsBefore + yearsAfter;
+      if (totalYears > 0) lifetimeRate = (initialRate * yearsBefore + postRate * yearsAfter) / totalYears;
+    }
+
+    elInitial.textContent  = fmt(initialRate);
+    elInitial.className    = rateClass(initialRate);
+    elPost.textContent     = fmt(postRate);
+    elPost.className       = rateClass(postRate);
+    elLifetime.textContent = fmt(lifetimeRate);
+    elLifetime.className   = rateClass(lifetimeRate);
+    if (elPostSub) elPostSub.textContent = stepDownPct + '% step-down applied';
   }
 
   // ─────────────────────────────
@@ -1152,6 +1217,12 @@
       return;
     }
 
+    if (e.target.id === 'stepDownPct') {
+      const _s = C.summarisePortfolio(state.portfolioAccounts);
+      refreshDrawdownRates(_s.total);
+      return;
+    }
+
     if (e.target.name === 'bniEnabled') {
       applyBniState(e.target.value === 'true');
       return;
@@ -1162,6 +1233,11 @@
       applyP2State();
       return;
     }
+  });
+
+  document.getElementById('spending')?.addEventListener('input', () => {
+    const _s = C.summarisePortfolio(state.portfolioAccounts);
+    refreshDrawdownRates(_s.total);
   });
 
   // ─────────────────────────────
