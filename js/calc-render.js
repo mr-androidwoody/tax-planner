@@ -313,7 +313,7 @@
       const lastCash  = [...rows].reverse().find(r => (r.p1Drawn?.Cash || 0) + (r.p2Drawn?.Cash || 0) > 0);
       if (!firstCash) return null;
       const yrs = lastCash.year - firstCash.year + 1;
-      return `Liquid cash reserves drawn in early retirement to bridge spending before investment wrappers — used across ${yrs} year${yrs !== 1 ? 's' : ''} (${firstCash.year}–${lastCash.year})`;
+      return `Liquid cash reserves drawn in early retirement to bridge spending before investment wrappers, used across ${yrs} year${yrs !== 1 ? 's' : ''} (${firstCash.year}–${lastCash.year})`;
     }
 
     if (label === 'Interest'     || label.endsWith("'s Interest")) {
@@ -332,7 +332,7 @@
       const sampleDiv = divRows[0].p1Divs + divRows[0].p2Divs;
       const sampleGIA = (divRows[0].snap?.p1GIA || 0) + (divRows[0].snap?.p2GIA || 0);
       const yieldPct  = sampleGIA > 0 ? ((sampleDiv / sampleGIA) * 100).toFixed(1) : '?';
-      return `Estimated dividend income from GIA holdings — average GIA balance of ${fmt0(avgGIA)} at a ${yieldPct}% annual yield. Shown separately from GIA capital withdrawals`;
+      return `Estimated dividend income from GIA holdings: average GIA balance of ${fmt0(avgGIA)} at a ${yieldPct}% annual yield. Shown separately from GIA capital withdrawals`;
     }
 
     if (label === 'GIA'          || label.endsWith("'s GIA")) {
@@ -341,7 +341,7 @@
       const totalDivs = rows.reduce((s, r) => s + (r.p1Divs || 0) + (r.p2Divs || 0), 0);
       if (!firstGIA) return null;
       const yrs = lastGIA.year - firstGIA.year + 1;
-      return `Capital withdrawals from GIA over ${yrs} years (${firstGIA.year}–${lastGIA.year}). Excludes ${fmt0(totalDivs)} dividend income shown separately — GIA gains within annual CGT exemption where possible`;
+      return `Capital withdrawals from GIA over ${yrs} years (${firstGIA.year}–${lastGIA.year}). Excludes ${fmt0(totalDivs)} dividend income shown separately. GIA gains within annual CGT exemption where possible`;
     }
 
     if (label === 'ISA'          || label.endsWith("'s ISA")) {
@@ -357,7 +357,7 @@
       const taxFree = totalGross - totalTaxable;
       const firstSIPP = rows.find(r => (r.p1Drawn?.SIPP || 0) + (r.p2Drawn?.SIPP || 0) > 0);
       if (!firstSIPP) return null;
-      return `Gross pension withdrawals from ${firstSIPP.year} — ${fmt0(taxFree)} tax-free (25%) and ${fmt0(totalTaxable)} taxable (75%). The largest single investment source over retirement`;
+      return `Gross pension withdrawals from ${firstSIPP.year}: ${fmt0(taxFree)} tax-free (25%) and ${fmt0(totalTaxable)} taxable (75%). The largest single investment source over retirement`;
     }
 
     if (label === 'State Pension' || label.endsWith("'s State Pension")) {
@@ -368,7 +368,7 @@
       const parts = [];
       if (p1SP) parts.push(`${p1Name}'s State Pension from ${p1SP.year} (age ${p1SP.p1Age})`);
       if (p2SP) parts.push(`${p2Name}'s State Pension from ${p2SP.year} (age ${p2SP.p2Age})`);
-      return `Combined state pension — ${parts.join(', ')}. The largest single lifetime income source`;
+      return `Combined state pension: ${parts.join(', ')}. The largest single lifetime income source`;
     }
 
     return null;
@@ -458,7 +458,7 @@
     sfItem.appendChild(sfLabel);
     // Shortfall tooltip — computed dynamically so it reflects the current toggle state
     const sfTipText = (() => {
-      if (sfRaw <= 0) return 'Portfolio fully meets the spending target across all years — no shortfall';
+      if (sfRaw <= 0) return 'Portfolio fully meets the spending target across all years with no shortfall';
       const sfYears = _rows
         .map((r, i) => ({ year: r.year, sf: (_engineShortfall[i] || 0) * 1000 }))
         .filter(x => x.sf >= 20000);
@@ -758,10 +758,10 @@
     const isExhausted  = minPortfolio === 0;
     const isNearDepleted = minPortfolio <= NEAR_DEPLETION;
     const severityLabel  = isExhausted
-      ? '🛑 Portfolio exhausted — spending target cannot be met'
+      ? '🛑 Portfolio exhausted: spending target cannot be met'
       : isNearDepleted
         ? `⚠️ Portfolio nearly exhausted (${fmt0(minPortfolio)} min remaining)`
-        : '⚠️ Spending shortfall — portfolio does not fully meet target';
+        : '⚠️ Spending shortfall: portfolio does not fully meet target';
 
     const banner = document.createElement('div');
     banner.className = 'chart-insight-banner' + (isExhausted || isNearDepleted ? ' chart-insight-banner--danger' : ' chart-insight-banner--warn');
@@ -815,7 +815,7 @@
         const lastAmt  = last.message.match(/£[\d,]+/)?.[0] || '';
         const row = document.createElement('div');
         row.className = 'chart-insight-summary';
-        row.textContent = `${first.year}–${last.year}: Annual household surplus above target parked in ${items[0].message.split('parked in ')[1]} — ${firstAmt} rising to ${lastAmt}/yr (total ${fmt0(total)})`;
+        row.textContent = `${first.year}–${last.year}: Annual household surplus above target parked in ${items[0].message.split('parked in ')[1]}, ${firstAmt} rising to ${lastAmt}/yr (total ${fmt0(total)})`;
         group.appendChild(row);
       } else {
         items.forEach(a => {
@@ -843,11 +843,11 @@
   // WEALTH LEGEND
   // ─────────────────────────────────────────────
   function buildWealthTooltip(label) {
-    if (label.includes('SIPP')) return 'Pension fund balance — tax-free growth inside the wrapper. Withdrawals are subject to income tax (75% taxable, 25% tax-free). Subject to IHT on death before age 75 in some cases.';
-    if (label.includes('ISA'))  return 'ISA balance — completely tax-free growth, income, and withdrawals. No CGT, income tax, or dividend tax on any gains.';
-    if (label.includes('GIA'))  return 'General Investment Account — subject to CGT on gains above the annual exemption (£3,000) and dividend tax above the allowance (£500). Growth is otherwise unrestricted.';
-    if (label.includes('Interest')) return 'Interest-bearing accounts (e.g. money market funds) — interest taxed as savings income, within the Starting Rate for Savings (£5,000) and Personal Savings Allowance (£1,000) where available.';
-    if (label.includes('Cash')) return 'Liquid cash reserves — interest taxed as savings income within standard allowances. Used to bridge spending before investment wrappers are drawn.';
+    if (label.includes('SIPP')) return 'Pension fund balance: tax-free growth inside the wrapper. Withdrawals are subject to income tax (75% taxable, 25% tax-free). Subject to IHT on death before age 75 in some cases.';
+    if (label.includes('ISA'))  return 'ISA balance: completely tax-free growth, income, and withdrawals. No CGT, income tax, or dividend tax on any gains.';
+    if (label.includes('GIA'))  return 'General Investment Account: subject to CGT on gains above the annual exemption (£3,000) and dividend tax above the allowance (£500). Growth is otherwise unrestricted.';
+    if (label.includes('Interest')) return 'Interest-bearing accounts (e.g. money market funds): interest taxed as savings income, within the Starting Rate for Savings (£5,000) and Personal Savings Allowance (£1,000) where available.';
+    if (label.includes('Cash')) return 'Liquid cash reserves: interest taxed as savings income within standard allowances. Used to bridge spending before investment wrappers are drawn.';
     return null;
   }
   function _tooltipTitle(label) {
