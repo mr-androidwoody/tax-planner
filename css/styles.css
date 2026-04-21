@@ -3744,8 +3744,14 @@ input[type="radio"] { accent-color: var(--accent); }
 }
 
 /* Growth rate suggestion card */
+.growth-suggestion-row,
+.mgmt-charge-row {
+  border-bottom: none !important;
+}
+
 .growth-suggestion-cell {
-  padding-top: 0.5rem;
+  padding-top: 12px;
+  padding-bottom: 0;
 }
 
 #growth-suggestion.growth-sugg--has-value {
@@ -3758,7 +3764,8 @@ input[type="radio"] { accent-color: var(--accent); }
   border-radius: var(--radius-xs);
   cursor: pointer;
   transition: background 120ms ease;
-  margin-top: 2px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 #growth-suggestion.growth-sugg--has-value:hover {
@@ -3781,6 +3788,15 @@ input[type="radio"] { accent-color: var(--accent); }
   line-height: 1.4;
 }
 
+.mgmt-charge-cell {
+  padding-top: 24px;
+  padding-bottom: 8px;
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+/* remove old standalone rules that are now consolidated above */
 .wiz-card__hint {
   font-size: 0.76rem;
   color: var(--muted);
