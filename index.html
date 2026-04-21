@@ -40,6 +40,18 @@
       color: #22314d;
       line-height: 1;
     }
+    /* ── Splash screen: transparent so body bg shows through ── */
+    #splash-screen {
+      background:
+        linear-gradient(
+          135deg,
+          rgba(18, 30, 60, 0.82) 0%,
+          rgba(10, 20, 50, 0.78) 50%,
+          rgba(18, 30, 60, 0.82) 100%
+        ),
+        url('img/bg.jpg') center center / cover fixed no-repeat;
+    }
+
     /* ── Background image ── */
     body {
       background:
@@ -64,8 +76,10 @@
       pointer-events: none;
       z-index: 0;
     }
-    /* Ensure all direct app children sit above the overlay */
-    .app > * {
+    /* Ensure content sits above the overlay — target specific children, not header */
+    .page-content,
+    #splash-screen,
+    .app-footer {
       position: relative;
       z-index: 1;
     }
