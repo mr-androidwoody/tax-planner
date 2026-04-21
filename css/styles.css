@@ -3743,6 +3743,44 @@ input[type="radio"] { accent-color: var(--accent); }
   color: var(--accent);
 }
 
+/* Growth rate suggestion card */
+.growth-suggestion-cell {
+  padding-top: 0.5rem;
+}
+
+#growth-suggestion.growth-sugg--has-value {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  background: rgba(45, 91, 255, 0.06);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  transition: background 120ms ease;
+  margin-top: 2px;
+}
+
+#growth-suggestion.growth-sugg--has-value:hover {
+  background: rgba(45, 91, 255, 0.11);
+}
+
+.growth-sugg__title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.growth-sugg__title strong {
+  font-weight: 800;
+}
+
+.growth-sugg__hint {
+  font-size: 0.75rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
 .wiz-card__hint {
   font-size: 0.76rem;
   color: var(--muted);
