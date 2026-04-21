@@ -652,12 +652,12 @@
       }
 
       // Use engine depletion year as the authoritative cap when a projection has run,
-      // otherwise fall back to static balance / annual amount estimate.
+      // otherwise estimate from GIA balance only (not whole portfolio).
       const depletions   = state.lastResult?.depletions;
       const depletionYr  = depletions?.[personKey()]?.year ?? null;
       const engineMaxYrs = depletionYr ? Math.max(1, depletionYr - startYear) : null;
-      const staticMaxYrs = Math.min(30, Math.floor(available / amt));
-      const maxYears     = engineMaxYrs !== null ? Math.min(30, engineMaxYrs) : staticMaxYrs;
+      const giaOnlyYrs   = Math.min(30, Math.floor(gia / amt));
+      const maxYears     = engineMaxYrs !== null ? Math.min(30, engineMaxYrs) : giaOnlyYrs;
 
       yearsEl.max = maxYears;
 
@@ -665,59 +665,23 @@
       if (parseInt(yearsEl.value) > maxYears) yearsEl.value = maxYears;
 
       // ── Note text ──────────────────────────────────────────────────────────
-      const spending = D.parseCurrency(safeEl('spending')?.value || '') || 0;
-      const nonPensionTotal =
-        (gv('p1GIAeq') || 0) + (gv('p1GIAcash') || 0) + (gv('p1Cash') || 0) + (gv('p1ISA') || 0) +
-        (state.p2enabled ? ((gv('p2GIAeq') || 0) + (gv('p2GIAcash') || 0) + (gv('p2Cash') || 0) + (gv('p2ISA') || 0)) : 0);
-      const wr = (spending > 0 && nonPensionTotal > 0) ? (spending / nonPensionTotal) * 100 : null;
-
       let noteText  = '';
       let noteColor = '#854f0b';
 
       if (engineMaxYrs !== null) {
-        // Engine result available — show depletion year as authoritative cap
+        // Engine result available — authoritative
         noteText  = `GIA depletes in year ${engineMaxYrs} of the projection`;
         noteColor = engineMaxYrs <= 3 ? '#a32d2d' : '#854f0b';
         noteEl.style.color     = noteColor;
         noteEl.style.fontStyle = 'italic';
         noteEl.textContent     = noteText;
-      } else if (maxYears < 30) {
-        // No projection yet — fall back to static estimate
-        noteText  = `Up to ${maxYears} year${maxYears !== 1 ? 's' : ''} based on starting balances`;
-        noteColor = maxYears <= 3 ? '#a32d2d' : '#854f0b';
-
-        if (wr !== null && maxYears >= 2) {
-          let midpointFrac;
-          if (wr < 4)      { midpointFrac = 0.95; }
-          else if (wr < 5) { midpointFrac = 0.80; }
-          else             { midpointFrac = 0.62; }
-
-          const midpoint  = maxYears * midpointFrac;
-          const rangeLow  = Math.max(1, Math.round(midpoint) - 1);
-          const rangeHigh = Math.min(maxYears, Math.round(midpoint) + 1);
-
-          if (rangeHigh < maxYears) {
-            noteText += ` · Likely ${rangeLow}–${rangeHigh} yrs at your withdrawal rate`;
-          }
-        }
-
+      } else if (giaOnlyYrs > 0) {
+        // Pre-projection estimate: GIA balance / annual amount
+        noteText  = `Est. ${giaOnlyYrs} yr${giaOnlyYrs !== 1 ? 's' : ''} at ${D.formatMoney(amt)}/yr from GIA balance`;
+        noteColor = giaOnlyYrs <= 3 ? '#a32d2d' : '#854f0b';
         noteEl.style.color     = noteColor;
         noteEl.style.fontStyle = 'italic';
         noteEl.textContent     = noteText;
-      } else if (wr !== null) {
-        // maxYears is 30 (unconstrained) — show WR guidance alone
-        let midpointFrac;
-        if (wr < 4)      { midpointFrac = 0.95; }
-        else if (wr < 5) { midpointFrac = 0.80; }
-        else             { midpointFrac = 0.62; }
-
-        const midpoint  = 30 * midpointFrac;
-        const rangeLow  = Math.max(1, Math.round(midpoint) - 1);
-        const rangeHigh = Math.round(midpoint) + 1;
-
-        noteEl.textContent     = `Likely ${rangeLow}–${rangeHigh} yrs sustainable at your withdrawal rate`;
-        noteEl.style.color     = wr >= 5 ? '#a32d2d' : '#854f0b';
-        noteEl.style.fontStyle = 'italic';
       } else {
         noteEl.textContent = '';
       }
