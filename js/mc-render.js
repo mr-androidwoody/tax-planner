@@ -48,9 +48,9 @@
   };
   const STATE_DESCRIPTIONS = {
     baseline:   null,
-    sorr:       'First 5 years: equity returns shifted 2\u03c3 below mean. Models an adverse early-retirement return sequence.',
-    inflation:  'Years 1\u201310: inflation drawn from N(5%, 2%). Models a 1970s-style sustained inflation regime.',
-    lostDecade: 'A fixed 10-year window of near-zero growth at an unpredictable point in the projection.',
+    sorr:       'Tests what happens if markets fall sharply in the first few years of retirement, before the portfolio has had time to recover.',
+    inflation:  'Tests a prolonged period of high inflation in the early years of retirement, squeezing the real value of withdrawals.',
+    lostDecade: 'Tests a sustained period of near-zero real growth at some point during retirement, limiting the portfolio\'s ability to compound.',
   };
 
   let _results       = { baseline: null, sorr: null, inflation: null, lostDecade: null };
@@ -423,9 +423,13 @@
     // ── Verdict ───────────────────────────────────────────────────────
     const rate = r.successRate;
     const verdictWord =
-      rate >= 0.95 ? 'Strong'     :
-      rate >= 0.90 ? 'Good'       :
-      rate >= 0.80 ? 'Borderline' : 'At risk';
+      rate >= 0.95 ? 'On track'           :
+      rate >= 0.90 ? 'On track, but tight' :
+      rate >= 0.80 ? 'Borderline'          : 'At risk';
+
+    // verdictWordClass: CSS modifier to shrink font for longer labels
+    const verdictWordClass =
+      rate >= 0.90 && rate < 0.95 ? ' mc-verdict-word--long' : '';
 
     // heroBg: solid 600-stop fill for the full-bleed hero band
     // actionBg / actionBorder / actionLabel / actionText / actionImpact: terminal block colours
@@ -474,31 +478,44 @@
     // Verdict sentence: focuses on resilience claim and timeline only.
     // Specific £ figures are owned by the hero stat; success rate is in the big number.
     const verdictSentence =
+      // A1 — On track, no depletion seen
       rate >= 0.95 && _p10DepletesAtYiEarly === null
-        ? 'Your plan is resilient across all tested scenarios, including sustained poor returns.' :
+        ? 'Your plan is on track. At your current spending level, it is likely to hold up even if markets are weaker than expected.' :
+      // A2 — On track, but late-life pressure only
       rate >= 0.95 && _lateRisk
-        ? `Your plan is secure through the early years, with limited pressure emerging in ${_depStage} in weaker scenarios.` :
+        ? `Your plan is on track. Most of the risk sits much later in retirement, not in the early years.` :
+      // A1 fallback — on track, minor edge pressure
       rate >= 0.95
-        ? 'Your plan holds well in the large majority of scenarios, with only limited vulnerability at the edges.' :
+        ? 'Your plan is on track and has a meaningful buffer above the level needed to stay sustainable.' :
+      // B1 — On track but tight, no depletion, early sensitivity
       rate >= 0.90 && _p10DepletesAtYiEarly === null && _earlyMarginTight
-        ? 'Your plan passes, but with limited room to spare. A poor sequence early in retirement would bring it close to its limit.' :
+        ? 'Your plan is on track, but the buffer is thin. A bad run of returns early in retirement could put it under pressure.' :
+      // B1 moderate margin
       rate >= 0.90 && _p10DepletesAtYiEarly === null && _earlyMarginModerate
-        ? 'Your plan is well-founded and survives intact in 9 out of 10 paths, with modest room above the threshold.' :
+        ? 'Your plan is on track, but not by a wide margin. It works in most scenarios, though the room above the threshold is modest.' :
+      // B1 — on track, no depletion seen, no particular margin flag
       rate >= 0.90 && _p10DepletesAtYiEarly === null
-        ? 'Your plan is well-founded and survives intact in 9 out of 10 paths.' :
+        ? 'Your plan is on track. It works in most scenarios, though the margin is not large.' :
+      // B2 — on track but tight, late risk, tight margin
       rate >= 0.90 && _lateRisk && _earlyMarginTight
-        ? `Your plan is solid through the early years with a narrow margin. Risk concentrates in ${_depStage} in weaker scenarios.` :
+        ? `Your plan is on track, but not by a wide margin. Some risk is pushed into later retirement, where there is less room to recover.` :
+      // B2 — on track but tight, late risk
       rate >= 0.90 && _lateRisk
-        ? `Your plan is solid through the early and middle years, with risk concentrated in ${_depStage} in weaker scenarios.` :
+        ? `Your plan is on track, but some of the risk sits later in retirement, where there is less room to recover.` :
+      // B1 fallback
       rate >= 0.90
-        ? 'Your plan holds in most scenarios, with some vulnerability at the edges.' :
+        ? 'Your plan is on track, though it does not have a large margin for error.' :
+      // C2 — Borderline, later-life failure risk
       rate >= 0.80 && _lateRisk
-        ? `Your plan works in most scenarios, but a meaningful share of poor sequences lead to depletion in ${_depStage}.` :
+        ? `Your plan is borderline. It may work, but too much of the risk is pushed into later retirement, where there is less room to recover.` :
+      // C1 — Borderline, meaningful downside risk, earlier trouble
       rate >= 0.80
-        ? 'Your plan holds in most scenarios but carries real risk in a meaningful share of poor sequences.' :
-      _earlyRisk
-        ? `Your plan needs attention. Depletion occurs in ${_depStage} across a significant share of simulated paths.` :
-        'Your plan needs attention. A significant share of simulated paths end in depletion before retirement ends.';
+        ? 'Your plan is borderline. It may work, but it is not comfortably safe. In weaker markets, it starts to run into trouble in ' + _depStage + '.' :
+      // D2 — At risk, poor typical outcome
+      _p10DepletesAtYiEarly !== null && _p10DepletesAtYiEarly <= lastIdx * 0.4
+        ? `Your plan is at risk. As things stand, there is too high a chance of running short before the end of retirement.` :
+      // D1 — At risk, material failure risk
+        'Your plan is at risk. As things stand, there is too high a chance of running short before the end of retirement.';
 
     // ── Headroom / gap ────────────────────────────────────────────────
     let headroom = null;
@@ -533,13 +550,13 @@
       if (sustainableIsFloor) {
         shortfallHTML = `
           <div class="mc-vstat">
-            <div class="mc-vstat-label">Spending headroom</div>
+            <div class="mc-vstat-label">Estimated annual buffer</div>
             <div class="mc-vstat-value">Substantial</div>
           </div>`;
       } else if (headroom >= 0) {
         const hr        = roundToNearest(headroom, 500);
-        const statLabel = marginTight ? 'Narrow headroom' : 'Typical headroom';
-        const statValue = marginTight ? `${warnIcon}+${fmt(hr)} / yr` : `+${fmt(hr)} / yr`;
+        const statLabel = 'Estimated annual buffer';
+        const statValue = marginTight ? `${warnIcon}${fmt(hr)} / yr` : `${fmt(hr)} / yr`;
         shortfallHTML = `
           <div class="mc-vstat">
             <div class="mc-vstat-label">${statLabel}</div>
@@ -550,7 +567,7 @@
         if (gap >= 500) {
           shortfallHTML = `
           <div class="mc-vstat">
-            <div class="mc-vstat-label">Typical shortfall</div>
+            <div class="mc-vstat-label">Estimated annual gap</div>
             <div class="mc-vstat-value">${fmt(gap)} / yr</div>
           </div>`;
         }
@@ -563,9 +580,9 @@
     const s1 = `
       <div class="mc-verdict-header" style="background:${verdictColour.heroBg}">
         <div class="mc-verdict-grid">
-          <div class="mc-verdict-eyebrow">Market-adjusted outlook</div>
-          <div class="mc-verdict-eyebrow mc-verdict-eyebrow--right">Success rate</div>
-          <div class="mc-verdict-word">${verdictWord}</div>
+          <div class="mc-verdict-eyebrow">Your retirement outlook</div>
+          <div class="mc-verdict-eyebrow mc-verdict-eyebrow--right">Likelihood of holding up</div>
+          <div class="mc-verdict-word${verdictWordClass}">${verdictWord}</div>
           <div class="mc-verdict-bignum">${Math.round(rate * 100)}%</div>
         </div>
         <div class="mc-verdict-lower">
@@ -599,9 +616,11 @@
         depAge < 70    ? 'your late 60s'        :
         depAge < 80    ? 'your 70s'             :
         depAge < 90    ? 'your 80s'             : 'your 90s';
-      pressureSentence = `In a poor sequence of returns, funds would begin to deplete in ${lifeStage}, when flexibility to adjust is limited.`;
+      pressureSentence = depAge !== null
+        ? `In weaker market conditions, the plan starts coming under real pressure around age ${depAge}, when it is harder to make big adjustments.`
+        : `In weaker market conditions, the plan starts coming under real pressure in ${lifeStage}, when it is harder to make big adjustments.`;
     } else {
-      pressureSentence = `No tested sequence of returns depletes the portfolio before the end of the projection.`;
+      pressureSentence = `Pressure stays low throughout retirement. Even in weaker outcomes, the plan does not run out before the end of the plan.`;
     }
 
     let decadeRowsHTML = '';
@@ -631,14 +650,14 @@
       }).join('');
 
       survivalNote =
-        minSurv >= 0.95 ? 'Risk remains low throughout the projection.' :
-        minSurv >= 0.80 ? 'No meaningful risk early on. Pressure builds later as withdrawals compound against a smaller asset base.' :
-                          'Risk builds significantly. Later years carry real pressure as the portfolio base declines.';
+        minSurv >= 0.95 ? 'Risk remains low throughout retirement.' :
+        minSurv >= 0.80 ? 'There is little pressure early on. Risk builds in the later years as withdrawals compound against a smaller portfolio.' :
+                          'Risk builds significantly. The later years carry real pressure as the portfolio base declines.';
     }
 
     const s2Left = `
       <div class="mc-evidence-pane mc-evidence-pane--left">
-        <div class="mc-section-label">Stress test</div>
+        <div class="mc-section-label">Where pressure shows up</div>
         <p class="mc-outlook-sentence">${pressureSentence}</p>
         ${decadeRowsHTML ? `<div class="mc-decade-chart">${decadeRowsHTML}</div>` : ''}
         ${survivalNote   ? `<p class="mc-survival-note">${survivalNote}</p>` : ''}
@@ -653,22 +672,24 @@
       l1Outcome = 'Spending analysis was not available for this run.';
     } else if (sustainableIsFloor) {
       l1Pill = 'No cut needed'; l1PillClass = 'mc-lever-pill--safe';
-      l1Outcome = 'Your plan remains sustainable well above current spending.';
+      l1Outcome = 'Current spending is comfortably affordable under this plan.';
     } else if (headroom >= 0) {
       const hr = roundToNearest(headroom, 500);
       l1Pill = 'No cut needed'; l1PillClass = 'mc-lever-pill--safe';
       l1Outcome = hr >= 500
-        ? `Current spending sits inside the ${confPct}% confidence band.`
-        : `Your plan is right at the ${confPct}% confidence threshold, with negligible room above.`;
+        ? marginTight
+          ? 'Current spending is workable, though the margin above a safer level is modest.'
+          : 'Current spending is comfortably affordable under this plan.'
+        : 'Current spending is right at the sustainable level, with negligible room above.';
     } else if (roundedGap >= 500) {
       const isSmall = roundedGap / currentSpending <= 0.15;
       l1Pill = isSmall ? 'Modest cut' : 'Cut needed';
       l1PillClass = isSmall ? 'mc-lever-pill--warn' : 'mc-lever-pill--risk';
-      l1Outcome = `A reduction brings the plan back inside the ${confPct}% confidence band.`;
+      l1Outcome = 'A spending cut is the most direct way to move this plan back into a safer range.';
     } else {
       // Gap rounds to zero, treat as at threshold
       l1Pill = 'No cut needed'; l1PillClass = 'mc-lever-pill--safe';
-      l1Outcome = `Your plan is right at the ${confPct}% confidence threshold, with negligible room above.`;
+      l1Outcome = 'Current spending is right at the sustainable level, with negligible room above.';
     }
 
     // Lever 2 — Delay withdrawals
@@ -681,15 +702,15 @@
       if (rate >= targetConfidence && effective.length) {
         const d = effective[0];
         l2Pill = 'Reinforces'; l2PillClass = 'mc-lever-pill--safe';
-        l2Outcome = `Your plan is already sustainable. Delaying by ${d.yearsDelay} year${d.yearsDelay > 1 ? 's' : ''} would push success to ${fmtPctB(d.successRate)}.`;
+        l2Outcome = `Your plan is already on track. Delaying by ${d.yearsDelay} year${d.yearsDelay > 1 ? 's' : ''} would strengthen it further, but it is not essential.`;
       } else if (effective.length) {
         const d = effective[0];
         l2Pill = `+${d.yearsDelay} yr fixes it`; l2PillClass = 'mc-lever-pill--safe';
-        l2Outcome = `Delaying withdrawals by ${d.yearsDelay} year${d.yearsDelay > 1 ? 's' : ''} makes the plan sustainable at ${fmtPctB(d.successRate)} success.`;
+        l2Outcome = `Delaying withdrawals by ${d.yearsDelay} year${d.yearsDelay > 1 ? 's' : ''} is enough to move the plan into a meaningfully safer position.`;
       } else {
         const best = delayPerturbations.reduce((a, b) => b.successRate > a.successRate ? b : a);
         l2Pill = 'Helps but not enough'; l2PillClass = 'mc-lever-pill--warn';
-        l2Outcome = `Even delaying by 3 years does not fully remove shortfall risk. Best result is ${fmtPctB(best.successRate)}, still below ${confPct}%.`;
+        l2Outcome = `Delay improves the plan, but it is not enough by itself. Even a 3-year delay does not fully remove the shortfall risk.`;
       }
     }
 
@@ -700,10 +721,10 @@
     let l3Pill, l3PillClass, l3Outcome;
     if (iqrWide) {
       l3Pill = 'Material gain'; l3PillClass = 'mc-lever-pill--safe';
-      l3Outcome = 'Cutting 10–15% in weak years would meaningfully improve the downside position.';
+      l3Outcome = 'Being willing to trim spending in bad market years would make an already-strong plan even more resilient.';
     } else {
       l3Pill = 'Small gain'; l3PillClass = 'mc-lever-pill--neutral';
-      l3Outcome = 'Flexible spending in down years adds a modest incremental improvement.';
+      l3Outcome = 'Flexible spending in down years adds a modest incremental improvement, but it is not the main fix.';
     }
 
     let s2Right;
@@ -720,29 +741,31 @@
       const deltaClass      = delta === null ? '' : delta >= 0 ? 'mc-stress-delta--up' : 'mc-stress-delta--down';
 
       const resilienceNote =
-        rate >= 0.95 ? `The plan remains strong even under this adverse scenario. The stress condition does not materially change the outlook.` :
-        rate >= 0.90 ? `The plan holds under this scenario, though with reduced margin. The stress condition introduces meaningful sensitivity.` :
-        rate >= 0.80 ? `The plan is borderline under this scenario. The stress condition reveals real vulnerability that the baseline does not show.` :
-        `The plan is at risk under this scenario. This stress condition exposes a material weakness that warrants attention.`;
+        rate >= 0.95 ? `Your plan remains robust even under this stress scenario. This scenario does not materially change the outlook.` :
+        rate >= 0.90 ? `Your plan still holds under this scenario, but the margin is thinner. This scenario reduces the cushion without breaking the plan.` :
+        rate >= 0.80 ? `Under this scenario, your plan becomes borderline. This exposes a real weakness that the baseline view may not fully show.` :
+        `Under this scenario, your plan is at risk. This is the kind of adverse start that your baseline buffer may not be strong enough to absorb.`;
 
       const actionNote =
-        rate >= 0.90
-          ? `No immediate action is needed, but this scenario is worth monitoring. If your early retirement years resemble these conditions, consider reviewing spending at that point.`
+        rate >= 0.95
+          ? `No immediate change is needed. Return to the Baseline view for your main spending guidance.`
+          : rate >= 0.90
+          ? `No immediate change is needed, but this scenario is worth watching. Check whether your baseline buffer is enough to absorb conditions like this if they arise early in retirement.`
           : rate >= 0.80
-          ? `Consider building a buffer into your baseline plan. The levers available are spending reduction and delaying initial withdrawals — run the baseline analysis for specific figures.`
-          : `This scenario indicates a structural sensitivity. Review the baseline Recommended action and consider whether your plan has sufficient margin to absorb adverse early conditions.`;
+          ? `Use the Baseline recommendations as your main guide, but treat them as more urgent if early retirement conditions start to resemble this scenario.`
+          : `This scenario makes the Baseline fixes more important. Review the Baseline recommendations for spending and delay adjustments.`;
 
       s2Right = `
         <div class="mc-evidence-pane">
-          <div class="mc-section-label">Scenario interpretation</div>
+          <div class="mc-section-label">What this scenario shows</div>
           <div class="mc-stress-interp">
             <div class="mc-stress-interp__row">
-              <span class="mc-stress-interp__label">Scenario success rate</span>
+              <span class="mc-stress-interp__label">Likelihood of holding up</span>
               <span class="mc-stress-interp__val">${scenarioPct}%${deltaStr ? ` <span class="mc-stress-delta ${deltaClass}">${deltaStr}</span>` : ''}</span>
             </div>
             ${baselinePct !== null ? `
             <div class="mc-stress-interp__row">
-              <span class="mc-stress-interp__label">Baseline success rate</span>
+              <span class="mc-stress-interp__label">Baseline likelihood</span>
               <span class="mc-stress-interp__val">${baselinePct}%</span>
             </div>` : ''}
             <p class="mc-stress-interp__note">${resilienceNote}</p>
@@ -787,20 +810,20 @@
       if (sustainableSpending !== null) {
         if (sustainableIsFloor) {
           items.push({ name: 'Spending', pill: 'No cut needed', pillClass: 'mc-lever-pill--safe',
-            outcome: 'Current spending sits well inside the sustainable range.' });
+            outcome: 'Current spending is comfortably affordable under this plan.' });
         } else if (marginTight) {
           items.push({ name: 'Spending', pill: 'Narrow margin', pillClass: 'mc-lever-pill--warn',
-            outcome: `Current spending sits just inside the ${confPct}% confidence band.` });
+            outcome: 'Current spending is workable, though the margin above a safer level is modest.' });
         } else if (marginModerate) {
           items.push({ name: 'Spending', pill: 'No cut needed', pillClass: 'mc-lever-pill--safe',
-            outcome: `Current spending sits inside the ${confPct}% confidence band, with modest room above.` });
+            outcome: 'Current spending is affordable, with modest room above the sustainable level.' });
         } else {
           items.push({ name: 'Spending', pill: 'No cut needed', pillClass: 'mc-lever-pill--safe',
-            outcome: `Current spending sits comfortably inside the ${confPct}% confidence band.` });
+            outcome: 'Current spending sits comfortably within a safe range.' });
         }
       } else {
         items.push({ name: 'Spending', pill: 'No cut needed', pillClass: 'mc-lever-pill--safe',
-          outcome: 'Current spending passes the confidence test over the full projection.' });
+          outcome: 'Current spending passes the sustainability test over the full projection.' });
       }
 
       // Item 2: Consider spending more / Maintain discipline — owns the ceiling £
@@ -808,34 +831,34 @@
       if (hr > 0) {
         if (marginTight) {
           items.push({ name: 'Consider spending more', pill: 'Not recommended', pillClass: 'mc-lever-pill--warn',
-            outcome: 'The buffer is too thin to support an increase without pushing the plan below the threshold.' });
+            outcome: 'The buffer is thin. Any increase should be small and kept under close review.' });
         } else if (marginModerate) {
           const higherSpend = roundToNearest(currentSpending + hr, 500);
           items.push({ name: 'Consider spending more', pill: 'Use with caution', pillClass: 'mc-lever-pill--neutral',
-            outcome: `A sustainable ceiling of around ${fmtB(higherSpend)}/yr holds up, but the buffer is moderate. Any increase should be modest and kept under review.` });
+            outcome: `You could spend somewhat more, up to around ${fmtB(higherSpend)}/yr, and still keep the plan on track, though any increase should be deliberate.` });
         } else {
           const higherSpend = roundToNearest(currentSpending + hr, 500);
           items.push({ name: 'Consider spending more', pill: 'Headroom available', pillClass: 'mc-lever-pill--safe',
-            outcome: `A sustainable ceiling of around ${fmtB(higherSpend)}/yr holds up across tested scenarios.` });
+            outcome: `There is room to spend up to around ${fmtB(higherSpend)}/yr and still keep the plan on track, though treat that as an option, not a target.` });
         }
       } else if (sustainableIsFloor) {
         items.push({ name: 'Consider spending more', pill: 'Headroom available', pillClass: 'mc-lever-pill--safe',
-          outcome: 'The sustainable ceiling sits well above current spending, leaving meaningful room to increase.' });
+          outcome: 'There is room to spend more and still keep the plan on track.' });
       } else {
         items.push({ name: 'Consider spending more', pill: 'Not recommended', pillClass: 'mc-lever-pill--neutral',
-          outcome: 'Current spending sits at or near the sustainable ceiling.' });
+          outcome: 'Current spending is at or near the sustainable ceiling.' });
       }
 
       // Item 3: Flexible spending — owns the flex-rule angle
       items.push({ name: 'Flexible spending', pill: iqrWide ? 'Material gain' : 'Small gain',
         pillClass: iqrWide ? 'mc-lever-pill--safe' : 'mc-lever-pill--neutral',
         outcome: iqrWide
-          ? 'Cutting 10 to 15% in weak years would meaningfully improve the downside position.'
-          : 'Cutting 10 to 15% in weak years would add incremental cushion.' });
+          ? 'Being willing to trim spending in bad market years would make an already-strong plan even more resilient.'
+          : 'Flexible spending in down years adds a modest incremental improvement, but it is not essential here.' });
 
       s2Right = `
         <div class="mc-evidence-pane">
-          <div class="mc-section-label">What changes this</div>
+          <div class="mc-section-label">What would improve this</div>
           <div class="mc-lever-table">
             ${items.map((it, idx) => leverBlock(it.name, it.pill, it.pillClass, it.outcome, idx === 0, true)).join('')}
           </div>
@@ -843,7 +866,7 @@
     } else {
       s2Right = `
         <div class="mc-evidence-pane">
-          <div class="mc-section-label">What changes this</div>
+          <div class="mc-section-label">What would improve this</div>
           <div class="mc-lever-table">
             ${leverBlock('Spending',          l1Pill, l1PillClass, l1Outcome, _primary === 0, false)}
             ${leverBlock('Delay withdrawals', l2Pill, l2PillClass, l2Outcome, _primary === 1, false)}
@@ -869,17 +892,17 @@
 
       let stressTakeaway, stressDetail;
       if (rate >= 0.95) {
-        stressTakeaway = `Your plan is robust to the ${scenarioLabel} scenario.`;
-        stressDetail   = `Even under these adverse conditions, the plan succeeds in ${Math.round(rate * 100)}% of simulated paths. Return to the Baseline view for spending headroom and specific recommendations.`;
+        stressTakeaway = `Your plan remains robust under the ${scenarioLabel} scenario.`;
+        stressDetail   = `Even under these conditions, the plan holds up well. No immediate change is needed. Return to the Baseline view for spending guidance and recommended actions.`;
       } else if (rate >= 0.90) {
-        stressTakeaway = `Your plan holds under the ${scenarioLabel} scenario, with reduced margin.`;
-        stressDetail   = `Success falls to ${Math.round(rate * 100)}%${baselineRate !== null ? ` from ${Math.round(baselineRate * 100)}% at baseline` : ''}. The plan remains above the ${confPct}% threshold, but the buffer is thinner. Consider whether your baseline headroom is sufficient to absorb this kind of scenario.`;
+        stressTakeaway = `Your plan still holds under the ${scenarioLabel} scenario, but the margin is thinner.`;
+        stressDetail   = `The plan remains above the sustainability threshold, but this scenario reduces the cushion${baselineRate !== null ? ` by ${Math.round((baselineRate - rate) * 100)}pp` : ''}. Check whether your baseline buffer is enough to absorb conditions like this if they arise early in retirement.`;
       } else if (rate >= 0.80) {
-        stressTakeaway = `Your plan is borderline under the ${scenarioLabel} scenario.`;
-        stressDetail   = `Success falls to ${Math.round(rate * 100)}%${baselineRate !== null ? ` from ${Math.round(baselineRate * 100)}% at baseline` : ''}, below the ${confPct}% threshold. This scenario reveals real sensitivity. Review the Baseline recommendations and consider whether your plan has sufficient margin to absorb adverse conditions.`;
+        stressTakeaway = `Under the ${scenarioLabel} scenario, your plan becomes borderline.`;
+        stressDetail   = `This exposes a real weakness that the baseline view may not fully show${baselineRate !== null ? `, with the likelihood of holding up falling ${Math.round((baselineRate - rate) * 100)}pp from baseline` : ''}. Use the Baseline recommendations as your main guide, but treat them as more urgent if early retirement conditions start to resemble this scenario.`;
       } else {
-        stressTakeaway = `Your plan is at risk under the ${scenarioLabel} scenario.`;
-        stressDetail   = `Success falls to ${Math.round(rate * 100)}%${baselineRate !== null ? ` from ${Math.round(baselineRate * 100)}% at baseline` : ''}. This scenario exposes a material weakness. The Baseline recommendations for spending and delay adjustments become more urgent if early retirement conditions resemble this scenario.`;
+        stressTakeaway = `Under the ${scenarioLabel} scenario, your plan is at risk.`;
+        stressDetail   = `This is the kind of adverse start that your baseline buffer may not be strong enough to absorb${baselineRate !== null ? `, with the likelihood of holding up falling ${Math.round((baselineRate - rate) * 100)}pp from baseline` : ''}. The Baseline fixes for spending and delay become more important.`;
       }
 
       // Stress-specific bullets: portfolio outcomes under the scenario
@@ -897,12 +920,12 @@
 
       const stressBullets = [];
       if (p10DepletesAge !== null) {
-        stressBullets.push(`In the worst 1 in 10 paths under this scenario, funds run low around age ${p10DepletesAge}.`);
+        stressBullets.push(`In weaker outcomes under this scenario, funds run low around age ${p10DepletesAge}.`);
       } else {
-        stressBullets.push(`In the worst 1 in 10 paths, the portfolio ends at around ${fmtKendB(p10End)}.`);
+        stressBullets.push(`In weaker outcomes under this scenario, the plan still tends to finish with about ${fmtKendB(p10End)} left.`);
       }
-      stressBullets.push(`In a typical path under this scenario, the portfolio ends at ${fmtKendB(p50End)}.`);
-      stressBullets.push(`Switch to Baseline for spending headroom figures and recommended actions.`);
+      stressBullets.push(`In a typical outcome under this scenario, the plan finishes with around ${fmtKendB(p50End)}.`);
+      stressBullets.push(`Switch to Baseline for spending guidance and recommended actions.`);
 
       const stressBulletsHTML = stressBullets.map(b => `<li class="mc-action-bullet">${b}</li>`).join('');
 
@@ -921,8 +944,7 @@
             </div>
           </div>
         </div>
-        <p class="mc-bridge-note">The Plan summary tab shows your inputs and planning assumptions. These simulations test those assumptions across thousands of market scenarios with realistic return variability, showing how your plan holds up when markets don't behave as expected.</p>
-        <p class="mc-bridge-note">Use the tabs above to explore charts and tables showing how your plan unfolds year by year under your planning assumptions.</p>`;
+        <p class="mc-bridge-note">This scenario shows what happens to your plan under a specific adverse condition. Use the Baseline view for your main spending guidance and recommended actions.</p>`;
 
     } else {
       // ── Baseline: full action block ───────────────────────────────
@@ -934,28 +956,28 @@
       if (hasGap) {
         const gap = roundedGap;
         const newTarget = roundToNearest(currentSpending - gap, 500);
-        actionLine   = `Reduce annual spending by ${fmtB(gap)} to ${fmtB(newTarget)}.`;
-        actionImpact = `This closes the sustainability gap and removes most of the risk in weaker market scenarios.`;
+        actionLine   = `Reduce annual spending by ${fmtB(gap)}, to roughly ${fmtB(newTarget)}.`;
+        actionImpact = `That is the clearest way to make the plan more dependable in weaker markets.`;
       } else if (rate < targetConfidence && delayEffective) {
         actionLine   = `Delay drawing from your portfolio by ${delayMin.yearsDelay} year${delayMin.yearsDelay > 1 ? 's' : ''}.`;
-        actionImpact = `This allows the portfolio to compound without draws and lifts your success rate to ${fmtPctB(delayMin.successRate)}.`;
+        actionImpact = `This allows the portfolio to compound without draws and is the strongest non-spending fix available.`;
       } else if (rate < targetConfidence && iqrWide) {
         actionLine   = `Adopt a flexible spending rule.`;
-        actionImpact = `Reducing withdrawals by 10 to 15% in down years is the most practical lever available.`;
+        actionImpact = `Being willing to trim spending by 10 to 15% in down years is the most practical lever available.`;
       } else {
         const hrForAction = sustainableSpending !== null && !sustainableIsFloor && headroom > 0
           ? roundToNearest(headroom, 500) : null;
         if (marginTight && hrForAction) {
-          actionLine   = `No changes needed, but headroom is limited at ${fmtB(hrForAction)} per year.`;
-          actionImpact = `Maintain your current spending and keep this under annual review. A poor sequence in the early years would consume this margin quickly.`;
+          actionLine   = `No immediate change is needed, but keep this under annual review.`;
+          actionImpact = `The buffer is thin at about ${fmtB(hrForAction)} per year. A poor run of returns early in retirement could use it up quickly.`;
         } else if (marginModerate && hrForAction) {
-          actionLine   = `No changes needed. You have ${fmtB(hrForAction)} per year of room, though the margin is not wide.`;
-          actionImpact = `Any spending increase should be modest and kept under review as market conditions evolve.`;
+          actionLine   = `No immediate change is needed.`;
+          actionImpact = `There is room to spend a little more if you choose to, but treat that as an option rather than a target, and keep the plan under review.`;
         } else {
           actionLine   = hrForAction
-            ? `No changes needed. You could increase spending by up to ${fmtB(hrForAction)} per year.`
-            : `No changes needed.`;
-          actionImpact = `Any increase still leaves meaningful margin above the confidence threshold.`;
+            ? `No immediate change is needed. You could spend around ${fmtB(hrForAction)} more each year and still keep the plan on track.`
+            : `No immediate change is needed.`;
+          actionImpact = `Any increase should be deliberate. Even with it, there is still a meaningful buffer above the level needed to stay sustainable.`;
         }
       }
 
@@ -980,54 +1002,54 @@
 
       if (rate >= 0.95) {
         if (p10DepletesAge !== null) {
-          bulletItems.push(`In the worst 1 in 10 outcomes, funds run low around age ${p10DepletesAge}.`);
+          bulletItems.push(`Even in weaker outcomes, funds only start to come under pressure around age ${p10DepletesAge}, after many years of withdrawals.`);
         } else {
-          bulletItems.push(`In the worst 1 in 10 outcomes, the portfolio ends at around ${fmtKendB(p10End)}.`);
+          bulletItems.push(`In weaker outcomes, the plan still tends to finish with about ${fmtKendB(p10End)} left.`);
         }
-        bulletItems.push(`In a typical market, it ends at ${fmtKendB(p50End)}.`);
-        bulletItems.push(`Upside scenarios finish at ${fmtKendB(p90End)} or higher.`);
+        bulletItems.push(`In a typical outcome, the plan finishes with around ${fmtKendB(p50End)} remaining.`);
+        bulletItems.push(`In stronger outcomes, the surplus is substantially higher.`);
       } else if (rate >= 0.90) {
         if (p10DepletesAge !== null) {
-          bulletItems.push(`In the worst 1 in 10 outcomes, funds run low around age ${p10DepletesAge}.`);
+          bulletItems.push(`In weaker outcomes, the money starts to come under pressure around age ${p10DepletesAge}.`);
         } else {
-          bulletItems.push(`In the worst 1 in 10 outcomes, the portfolio ends at around ${fmtKendB(p10End)}.`);
+          bulletItems.push(`In weaker outcomes, the plan still tends to finish with about ${fmtKendB(p10End)} left.`);
         }
-        bulletItems.push(`In a typical market, it ends at ${fmtKendB(p50End)}.`);
+        bulletItems.push(`In a typical outcome, the plan finishes with around ${fmtKendB(p50End)} remaining.`);
         if (_earlyMarginTight || marginTight) {
-          bulletItems.push(`A poor early-returns period is the main sensitivity to watch.`);
+          bulletItems.push(`A bad run of returns early in retirement is the main risk to watch.`);
         } else if (_lateRisk) {
-          bulletItems.push(`Risk concentrates in the later years, where flexibility to adjust is more limited.`);
+          bulletItems.push(`Most of the risk sits later in retirement, when course correction is harder.`);
         } else {
-          bulletItems.push(`A flexible spending rule would further widen the margin above the threshold.`);
+          bulletItems.push(`Being willing to trim spending in bad market years would add a little extra protection.`);
         }
       } else if (rate >= 0.80) {
-        bulletItems.push(`Making no change leaves around a 1 in ${Math.max(2, Math.round(1 / Math.max(0.01, 1 - rate)))} chance of serious shortfall by the later years.`);
+        bulletItems.push(`If nothing changes, the risk of a later-life shortfall is too high to ignore.`);
         if (p10DepletesAge !== null) {
-          bulletItems.push(`In the worst 1 in 10 paths, funds run low around age ${p10DepletesAge}.`);
+          bulletItems.push(`In weaker outcomes, the money starts running short around age ${p10DepletesAge}.`);
         } else {
-          bulletItems.push(`In the worst 1 in 10 paths, the portfolio ends at around ${fmtKendB(p10End)}.`);
+          bulletItems.push(`In weaker outcomes, the money starts running short later in retirement.`);
         }
-        bulletItems.push(`In a typical market, the portfolio reaches ${fmtKendB(p50End)}. The plan works in most scenarios, but not with margin.`);
+        bulletItems.push(`In a typical outcome, the plan can still work, but there is not enough buffer to rely on that comfortably.`);
       } else {
         if (p10DepletesAge !== null) {
-          bulletItems.push(`In the worst 1 in 10 paths, funds are exhausted by age ${p10DepletesAge}.`);
+          bulletItems.push(`In weaker outcomes, the money runs out around age ${p10DepletesAge}.`);
         } else {
-          bulletItems.push(`A significant share of paths end in depletion before retirement ends.`);
+          bulletItems.push(`Too many outcomes end with the plan running short before the end of retirement.`);
         }
         if (hasGap) {
           const newTarget = roundToNearest(currentSpending - roundedGap, 500);
-          bulletItems.push(`Cutting to ${fmtB(newTarget)} alone brings success closer to the ${confPct}% threshold.`);
+          bulletItems.push(`Reducing spending to roughly ${fmtB(newTarget)} would move the plan much closer to a workable level.`);
         } else if (p50End > 0) {
-          bulletItems.push(`In a typical market, the portfolio reaches ${fmtKendB(p50End)}, but depletion is a likely outcome.`);
+          bulletItems.push(`Even a typical outcome still leaves this plan under pressure.`);
         } else {
-          bulletItems.push(`A typical market still sees the portfolio depleted before the end of the projection.`);
+          bulletItems.push(`A typical outcome still sees the portfolio depleted before the end of retirement.`);
         }
         if (hasGap && delayEffective) {
-          bulletItems.push(`Combining this cut with a ${delayMin.yearsDelay}-year delay lifts success to ${fmtPctB(delayMin.successRate)}.`);
+          bulletItems.push(`Combining that cut with a ${delayMin.yearsDelay}-year delay would strengthen the plan further.`);
         } else if (delayEffective) {
-          bulletItems.push(`A ${delayMin.yearsDelay}-year delay in drawing from the portfolio lifts success to ${fmtPctB(delayMin.successRate)}.`);
+          bulletItems.push(`Delaying withdrawals by ${delayMin.yearsDelay} year${delayMin.yearsDelay > 1 ? 's' : ''} improves the plan, but may still need to be paired with lower spending.`);
         } else {
-          bulletItems.push(`A flexible spending rule of 10 to 15% cuts in weak years is the strongest remaining lever.`);
+          bulletItems.push(`Being willing to trim spending by 10 to 15% in weak years is the strongest remaining lever.`);
         }
       }
 
@@ -1038,7 +1060,7 @@
         <div class="mc-primary-action" style="border-top-color:${verdictColour.actionBorder};background:${verdictColour.actionBg}">
           <div class="mc-primary-action__body">
             <div class="mc-primary-action__left">
-              <div class="mc-primary-action__label" style="color:${verdictColour.actionLabel}">Recommended action</div>
+              <div class="mc-primary-action__label" style="color:${verdictColour.actionLabel}">Best next move</div>
               <p class="mc-primary-action__text" style="color:${verdictColour.actionText}">${actionLine}</p>
               <p class="mc-primary-action__impact" style="color:${verdictColour.actionImpact}">${actionImpact}</p>
             </div>
@@ -1050,8 +1072,7 @@
             </div>` : ''}
           </div>
         </div>
-        <p class="mc-bridge-note">The Plan summary tab shows your inputs and planning assumptions. These simulations test those assumptions across thousands of market scenarios with realistic return variability, showing how your plan holds up when markets don't behave as expected.</p>
-        <p class="mc-bridge-note">Use the tabs above to explore charts and tables showing how your plan unfolds year by year under your planning assumptions.</p>`;
+        <p class="mc-bridge-note">This view tests your plan against weaker and stronger market conditions, so you can see whether it still holds up when reality is less tidy than a straight-line forecast. Use the tabs above to explore how your plan unfolds year by year.</p>`;
     }
 
     // Always expose the nominal median end value for the deterministic metrics badge.
