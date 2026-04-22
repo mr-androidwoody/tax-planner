@@ -40,6 +40,73 @@
       color: #22314d;
       line-height: 1;
     }
+
+    /* ── Stress scenario toggle controls ────────────────────────────────── */
+    #mc-stress-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 10px 16px 0;
+    }
+    .mc-sc-row {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+    }
+    .mc-sc-btns {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+    .mc-sc-btn {
+      font-size: 0.78rem;
+      font-weight: 500;
+      padding: 4px 11px;
+      border-radius: 20px;
+      border: 1.5px solid #cbd5e1;
+      background: #f8fafc;
+      color: #64748b;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+      position: relative;
+      white-space: nowrap;
+    }
+    .mc-sc-btn:hover {
+      border-color: #94a3b8;
+      color: #334155;
+    }
+    .mc-sc-btn--active {
+      background: #1e293b;
+      border-color: #1e293b;
+      color: #fff;
+    }
+    .mc-sc-btn--done {
+      border-color: #94a3b8;
+      color: #334155;
+      background: #fff;
+    }
+    .mc-sc-btn--idle {
+      border-style: dashed;
+    }
+    .mc-sc-stale-dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #f59e0b;
+      margin-left: 5px;
+      vertical-align: middle;
+      margin-bottom: 1px;
+    }
+    .mc-sc-desc {
+      font-size: 0.75rem;
+      color: #64748b;
+      text-align: right;
+      margin: 0;
+      line-height: 1.5;
+      padding-right: 2px;
+    }
   </style>
 
 </head>
@@ -1346,6 +1413,8 @@
       <!-- ── Plan outlook tab (Monte Carlo narrative) — hidden until first risk run ── -->
       <div id="results-panel-outlook" class="chart-panel chart-panel--full" style="display:none">
         <div class="chart-canvas-area" id="outlook-panel">
+          <!-- Stress-test scenario toggle — managed by mc-render.js, never replaced by narrative renders -->
+          <div id="mc-stress-controls" style="display:none"></div>
           <div id="mc-narrative"></div>
         </div>
       </div>
