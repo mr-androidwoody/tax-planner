@@ -645,16 +645,8 @@
         annotations: engineResult.annotations || [],
       };
 
-      // ── Capture live chart canvases ──────────────────────────────────────
-      // Wealth chart (portfolio fan) → page 3
-      // Income chart (withdrawal sources) → page 4
-      const chartCanvases = {
-        wealth: document.getElementById('wealthChart') || null,
-        income: document.getElementById('incomeChart') || null,
-      };
-
       // ── Generate PDF ─────────────────────────────────────────────────────
-      await window.RetirePDFRender.generate(snapshot, chartCanvases);
+      await window.RetirePDFRender.generate(snapshot);
 
     } catch (err) {
       console.error('RetireExport PDF error:', err);

@@ -1,7 +1,7 @@
 /**
  * pdf-render.js
  *
- * Generates a multi-page A4 PDF retirement plan report from a plan snapshot.
+ * Generates a multi-page A4 landscape PDF retirement plan report.
  * Registers window.RetirePDFRender.
  *
  * Depends on (loaded via CDN before this file):
@@ -9,647 +9,1455 @@
  *   window.html2canvas   — html2canvas 1.x
  *
  * Public API:
- *   RetirePDFRender.generate(snapshot, chartCanvases)
+ *   RetirePDFRender.generate(snapshot)
  *
- *   snapshot      — assembled by export.js (_buildSnapshot)
- *   chartCanvases — { wealth: HTMLCanvasElement|null, income: HTMLCanvasElement|null }
+ *   snapshot      — assembled by export.js
  *
  * Architecture:
- *   1. Build each page as a styled HTML div (A4 at 794×1123px).
- *   2. Inject all pages into a hidden off-screen container.
+ *   1. Build each page as a styled HTML div (A4 landscape: 1123×794px at 96dpi).
+ *   2. Inject all pages into a hidden off-screen container using opacity:0.
  *   3. html2canvas renders each page at 2× scale.
- *   4. jsPDF receives each canvas as a full-page JPEG image.
- *   5. Blob is downloaded immediately.
- *
- * Design tokens mirror the IncomeFlow UI:
- *   Primary blue:  #315CE8
- *   Accent green:  #3B6D11 (on-track verdict)
- *   Amber:         #BA7517 (borderline)
- *   Red:           #A32D2D (at-risk)
- *   Text dark:     #1e293b
- *   Text mid:      #475569
- *   Text light:    #94a3b8
- *   Border:        #e2e8f0
- *   Background:    #f8fafc
+ *   4. jsPDF receives each canvas as a full-page JPEG.
+ *   5. File is downloaded immediately.
  */
 
 (function () {
   'use strict';
 
-  // ── Design tokens ─────────────────────────────────────────────────────────
-  const T = {
-    blue:       '#315CE8',
-    blueDark:   '#1e3a8a',
-    blueLight:  '#e8eefb',
-    green:      '#3B6D11',
-    greenLight: '#EAF3DE',
-    amber:      '#BA7517',
-    amberLight: '#FAEEDA',
-    red:        '#A32D2D',
-    redLight:   '#FCEBEB',
-    textDark:   '#1e293b',
-    textMid:    '#475569',
-    textLight:  '#94a3b8',
-    border:     '#e2e8f0',
-    bg:         '#f8fafc',
-    white:      '#ffffff',
+  // ── Page dimensions (A4 landscape at 96dpi) ───────────────────────────────
+  const PAGE_W = 1123;
+  const PAGE_H = 794;
+
+  // ── CSS for page rendering ────────────────────────────────────────────────
+  // Injected into the off-screen container so html2canvas picks up all styles.
+  const PAGE_CSS = `
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --blue:       #2d55e8;
+  --blue-dark:  #1a3ab5;
+  --blue-deep:  #0f1c2e;
+  --green:      #3B6D11;
+  --amber:      #BA7517;
+  --red:        #A32D2D;
+  --ink:        #0f1c2e;
+  --ink-mid:    #3d5068;
+  --ink-light:  #7a90a8;
+  --rule:       #dde4ed;
+  --bg:         #f4f6fa;
+  --bg-mid:     #edf0f6;
+  --white:      #ffffff;
+  --page-w:     1123px;
+  --page-h:     794px;
+  --margin:     52px;
+  --amber-light: #faeeda;
+  --blue-light:  #eaeffd;
+  --sans:       'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --serif:      Georgia, 'Times New Roman', serif;
+}
+
+/* ── A4 landscape page ── */
+.page {
+  width: var(--page-w); height: var(--page-h);
+  background: var(--white); position: relative; overflow: hidden;
+  display: flex; flex-direction: column;
+  box-shadow: 0 6px 32px rgba(0,0,0,.38); border-radius: 2px;
+  font-family: var(--sans); color: var(--ink); font-size: 11px;
+}
+
+/* ── Shared ── */
+.page-footer {
+  height: 26px; border-top: 1px solid var(--rule); flex-shrink: 0;
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 0 var(--margin); font-size: 7.5px; color: var(--ink-light);
+}
+.page-body { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.section-label {
+  font-size: 7.5px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .12em; color: var(--ink-light); margin-bottom: 8px;
+}
+.divider { height: 1px; background: var(--rule); margin: 14px 0; }
+.divider-blue { height: 1px; background: var(--blue); margin: 14px 0; opacity: 0.3; }
+.rule-heavy { height: 2px; background: var(--ink); margin: 4px 0; }
+
+/* ── Table system ── */
+table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+thead th {
+  font-size: 9px; font-weight: 700; color: var(--ink-mid);
+  border-bottom: 1px solid var(--ink); padding: 6px 10px;
+  text-align: right; white-space: nowrap;
+}
+thead th:first-child { text-align: left; }
+tbody tr td { padding: 5.5px 10px; border-bottom: 1px solid var(--rule); }
+tbody tr td:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
+tbody tr.group-header td {
+  font-size: 8.5px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .08em; color: var(--ink-light);
+  background: var(--bg); border-bottom: none; padding: 8px 10px 4px;
+}
+tbody tr.subtotal td { font-weight: 700; color: var(--ink); background: var(--bg-mid); border-bottom: 1px solid var(--rule); }
+tbody tr.total-row td { font-weight: 800; font-size: 11.5px; color: var(--ink); border-top: 2px solid var(--ink); border-bottom: none; padding: 7px 10px; }
+tbody tr:last-child td { border-bottom: none; }
+.rate-badge {
+  display: inline-block; padding: 1px 7px; border-radius: 999px;
+  background: var(--bg-mid); color: var(--ink-mid);
+  font-size: 8px; font-weight: 600; margin-left: 6px;
+}
+
+/* ══════════════════════════════════════════════════════
+   PAGE 1 — TITLE
+══════════════════════════════════════════════════════ */
+.p1-brand-strip {
+  background: var(--bg); border-bottom: 1px solid var(--rule);
+  padding: 16px var(--margin); display: flex; align-items: center; gap: 14px;
+  flex-shrink: 0;
+}
+.p1-brand-strip svg { flex-shrink: 0; }
+.p1-brand-name { font-size: 20px; font-weight: 800; color: var(--ink); letter-spacing: -.02em; line-height: 1; }
+.p1-brand-tag { font-size: 9.5px; color: var(--ink-mid); margin-top: 3px; }
+
+.p1-content {
+  flex: 1; display: flex; flex-direction: column;
+  justify-content: center; padding: var(--margin) calc(var(--margin) * 1.6);
+  gap: 0;
+}
+.p1-eyebrow { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .14em; color: var(--ink-light); margin-bottom: 14px; }
+.p1-title { font-size: 42px; font-weight: 800; color: var(--ink); line-height: 1.05; letter-spacing: -.03em; margin-bottom: 24px; }
+.p1-statement {
+  font-size: 13.5px; color: var(--ink-mid); line-height: 1.7;
+  max-width: 640px; border-left: 3px solid var(--blue);
+  padding-left: 18px; margin-bottom: 36px;
+}
+.p1-meta { display: flex; flex-direction: column; gap: 6px; }
+.p1-meta-row { display: flex; align-items: baseline; gap: 10px; font-size: 10.5px; }
+.p1-meta-label { color: var(--ink-light); width: 110px; flex-shrink: 0; }
+.p1-meta-value { color: var(--ink); font-weight: 600; }
+
+.p1-decoration {
+  position: absolute; right: 0; top: 0; bottom: 0; width: 340px;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+}
+.p1-deco-grid {
+  display: grid; grid-template-columns: repeat(3, 60px); gap: 8px;
+  opacity: .06; transform: rotate(10deg) scale(1.4);
+}
+.p1-deco-cell { height: 60px; border-radius: 10px; background: var(--blue); }
+.p1-deco-cell.g { background: var(--green); }
+
+/* ══════════════════════════════════════════════════════
+   PAGE 2 — PLAN SUMMARY
+══════════════════════════════════════════════════════ */
+.p2-header {
+  background: var(--blue-dark); padding: 14px var(--margin); flex-shrink: 0;
+  display: flex; align-items: baseline; justify-content: space-between;
+}
+.p2-header-title { font-size: 18px; font-weight: 800; color: #fff; letter-spacing: -.02em; }
+.p2-header-sub { font-size: 9px; color: rgba(255,255,255,.5); }
+
+.p2-body { flex: 1; display: grid; grid-template-columns: 1fr 1fr; min-height: 0; }
+.p2-col { padding: var(--margin) 36px; overflow: hidden; display: flex; flex-direction: column; }
+.p2-col + .p2-col { border-left: 1px solid var(--rule); }
+
+/* ══════════════════════════════════════════════════════
+   PAGE 3 — ASSUMPTIONS
+══════════════════════════════════════════════════════ */
+.p3-header { background: #1a3ab5; padding: 14px var(--margin); flex-shrink: 0; }
+.p3-header-title { font-size: 18px; font-weight: 800; color: #fff; letter-spacing: -.02em; }
+.p3-header-sub { font-size: 9px; color: rgba(255,255,255,.45); margin-top: 2px; }
+
+.p3-body { flex: 1; display: grid; grid-template-columns: 1fr 1fr 1fr; min-height: 0; gap: 0; }
+.p3-col { padding: var(--margin) 32px; overflow: hidden; display: flex; flex-direction: column; }
+.p3-col + .p3-col { border-left: 1px solid var(--rule); }
+
+.assump-row { display: flex; justify-content: space-between; align-items: baseline; padding: 6px 0; border-bottom: 1px solid var(--rule); font-size: 10.5px; }
+.assump-label { color: var(--ink-mid); }
+.assump-value { font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+
+/* ══════════════════════════════════════════════════════
+   PAGE 4 — BALANCE SHEET
+══════════════════════════════════════════════════════ */
+.p4-header { background: #1a3ab5; padding: 14px var(--margin); flex-shrink: 0; display: flex; align-items: baseline; justify-content: space-between; }
+.p4-header-title { font-size: 18px; font-weight: 800; color: #fff; letter-spacing: -.02em; }
+.p4-header-sub { font-size: 9px; color: rgba(255,255,255,.4); }
+.p4-body { flex: 1; padding: var(--margin); overflow: hidden; display: flex; flex-direction: column; }
+`;
+
+  function injectStyles(container) {
+    const style = document.createElement('style');
+    style.textContent = PAGE_CSS;
+    container.appendChild(style);
+  }
+
+// ── Helpers ──────────────────────────────────────────────────────────────
+const fmt    = n => n == null ? '—' : '£' + Math.round(n).toLocaleString('en-GB');
+const fmtPct = r => r == null ? '—' : (r * 100).toFixed(1) + '%';
+const fmtPctN = r => r == null ? '—' : (r >= 0.995 ? '99%+' : Math.round(r*100)+'%');
+const fmtDate = iso => iso ? new Date(iso).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'}) : '';
+const strip  = s => s ? s.replace(/<[^>]+>/g,'') : '';
+
+const LOGO_SVG = `<svg width="40" height="40" viewBox="0 0 54 54" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="0"  y="0"  width="16" height="16" rx="3.5" fill="#adbdda"/>
+  <rect x="19" y="0"  width="16" height="16" rx="3.5" fill="#8faacc"/>
+  <rect x="38" y="0"  width="16" height="16" rx="3.5" fill="#6b8fbf"/>
+  <rect x="0"  y="19" width="16" height="16" rx="3.5" fill="#7ea3cc"/>
+  <rect x="19" y="19" width="16" height="16" rx="3.5" fill="#2e6fd4"/>
+  <rect x="38" y="19" width="16" height="16" rx="3.5" fill="#1a5ec4"/>
+  <rect x="0"  y="38" width="16" height="16" rx="3.5" fill="#1a55be"/>
+  <rect x="19" y="38" width="16" height="16" rx="3.5" fill="#1746a8"/>
+  <rect x="38" y="38" width="16" height="16" rx="3.5" fill="#1a9e4a"/>
+</svg>`;
+
+function footer(n, total) {
+  const d = document.createElement('div');
+  d.className = 'page-footer';
+  d.innerHTML = `<span>IncomeFlow – Confidential</span><span>Page ${n} of ${total}</span>`;
+  return d;
+}
+
+function el(tag, cls, html) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (html) e.innerHTML = html;
+  return e;
+}
+
+// ══════════════════════════════════════════════════════
+// PAGE 1 — TITLE
+// ══════════════════════════════════════════════════════
+function page1(s) {
+  const page = el('div','page');
+  const plan = s.plan;
+  const names = s.meta.persons.map(p => p.name).join(' & ');
+
+  // Brand strip
+  const brand = el('div','p1-brand-strip');
+  brand.innerHTML = `
+    ${LOGO_SVG}
+    <div>
+      <div class="p1-brand-name">IncomeFlow</div>
+      <div class="p1-brand-tag">Model and optimise how money flows from pensions, ISAs, and investments to fund your retirement.</div>
+    </div>`;
+
+  // Decorative background grid (CSS-only)
+  const deco = el('div','p1-decoration');
+  let cells = '';
+  for (let i = 0; i < 9; i++) cells += `<div class="p1-deco-cell${i===8?' g':''}"></div>`;
+  deco.innerHTML = `<div class="p1-deco-grid">${cells}</div>`;
+
+  // Main content
+  const content = el('div','p1-content');
+  content.innerHTML = `
+    <div class="p1-eyebrow">Personal retirement plan</div>
+    <div class="p1-title">Financial Plan for<br>${names}</div>
+    <div class="p1-statement">
+      This report summarises your current financial position and gives you a view of how your finances could change throughout retirement. It is produced by IncomeFlow and is for illustrative purposes only.
+    </div>
+    <div class="p1-meta">
+      <div class="p1-meta-row">
+        <span class="p1-meta-label">Prepared on</span>
+        <span class="p1-meta-value">${fmtDate(s.generated_at)}</span>
+      </div>
+      <div class="p1-meta-row">
+        <span class="p1-meta-label">Plan period</span>
+        <span class="p1-meta-value">${plan.start_year} – ${plan.end_year} (${plan.end_year - plan.start_year} years)</span>
+      </div>
+      <div class="p1-meta-row">
+        <span class="p1-meta-label">People</span>
+        <span class="p1-meta-value">${s.meta.persons.map(p => `${p.name} (born ${p.dob_year})`).join(' · ')}</span>
+      </div>
+      <div class="p1-meta-row">
+        <span class="p1-meta-label">Withdrawal strategy</span>
+        <span class="p1-meta-value">${plan.strategy_label || plan.strategy}</span>
+      </div>
+    </div>`;
+
+  page.appendChild(brand);
+  page.appendChild(content);
+  page.appendChild(deco);
+  page.appendChild(footer(1, 8));
+  return page;
+}
+
+// ══════════════════════════════════════════════════════
+// PAGE 2 — PLAN SUMMARY: Savings & Income
+// ══════════════════════════════════════════════════════
+function page2(s) {
+  const page = el('div','page');
+  const plan = s.plan;
+  const p1 = plan.p1, p2 = plan.p2;
+  const d = s.assumptions.detail;
+  const returns = d.asset_class_returns_nominal_gross;
+
+  // Header
+  const hdr = el('div','p2-header');
+  hdr.innerHTML = `<div class="p2-header-title">Plan Summary</div><div class="p2-header-sub">Savings, investments &amp; income at plan start (${plan.start_year})</div>`;
+  page.appendChild(hdr);
+
+  const body = el('div','p2-body');
+
+  // ── LEFT: Savings & Investments table ──────────────────────────────
+  const leftCol = el('div','p2-col');
+  leftCol.appendChild(el('div','section-label','Savings &amp; Investments'));
+
+  const p1b = p1.starting_balances;
+  const p2b = p2 ? p2.starting_balances : {};
+  const combined = (a, b) => (a||0) + (b||0);
+
+  const siRows = [
+    {
+      group: 'Pensions',
+      rows: [
+        { label: `${p1.name} SIPP`, p1: p1b.SIPP, p2: null, rate: returns.global_equities },
+        ...(p2 ? [{ label: `${p2.name} SIPP`, p1: null, p2: p2b.SIPP, rate: returns.global_equities }] : []),
+      ],
+      subtotalLabel: 'Total Pensions',
+    },
+    {
+      group: 'ISAs',
+      rows: [
+        { label: `${p1.name} ISA`, p1: p1b.ISA, p2: null, rate: returns.global_equities },
+        ...(p2 ? [{ label: `${p2.name} ISA`, p1: null, p2: p2b.ISA, rate: returns.global_equities }] : []),
+      ],
+      subtotalLabel: 'Total ISAs',
+    },
+    {
+      group: 'General Investment Accounts',
+      rows: [
+        { label: `${p1.name} GIA — Equities`, p1: p1b.GIAeq, p2: null, rate: returns.global_equities },
+        { label: `${p1.name} GIA — Cashlike`,  p1: p1b.GIAcash, p2: null, rate: returns.cashlike },
+        ...(p2 && (p2b.GIAeq||p2b.GIAcash) ? [
+          { label: `${p2.name} GIA — Equities`, p1: null, p2: p2b.GIAeq,   rate: returns.global_equities },
+          { label: `${p2.name} GIA — Cashlike`,  p1: null, p2: p2b.GIAcash, rate: returns.cashlike },
+        ] : []),
+      ],
+      subtotalLabel: 'Total GIAs',
+    },
+    {
+      group: 'Cash',
+      rows: [
+        { label: `${p1.name} Cash`, p1: p1b.Cash, p2: null, rate: 0 },
+        ...(p2 && p2b.Cash ? [{ label: `${p2.name} Cash`, p1: null, p2: p2b.Cash, rate: 0 }] : []),
+      ],
+      subtotalLabel: 'Total Cash',
+    },
+  ];
+
+  // Note: interest_accounts balances are already included in GIAcash above — do not add again.
+
+  // Build table
+  const table = document.createElement('table');
+  table.innerHTML = `<thead><tr><th></th><th>${p1.name}</th>${p2?`<th>${p2.name}</th>`:''}${p2?`<th>Combined</th>`:''}<th>Growth rate</th></tr></thead>`;
+  const tbody = document.createElement('tbody');
+
+  let grandP1 = 0, grandP2 = 0;
+
+  siRows.forEach(section => {
+    const gr = document.createElement('tr'); gr.className = 'group-header';
+    gr.innerHTML = `<td colspan="${p2?5:3}">${section.group}</td>`;
+    tbody.appendChild(gr);
+
+    let secP1 = 0, secP2 = 0;
+    section.rows.forEach(row => {
+      const rp1 = row.p1||0, rp2 = row.p2||0;
+      if (!rp1 && !rp2) return;
+      secP1 += rp1; secP2 += rp2;
+      const tr = document.createElement('tr');
+      const rateLabel = row.rate > 0
+        ? `<span class="rate-badge">${(row.rate*100).toFixed(1)}% p.a.</span>` : '—';
+      tr.innerHTML = `<td>${row.label}</td><td>${rp1 ? fmt(rp1) : '—'}</td>${p2?`<td>${rp2 ? fmt(rp2) : '—'}</td>`:''} ${p2?`<td>${fmt(rp1+rp2)}</td>`:''}<td>${rateLabel}</td>`;
+      tbody.appendChild(tr);
+    });
+
+    const st = document.createElement('tr'); st.className = 'subtotal';
+    st.innerHTML = `<td>${section.subtotalLabel}</td><td>${fmt(secP1)}</td>${p2?`<td>${fmt(secP2)}</td>`:''} ${p2?`<td>${fmt(secP1+secP2)}</td>`:''}<td></td>`;
+    tbody.appendChild(st);
+    grandP1 += secP1; grandP2 += secP2;
+  });
+
+  const tot = document.createElement('tr'); tot.className = 'total-row';
+  tot.innerHTML = `<td>Total Portfolio</td><td>${fmt(grandP1)}</td>${p2?`<td>${fmt(grandP2)}</td>`:''} ${p2?`<td>${fmt(grandP1+grandP2)}</td>`:''}<td></td>`;
+  tbody.appendChild(tot);
+  table.appendChild(tbody);
+  leftCol.appendChild(table);
+
+  // ── RIGHT: Income table ─────────────────────────────────────────────
+  const rightCol = el('div','p2-col');
+  rightCol.appendChild(el('div','section-label','Income sources'));
+
+  const incTable = document.createElement('table');
+  incTable.innerHTML = `<thead><tr><th></th><th>${p1.name}</th>${p2?`<th>${p2.name}</th>`:''}<th>Notes</th></tr></thead>`;
+  const incBody = document.createElement('tbody');
+
+  // State pension
+  const spGr = document.createElement('tr'); spGr.className = 'group-header';
+  spGr.innerHTML = `<td colspan="${p2?4:3}">State Pension</td>`;
+  incBody.appendChild(spGr);
+
+  [p1, p2].filter(Boolean).forEach((p, i) => {
+    if (!p.sp_annual_gross) return;
+    const tr = document.createElement('tr');
+    const cells = i === 0
+      ? `<td>${fmt(p.sp_annual_gross)}</td>${p2?`<td>—</td>`:''}`
+      : `<td>—</td><td>${fmt(p.sp_annual_gross)}</td>`;
+    tr.innerHTML = `<td>${p.name} State Pension</td>${cells}<td style="font-size:9px;color:var(--ink-light);">From age ${p.sp_age} · inflation-linked</td>`;
+    incBody.appendChild(tr);
+  });
+
+  // Salary
+  const salGr = document.createElement('tr'); salGr.className = 'group-header';
+  salGr.innerHTML = `<td colspan="${p2?4:3}">Employment Income</td>`;
+  incBody.appendChild(salGr);
+
+  [p1, p2].filter(Boolean).forEach((p, i) => {
+    const tr = document.createElement('tr');
+    const salVal = p.salary > 0 ? fmt(p.salary) : '—';
+    const note = p.salary > 0 ? `Until age ${p.salary_stop_age}` : 'None';
+    const cells = i === 0
+      ? `<td>${salVal}</td>${p2?`<td>—</td>`:''}`
+      : `<td>—</td><td>${salVal}</td>`;
+    tr.innerHTML = `<td>${p.name} Salary</td>${cells}<td style="font-size:9px;color:var(--ink-light);">${note}</td>`;
+    incBody.appendChild(tr);
+  });
+
+  // Interest accounts
+  if ((plan.interest_accounts||[]).length) {
+    const iaGr = document.createElement('tr'); iaGr.className = 'group-header';
+    iaGr.innerHTML = `<td colspan="${p2?4:3}">Interest / Draw-down Accounts</td>`;
+    incBody.appendChild(iaGr);
+    plan.interest_accounts.forEach(a => {
+      const annual = Math.round((a.monthly_draw||0) * 12);
+      const tr = document.createElement('tr');
+      const isP1 = a.owner === 'p1';
+      const cells = isP1
+        ? `<td>${annual > 0 ? fmt(annual) + '/yr' : '—'}</td>${p2?`<td>—</td>`:''}`
+        : `<td>—</td><td>${annual > 0 ? fmt(annual) + '/yr' : '—'}</td>`;
+      tr.innerHTML = `<td>${a.name}</td>${cells}<td style="font-size:9px;color:var(--ink-light);">${a.rate}% rate · ${fmt(a.balance)} balance</td>`;
+      incBody.appendChild(tr);
+    });
+  }
+
+  // Target spending
+  const divTr = document.createElement('tr'); divTr.className = 'group-header';
+  divTr.innerHTML = `<td colspan="${p2?4:3}">Target Retirement Income</td>`;
+  incBody.appendChild(divTr);
+  const targetTr = document.createElement('tr'); targetTr.className = 'total-row';
+  targetTr.innerHTML = `<td>Annual net target</td><td colspan="${p2?3:2}">${fmt(plan.spending_target_net)} / year</td>`;
+  incBody.appendChild(targetTr);
+
+  incTable.appendChild(incBody);
+  rightCol.appendChild(incTable);
+
+  body.appendChild(leftCol);
+  body.appendChild(rightCol);
+  page.appendChild(body);
+  page.appendChild(footer(2, 8));
+  return page;
+}
+
+// ══════════════════════════════════════════════════════
+// PAGE 3 — ASSUMPTIONS
+// ══════════════════════════════════════════════════════
+function page3(s) {
+  const page = el('div','page');
+  const plan = s.plan;
+  const asmp = s.assumptions;
+  const d = asmp.detail;
+  const returns = d.asset_class_returns_nominal_gross;
+  const vols    = d.asset_class_volatility;
+
+  const hdr = el('div','p3-header');
+  hdr.innerHTML = `<div class="p3-header-title">Default Assumptions</div><div class="p3-header-sub">Calculation settings used in this projection</div>`;
+  page.appendChild(hdr);
+
+  const body = el('div','p3-body');
+
+  function assumpRow(label, value) {
+    const d = document.createElement('div'); d.className = 'assump-row';
+    d.innerHTML = `<span class="assump-label">${label}</span><span class="assump-value">${value}</span>`;
+    return d;
+  }
+
+  // ── COL 1: Growth rates ─────────────────────────────────────────────
+  const col1 = el('div','p3-col');
+  col1.appendChild(el('div','section-label','Investment return assumptions'));
+  [
+    ['Global equities (gross)',  fmtPct(returns.global_equities)],
+    ['Global bonds (gross)',     fmtPct(returns.global_bonds)],
+    ['Cashlike / money market',  fmtPct(returns.cashlike)],
+    ['Cash (uninvested)',        fmtPct(returns.cash)],
+    ['Annual platform / fund fee', fmtPct(d.annual_fee)],
+    ['Blended net return',       fmtPct(d.blended_net_return)],
+  ].forEach(([l,v]) => col1.appendChild(assumpRow(l,v)));
+
+  col1.appendChild(el('div','divider-blue'));
+  col1.appendChild(el('div','section-label','Volatility assumptions'));
+  [
+    ['Equity volatility (annualised)', fmtPct(vols.global_equities)],
+    ['Bond volatility',               fmtPct(vols.global_bonds)],
+    ['Cashlike volatility',           fmtPct(vols.cashlike)],
+    ['Blended portfolio vol',         fmtPct(d.blended_vol)],
+  ].forEach(([l,v]) => col1.appendChild(assumpRow(l,v)));
+
+  col1.appendChild(el('div','divider-blue'));
+  col1.appendChild(el('div','section-label','Correlation assumptions'));
+  const corr = d.correlations;
+  [
+    ['Equities / Bonds',    corr.equities_bonds.toFixed(2)],
+    ['Equities / Cashlike', corr.equities_cashlike.toFixed(2)],
+    ['Bonds / Cashlike',    corr.bonds_cashlike.toFixed(2)],
+  ].forEach(([l,v]) => col1.appendChild(assumpRow(l,v)));
+
+  // ── COL 2: Economic & plan settings ────────────────────────────────
+  const col2 = el('div','p3-col');
+  col2.appendChild(el('div','section-label','Economic assumptions'));
+  [
+    ['Inflation rate',          fmtPct(plan.inflation_rate)],
+    ['Inflation volatility',    fmtPct(d.inflation_vol)],
+    ['Deterministic growth rate', fmtPct(plan.growth_rate_deterministic)],
+  ].forEach(([l,v]) => col2.appendChild(assumpRow(l,v)));
+
+  col2.appendChild(el('div','divider-blue'));
+  col2.appendChild(el('div','section-label','Plan settings'));
+  [
+    ['Target net income',     `£${Math.round(plan.spending_target_net).toLocaleString('en-GB')} / yr`],
+    ['Spending step-down',    plan.step_down_pct > 0 ? `${plan.step_down_pct}% at age 75` : 'None'],
+    ['Withdrawal strategy',   plan.strategy_label || plan.strategy],
+    ['Tax thresholds',        plan.threshold_mode === 'frozen' ? 'Frozen at 2025/26 levels' : `Uprated from ${plan.threshold_from_year}`],
+    ['Dividend yield',        fmtPct(plan.dividend_yield)],
+    ['Dividend mode',         plan.dividend_mode === 'payout' ? 'Payout (taxed annually)' : 'Accumulating'],
+  ].forEach(([l,v]) => col2.appendChild(assumpRow(l,v)));
+
+  col2.appendChild(el('div','divider-blue'));
+  col2.appendChild(el('div','section-label','Bed-and-ISA transfers'));
+  [
+    ['Enabled',               plan.bed_and_isa?.enabled ? 'Yes' : 'No'],
+    ...(plan.bed_and_isa?.enabled ? [
+      [`${plan.p1.name} annual transfer`, `£${Math.round(plan.bed_and_isa.p1_gia_annual||0).toLocaleString('en-GB')}`],
+      [`${plan.p1.name} transfer years`,  `${plan.bed_and_isa.p1_years} years`],
+      [`${plan.p2?.name||'p2'} annual transfer`, `£${Math.round(plan.bed_and_isa.p2_gia_annual||0).toLocaleString('en-GB')}`],
+    ] : []),
+  ].forEach(([l,v]) => col2.appendChild(assumpRow(l,v)));
+
+  // ── COL 3: Portfolio allocation, data sources, MC technical detail ──
+  const col3 = el('div','p3-col');
+
+  // Portfolio allocation — first
+  col3.appendChild(el('div','section-label','Portfolio allocation'));
+  const alloc = d.portfolio_allocation;
+  [
+    ['Equities',  `${alloc.equity_pct}%`],
+    ['Bonds',     `${alloc.bond_pct}%`],
+    ['Cashlike',  `${alloc.cashlike_pct}%`],
+    ['Cash',      `${alloc.cash_pct}%`],
+  ].forEach(([l,v]) => col3.appendChild(assumpRow(l,v)));
+
+  col3.appendChild(el('div','divider-blue'));
+  col3.appendChild(el('div','section-label','Data sources'));
+  const src = el('div','');
+  src.style.cssText = 'font-size:9.5px;color:var(--ink-light);line-height:1.8;margin-bottom:14px;';
+  src.innerHTML = `
+    Return assumptions: Vanguard Capital Markets Model 2024 &amp; BlackRock CMA 2024.<br>
+    Inflation: 2.5% base rate, 1.5% std dev.<br>
+    UK tax: 2025/26 legislation, thresholds frozen.<br>
+    All projections are illustrative. Past performance does not guarantee future results.`;
+  col3.appendChild(src);
+
+  // MC technical detail — demoted
+  col3.appendChild(el('div','divider-blue'));
+  const techLabel = el('div','section-label','Technical detail: scenario simulation');
+  techLabel.style.color = 'var(--ink-light)';
+  col3.appendChild(techLabel);
+  [
+    ['Simulation paths',       (d.sim_count||10000).toLocaleString('en-GB')],
+    ['Method',                 'i.i.d. log-normal returns'],
+    ['Sampling',               'Box-Muller transform'],
+    ['Correlation model',      'Cholesky decomposition'],
+    ['Success criterion',      'Portfolio > 0 AND target met every year'],
+    ['Blended vol',            fmtPct(d.blended_vol)],
+    ['Geometric mean',         fmtPct(d.geometric_mean)],
+  ].forEach(([l,v]) => {
+    const row = el('div','assump-row');
+    row.style.cssText = 'border-bottom-color:var(--bg-mid);';
+    row.innerHTML = `<span class="assump-label" style="font-size:9px;color:var(--ink-light);">${l}</span><span class="assump-value" style="font-size:9px;color:var(--ink-mid);">${v}</span>`;
+    col3.appendChild(row);
+  });
+
+  body.appendChild(col1);
+  body.appendChild(col2);
+  body.appendChild(col3);
+  page.appendChild(body);
+  page.appendChild(footer(3, 8));
+  return page;
+}
+
+// ══════════════════════════════════════════════════════
+// PAGE 4 — BALANCE SHEET
+// ══════════════════════════════════════════════════════
+function page4(s) {
+  const page = el('div','page');
+  const plan = s.plan;
+  const p1 = plan.p1, p2 = plan.p2;
+  const p1b = p1.starting_balances;
+  const p2b = p2 ? p2.starting_balances : {};
+  const C = (a,b) => (a||0)+(b||0);
+
+  const hdr = el('div','p4-header');
+  hdr.innerHTML = `<div class="p4-header-title">Balance Sheet</div><div class="p4-header-sub">Financial position at plan start (${plan.start_year})</div>`;
+  page.appendChild(hdr);
+
+  const body = el('div','p4-body');
+  body.appendChild(el('div','section-label','All values as at plan start date. Figures are illustrative estimates based on inputs provided.'));
+
+  const table = document.createElement('table');
+  const colHeaders = p2
+    ? `<th>${p1.name}</th><th>${p2.name}</th><th>Combined</th>`
+    : `<th>${p1.name}</th>`;
+  table.innerHTML = `<thead><tr><th></th>${colHeaders}</tr></thead>`;
+  const tbody = document.createElement('tbody');
+
+  function row(label, v1, v2, opts={}) {
+    const tr = document.createElement('tr');
+    if (opts.groupHeader) { tr.className='group-header'; tr.innerHTML=`<td colspan="${p2?4:2}">${label}</td>`; return tr; }
+    if (opts.subtotal)    tr.className='subtotal';
+    if (opts.total)       tr.className='total-row';
+    const fv1 = v1 != null ? fmt(v1) : '—';
+    const fv2 = v2 != null ? fmt(v2) : '—';
+    const fComb = (v1!=null||v2!=null) ? fmt((v1||0)+(v2||0)) : '—';
+    const cells = p2 ? `<td>${fv1}</td><td>${fv2}</td><td>${fComb}</td>` : `<td>${fv1}</td>`;
+    tr.innerHTML = `<td style="${opts.indent?'padding-left:20px;color:var(--ink-mid);':''}">${label}</td>${cells}`;
+    return tr;
+  }
+
+  // ASSETS
+  tbody.appendChild(row('ASSETS', null, null, {groupHeader:true}));
+
+  // Pensions
+  tbody.appendChild(row('Pensions', null, null, {groupHeader:true}));
+  tbody.appendChild(row(`${p1.name} — SIPP / Pension`, p1b.SIPP, null, {indent:true}));
+  if (p2 && p2b.SIPP) tbody.appendChild(row(`${p2.name} — SIPP / Pension`, null, p2b.SIPP, {indent:true}));
+  tbody.appendChild(row('Total Pensions', p1b.SIPP||0, p2?p2b.SIPP||0:null, {subtotal:true}));
+
+  // Investments
+  tbody.appendChild(row('Investments', null, null, {groupHeader:true}));
+  if (p1b.ISA)    tbody.appendChild(row(`${p1.name} — ISA`, p1b.ISA, null, {indent:true}));
+  if (p1b.GIAeq)  tbody.appendChild(row(`${p1.name} — GIA (Equities)`, p1b.GIAeq, null, {indent:true}));
+  if (p1b.GIAcash)tbody.appendChild(row(`${p1.name} — GIA (Cashlike)`, p1b.GIAcash, null, {indent:true}));
+  if (p2) {
+    if (p2b.ISA)    tbody.appendChild(row(`${p2.name} — ISA`, null, p2b.ISA, {indent:true}));
+    if (p2b.GIAeq)  tbody.appendChild(row(`${p2.name} — GIA (Equities)`, null, p2b.GIAeq, {indent:true}));
+    if (p2b.GIAcash)tbody.appendChild(row(`${p2.name} — GIA (Cashlike)`, null, p2b.GIAcash, {indent:true}));
+  }
+  const p1Inv = (p1b.ISA||0)+(p1b.GIAeq||0)+(p1b.GIAcash||0);
+  const p2Inv = p2 ? (p2b.ISA||0)+(p2b.GIAeq||0)+(p2b.GIAcash||0) : null;
+  tbody.appendChild(row('Total Investments', p1Inv, p2Inv, {subtotal:true}));
+
+  // Interest accounts — balances already captured in GIAcash, so show as info only (no totals)
+  if ((plan.interest_accounts||[]).length) {
+    tbody.appendChild(row('Interest-bearing Accounts (within GIA Cashlike)', null, null, {groupHeader:true}));
+    plan.interest_accounts.forEach(a => {
+      const isP1 = a.owner==='p1';
+      const annual = Math.round((a.monthly_draw||0)*12);
+      const note = `${a.rate}% rate · £${annual.toLocaleString('en-GB')}/yr draw · included in GIA cashlike above`;
+      const tr = document.createElement('tr');
+      const fv = `${fmt(a.balance)} ⓘ`;
+      const cells = p2
+        ? (isP1 ? `<td>${fv}</td><td>—</td><td>${fv}</td>` : `<td>—</td><td>${fv}</td><td>${fv}</td>`)
+        : `<td>${fv}</td>`;
+      tr.innerHTML = `<td style="padding-left:20px;color:var(--ink-mid);">${a.name}</td>${cells}`;
+      tr.title = note;
+      tbody.appendChild(tr);
+    });
+  }
+
+  // Cash
+  tbody.appendChild(row('Cash', null, null, {groupHeader:true}));
+  if (p1b.Cash) tbody.appendChild(row(`${p1.name} — Cash`, p1b.Cash, null, {indent:true}));
+  if (p2 && p2b.Cash) tbody.appendChild(row(`${p2.name} — Cash`, null, p2b.Cash, {indent:true}));
+  tbody.appendChild(row('Total Cash', p1b.Cash||0, p2?p2b.Cash||0:null, {subtotal:true}));
+
+  // Total assets
+  const totalP1 = (p1b.SIPP||0)+p1Inv+(p1b.Cash||0);
+  const totalP2 = p2 ? ((p2b.SIPP||0)+p2Inv+(p2b.Cash||0)) : null;
+
+  // Add interest accounts to totals
+  // Total assets — GIAcash already includes interest account balances
+  // Total assets — GIAcash already includes interest account balances, so no separate IA addition
+  tbody.appendChild(row('Total Assets', totalP1, p2?totalP2:null, {total:true}));
+
+  // LIABILITIES
+  tbody.appendChild(row('LIABILITIES', null, null, {groupHeader:true}));
+  tbody.appendChild(row('Total Liabilities', 0, p2?0:null, {subtotal:true}));
+
+  // NET WORTH
+  tbody.appendChild(row('Net Worth', totalP1, p2?totalP2:null, {total:true}));
+
+  table.appendChild(tbody);
+  body.appendChild(table);
+
+  // Note
+  const note = el('p','');
+  note.style.cssText = 'font-size:8.5px;color:var(--ink-light);margin-top:14px;line-height:1.6;';
+  note.textContent = 'Figures represent investable assets only. Property, liabilities, and non-financial assets are not included in this model. Values are as entered and have not been independently verified.';
+  body.appendChild(note);
+
+  page.appendChild(body);
+  page.appendChild(footer(4, 8));
+  return page;
+}
+
+// ══════════════════════════════════════════════════════
+// PAGE 5 — ASSET PROJECTION TABLE
+// ══════════════════════════════════════════════════════
+function page5(s) {
+  const page = el('div','page');
+  const allRows = s.results.annual_rows;
+  const plan = s.plan;
+  const TOTAL = 8;
+
+  // Every other year: 2026, 2028, 2030 ... 2060
+  const rows = allRows.filter(r => (r.year - s.meta.plan_start_year) % 2 === 0);
+
+  const hdr = el('div','p2-header');
+  hdr.style.background = '#1a3ab5';
+  hdr.innerHTML = `<div class="p2-header-title">Asset Projection</div><div class="p2-header-sub">Real terms (today's money, ${s.meta.plan_start_year} prices) · every other year · deterministic projection</div>`;
+  page.appendChild(hdr);
+
+  const body = el('div','page-body');
+  body.style.cssText = 'padding:20px 32px 16px;display:flex;flex-direction:column;overflow:hidden;';
+
+  // ── Table ──────────────────────────────────────────────────────────
+  const tbl = document.createElement('table');
+  tbl.style.cssText = 'width:100%;border-collapse:collapse;font-size:8.5px;table-layout:fixed;';
+
+  // Column widths: first col wider (label), rest equal
+  const colCount = rows.length + 1;
+  const labelW = 90;
+  const dataW = Math.floor((1123 - 64 - labelW) / rows.length); // 1123 page - 64 padding - label
+
+  let colgroupHtml = `<col style="width:${labelW}px;">`;
+  rows.forEach(() => { colgroupHtml += `<col style="width:${dataW}px;">`; });
+  tbl.innerHTML = `<colgroup>${colgroupHtml}</colgroup>`;
+
+  // ── Header rows ────────────────────────────────────────────────────
+  const thead = document.createElement('thead');
+
+  // Year row
+  const yearRow = document.createElement('tr');
+  yearRow.innerHTML = `<th style="text-align:left;padding:5px 6px;border-bottom:2px solid var(--ink);font-size:8px;color:var(--ink-light);font-weight:700;text-transform:uppercase;letter-spacing:.08em;">Year</th>`;
+  rows.forEach(r => {
+    yearRow.innerHTML += `<th style="text-align:right;padding:5px 4px;border-bottom:2px solid var(--ink);font-size:8.5px;font-weight:700;color:var(--ink);">${r.year}</th>`;
+  });
+  thead.appendChild(yearRow);
+
+  // Age row
+  const ageRow = document.createElement('tr');
+  ageRow.innerHTML = `<td style="padding:3px 6px 6px;font-size:7.5px;color:var(--ink-light);">Age ${plan.p1.name} | ${plan.p2?.name||''}</td>`;
+  rows.forEach(r => {
+    ageRow.innerHTML += `<td style="text-align:right;padding:3px 4px 6px;font-size:7.5px;color:var(--ink-light);">${r.p1_age}|${r.p2_age}</td>`;
+  });
+  thead.appendChild(ageRow);
+  tbl.appendChild(thead);
+
+  // ── Body rows ──────────────────────────────────────────────────────
+  const tbody = document.createElement('tbody');
+
+  function dataRow(label, values, opts={}) {
+    const tr = document.createElement('tr');
+    if (opts.groupHeader) {
+      tr.innerHTML = `<td colspan="${colCount}" style="padding:8px 6px 3px;font-size:7.5px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-light);background:var(--bg);border-top:1px solid var(--rule);">${label}</td>`;
+      return tr;
+    }
+    const isTotal   = opts.total;
+    const isSubtot  = opts.subtotal;
+    const bgStyle   = isTotal   ? 'background:#e8eef8;' : isSubtot ? 'background:var(--bg-mid);' : '';
+    const fwStyle   = isTotal   ? 'font-weight:800;' : isSubtot ? 'font-weight:700;' : '';
+    const borderTop = isTotal   ? 'border-top:2px solid var(--ink);' : '';
+    const labelStyle = `padding:5px 6px;color:${isTotal?'var(--ink)':'var(--ink-mid)'};${fwStyle}${bgStyle}${borderTop}`;
+
+    tr.innerHTML = `<td style="${labelStyle}">${label}</td>`;
+    values.forEach((v, i) => {
+      const even = i % 2 === 0;
+      const cellBg = isTotal ? '#e8eef8' : isSubtot ? 'var(--bg-mid)' : even ? 'var(--white)' : '#fafbfd';
+      const color  = opts.color || (isTotal ? 'var(--ink)' : 'var(--ink-mid)');
+      tr.innerHTML += `<td style="text-align:right;padding:5px 4px;${fwStyle}background:${cellBg};color:${color};${borderTop}">${v != null && v > 0.5 ? fmtK(v) : '—'}</td>`;
+    });
+    return tr;
+  }
+
+  // Format as £k or £M
+  function fmtK(n) {
+    if (n == null) return '—';
+    if (n >= 1000000) return '£' + (n/1000000).toFixed(2) + 'M';
+    if (n >= 1000)    return '£' + Math.round(n/1000) + 'k';
+    return '£' + Math.round(n);
+  }
+
+  // ── Real terms conversion ──────────────────────────────────────────
+  // Multiply nominal values by real_deflator to get today's money.
+  // MC values use the deterministic deflator as an approximation.
+  const def = r => r.real_deflator || 1;
+  const real = (r, v) => v * def(r);
+
+  // ── PENSIONS ───────────────────────────────────────────────────────
+  tbody.appendChild(dataRow('Pensions', [], {groupHeader:true}));
+  tbody.appendChild(dataRow(`${plan.p1.name} SIPP`, rows.map(r => real(r, r.snap.p1_sipp))));
+  if (plan.p2) tbody.appendChild(dataRow(`${plan.p2.name} SIPP`, rows.map(r => real(r, r.snap.p2_sipp))));
+  tbody.appendChild(dataRow('Total Pensions', rows.map(r => real(r, (r.snap.p1_sipp||0)+(r.snap.p2_sipp||0))), {subtotal:true}));
+
+  // ── ISAs ───────────────────────────────────────────────────────────
+  tbody.appendChild(dataRow('ISAs', [], {groupHeader:true}));
+  tbody.appendChild(dataRow(`${plan.p1.name} ISA`, rows.map(r => real(r, r.snap.p1_isa))));
+  if (plan.p2) tbody.appendChild(dataRow(`${plan.p2.name} ISA`, rows.map(r => real(r, r.snap.p2_isa))));
+  tbody.appendChild(dataRow('Total ISAs', rows.map(r => real(r, (r.snap.p1_isa||0)+(r.snap.p2_isa||0))), {subtotal:true}));
+
+  // ── GIA / Investments ──────────────────────────────────────────────
+  tbody.appendChild(dataRow('Investments (GIA)', [], {groupHeader:true}));
+  tbody.appendChild(dataRow(`${plan.p1.name} GIA`, rows.map(r => real(r, (r.snap.p1_gia||0)+(r.snap.p1_int_bal||0)))));
+  if (plan.p2) tbody.appendChild(dataRow(`${plan.p2.name} GIA`, rows.map(r => real(r, (r.snap.p2_gia||0)+(r.snap.p2_int_bal||0)))));
+  tbody.appendChild(dataRow('Total GIA', rows.map(r => real(r, (r.snap.p1_gia||0)+(r.snap.p1_int_bal||0)+(r.snap.p2_gia||0)+(r.snap.p2_int_bal||0))), {subtotal:true}));
+
+  // ── Cash ───────────────────────────────────────────────────────────
+  tbody.appendChild(dataRow('Cash', [], {groupHeader:true}));
+  tbody.appendChild(dataRow(`${plan.p1.name} Cash`, rows.map(r => real(r, r.snap.p1_cash))));
+  if (plan.p2 && rows.some(r => r.snap.p2_cash > 0)) {
+    tbody.appendChild(dataRow(`${plan.p2.name} Cash`, rows.map(r => real(r, r.snap.p2_cash))));
+  }
+  tbody.appendChild(dataRow('Total Cash', rows.map(r => real(r, (r.snap.p1_cash||0)+(r.snap.p2_cash||0))), {subtotal:true}));
+
+  // ── Total ──────────────────────────────────────────────────────────
+  tbody.appendChild(dataRow('Projected total (today\'s money)', rows.map(r => real(r, r.total_portfolio)), {total:true}));
+
+  // ── Simulated returns ──────────────────────────────────────────────
+  tbody.appendChild(dataRow('Simulated returns: median outcome', rows.map(r => real(r, r.mc_p50)), {color:'var(--blue)'}));
+  tbody.appendChild(dataRow('Simulated returns: weaker (1-in-10)', rows.map(r => real(r, r.mc_p10)), {color:'var(--amber)'}));
+
+  tbl.appendChild(tbody);
+  body.appendChild(tbl);
+
+  // ── Events mini-table ──────────────────────────────────────────────
+  const p1Name = plan.p1.name;
+  const p2Name = plan.p2?.name || '';
+
+  // Collect all events, classify by person
+  const allEvents = [
+    ...(s.annotations||[])
+      .filter(a => a.event !== 'depletion')
+      .map(a => ({ year: a.year, label: a.message, person: a.person, type: 'life' })),
+    ...Object.entries(s.depletions||{})
+      .map(([key, d]) => ({
+        year: d.year,
+        label: key + ' depleted',
+        person: key.startsWith(p1Name) ? 'p1' : 'p2',
+        type: 'depletion',
+      })),
+  ].sort((a, b) => a.year - b.year || a.label.localeCompare(b.label));
+
+  function shortLabel(label) {
+    return label
+      .replace(p1Name + "'s ", '').replace(p1Name + ' ', '')
+      .replace(p2Name + "'s ", '').replace(p2Name + ' ', '')
+      .replace(/\s*\(£[\d,]+\/yr\)/, '')
+      .replace(' begins', ' begins')
+      .replace(' stops', ' stops')
+      .replace(' depleted', ' depleted');
+  }
+
+  function eventEntry(e) {
+    const col = e.type === 'depletion' ? '#BA7517' : '#2d55e8';
+    return `<span style="margin-right:18px;white-space:nowrap;">
+      <span style="font-weight:700;color:${col};">${e.year}</span>
+      <span style="color:${e.type==='depletion'?'#BA7517':'var(--ink-mid)'}"> ${shortLabel(e.label)}</span>
+    </span>`;
+  }
+
+  const p1Events = allEvents.filter(e => e.person === 'p1');
+  const p2Events = allEvents.filter(e => e.person === 'p2');
+
+  const eventsTable = el('div','');
+  eventsTable.style.cssText = 'margin-top:10px;border:1px solid var(--rule);border-radius:6px;overflow:hidden;';
+
+  function eventRow(name, events, isLast) {
+    const d = el('div','');
+    d.style.cssText = `display:flex;align-items:baseline;gap:0;padding:6px 12px;${isLast?'':'border-bottom:1px solid var(--rule);'}`;
+    const nameEl = el('div','');
+    nameEl.style.cssText = 'font-size:7.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-light);width:52px;flex-shrink:0;padding-top:1px;';
+    nameEl.textContent = name;
+    const entriesEl = el('div','');
+    entriesEl.style.cssText = 'font-size:8.5px;line-height:1.8;flex:1;';
+    entriesEl.innerHTML = events.length
+      ? events.map(eventEntry).join('')
+      : `<span style="color:var(--ink-light);font-style:italic;">No events</span>`;
+    d.appendChild(nameEl);
+    d.appendChild(entriesEl);
+    return d;
+  }
+
+  eventsTable.appendChild(eventRow(p1Name, p1Events, !p2Name));
+  if (p2Name) eventsTable.appendChild(eventRow(p2Name, p2Events, true));
+
+  body.appendChild(eventsTable);
+
+
+  page.appendChild(body);
+  page.appendChild(footer(5, TOTAL));
+  return page;
+}
+
+
+// ══════════════════════════════════════════════════════
+// PAGE 6 — TAX TABLE
+// ══════════════════════════════════════════════════════
+function page6(s) {
+  const page = el('div','page');
+  const allRows = s.results.annual_rows;
+  const plan = s.plan;
+  const TOTAL = 8;
+
+  // Every other year matching asset projection
+  const rows = allRows.filter(r => (r.year - s.meta.plan_start_year) % 2 === 0);
+
+  const hdr = el('div','p2-header');
+  hdr.style.background = '#1a3ab5';
+  hdr.innerHTML = `<div class="p2-header-title">Tax</div><div class="p2-header-sub">Real terms (today's money, ${s.meta.plan_start_year} prices) · income tax, CGT and NI · every other year</div>`;
+  page.appendChild(hdr);
+
+  const body = el('div','page-body');
+  body.style.cssText = 'padding:20px 32px 16px;display:flex;flex-direction:column;overflow:hidden;';
+
+  // ── Summary stat cards ─────────────────────────────────────────────
+  const totalTax    = allRows.reduce((sum, r) => sum + r.household_tax * (r.real_deflator||1), 0);
+  const peakTax     = Math.max(...allRows.map(r => r.household_tax * (r.real_deflator||1)));
+  const taxFreeYrs  = allRows.filter(r => r.household_tax < 1).length;
+  const avgRate     = allRows.reduce((s,r) => s + (r.household_gross_income > 0 ? r.household_tax/r.household_gross_income : 0), 0) / allRows.length;
+
+  const cards = el('div','');
+  cards.style.cssText = 'display:flex;gap:10px;margin-bottom:14px;';
+  [
+    { l:'Total tax over plan (real)',  v: fmt(totalTax),                           s:'across all years' },
+    { l:'Peak annual tax (real)',      v: fmt(peakTax),                            s:'highest single year' },
+    { l:'Tax-free years',             v: `${taxFreeYrs} of ${allRows.length}`,    s:'years with no tax liability' },
+    { l:'Average effective rate',     v: (avgRate*100).toFixed(1)+'%',            s:'tax as % of gross income' },
+  ].forEach(c => {
+    const card = el('div','');
+    card.style.cssText = 'flex:1;background:var(--bg);border:1px solid var(--rule);border-radius:6px;padding:9px 11px;';
+    card.innerHTML = `<div style="font-size:7.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-light);margin-bottom:3px;">${c.l}</div><div style="font-family:'Helvetica Neue',sans-serif;font-size:15px;font-weight:800;color:var(--ink);line-height:1;">${c.v}</div><div style="font-size:7.5px;color:var(--ink-light);margin-top:2px;">${c.s}</div>`;
+    cards.appendChild(card);
+  });
+  body.appendChild(cards);
+
+  // ── Table ──────────────────────────────────────────────────────────
+  const labelW = 150;
+  const colCount = rows.length + 1;
+  const dataW = Math.floor((1123 - 64 - labelW) / rows.length);
+
+  const tbl = document.createElement('table');
+  tbl.style.cssText = 'width:100%;border-collapse:collapse;font-size:8.5px;table-layout:fixed;';
+
+  let colgroupHtml = `<col style="width:${labelW}px;">`;
+  rows.forEach(() => { colgroupHtml += `<col style="width:${dataW}px;">`; });
+  tbl.innerHTML = `<colgroup>${colgroupHtml}</colgroup>`;
+
+  const thead = document.createElement('thead');
+
+  // Year row
+  const yearRow = document.createElement('tr');
+  yearRow.innerHTML = `<th style="text-align:left;padding:5px 6px;border-bottom:2px solid var(--ink);font-size:8px;color:var(--ink-light);font-weight:700;text-transform:uppercase;letter-spacing:.08em;">Year</th>`;
+  rows.forEach(r => {
+    yearRow.innerHTML += `<th style="text-align:right;padding:5px 4px;border-bottom:2px solid var(--ink);font-size:8.5px;font-weight:700;color:var(--ink);">${r.year}</th>`;
+  });
+  thead.appendChild(yearRow);
+
+  // Age row
+  const ageRow = document.createElement('tr');
+  ageRow.innerHTML = `<td style="padding:3px 6px 6px;font-size:7.5px;color:var(--ink-light);">Age ${plan.p1.name} | ${plan.p2?.name||''}</td>`;
+  rows.forEach(r => {
+    ageRow.innerHTML += `<td style="text-align:right;padding:3px 4px 6px;font-size:7.5px;color:var(--ink-light);">${r.p1_age}|${r.p2_age}</td>`;
+  });
+  thead.appendChild(ageRow);
+  tbl.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  const def = r => r.real_deflator || 1;
+
+  function taxRow(label, values, opts={}) {
+    const tr = document.createElement('tr');
+    if (opts.groupHeader) {
+      tr.innerHTML = `<td colspan="${colCount}" style="padding:7px 6px 3px;font-size:7.5px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-light);background:var(--bg);border-top:1px solid var(--rule);">${label}</td>`;
+      return tr;
+    }
+    const isTotal  = opts.total;
+    const isSub    = opts.subtotal;
+    const bg       = isTotal ? 'background:#e8eef8;' : isSub ? 'background:var(--bg-mid);' : '';
+    const fw       = isTotal || isSub ? 'font-weight:700;' : '';
+    const bt       = isTotal ? 'border-top:2px solid var(--ink);' : '';
+    const col      = opts.color || (isTotal ? 'var(--ink)' : 'var(--ink-mid)');
+    tr.innerHTML   = `<td style="padding:5px 6px;${fw}${bg}${bt}color:${isTotal?'var(--ink)':'var(--ink-mid)'};">${label}</td>`;
+    values.forEach((v, i) => {
+      const cellBg = isTotal ? '#e8eef8' : isSub ? 'var(--bg-mid)' : i%2===0 ? 'var(--white)' : '#fafbfd';
+      const disp = v > 0.5 ? fmt(v) : '—';
+      tr.innerHTML += `<td style="text-align:right;padding:5px 4px;${fw}background:${cellBg};color:${col};${bt}">${disp}</td>`;
+    });
+    return tr;
+  }
+
+  // ── Person 1 ───────────────────────────────────────────────────────
+  tbody.appendChild(taxRow(plan.p1.name, [], {groupHeader:true}));
+  tbody.appendChild(taxRow('Income tax',  rows.map(r => r.p1_income_tax * def(r))));
+  tbody.appendChild(taxRow('CGT',         rows.map(r => r.p1_cgt * def(r))));
+  tbody.appendChild(taxRow('National Insurance', rows.map(r => r.p1_ni * def(r))));
+  tbody.appendChild(taxRow(`${plan.p1.name} total`, rows.map(r => (r.p1_income_tax+r.p1_cgt+r.p1_ni)*def(r)), {subtotal:true}));
+
+  // ── Person 2 ───────────────────────────────────────────────────────
+  if (plan.p2) {
+    tbody.appendChild(taxRow(plan.p2.name, [], {groupHeader:true}));
+    tbody.appendChild(taxRow('Income tax',  rows.map(r => r.p2_income_tax * def(r))));
+    tbody.appendChild(taxRow('CGT',         rows.map(r => r.p2_cgt * def(r))));
+    tbody.appendChild(taxRow('National Insurance', rows.map(r => r.p2_ni * def(r))));
+    tbody.appendChild(taxRow(`${plan.p2.name} total`, rows.map(r => (r.p2_income_tax+r.p2_cgt+r.p2_ni)*def(r)), {subtotal:true}));
+  }
+
+  // ── Household totals ───────────────────────────────────────────────
+  tbody.appendChild(taxRow('Household total tax (today\'s money)', rows.map(r => r.household_tax * def(r)), {total:true}));
+
+  // ── Effective rate row ─────────────────────────────────────────────
+  tbody.appendChild(taxRow('Effective tax rate', rows.map(r => {
+    if (r.household_gross_income < 1) return 0;
+    return null; // handled below as special render
+  }), {color:'var(--ink-mid)'}));
+
+  // Replace last row with rate display
+  const lastRow = tbody.lastElementChild;
+  lastRow.querySelectorAll('td:not(:first-child)').forEach((td, i) => {
+    const r = rows[i];
+    const rate = r && r.household_gross_income > 0
+      ? (r.household_tax / r.household_gross_income * 100).toFixed(1) + '%'
+      : '—';
+    td.textContent = rate;
+    td.style.color = 'var(--ink-mid)';
+    td.style.fontStyle = 'normal';
+  });
+
+  // ── Cumulative tax row ─────────────────────────────────────────────
+  // Running total of real-terms tax up to and including each displayed year.
+  // Uses allRows (every year) to accumulate, then samples at the every-other-year points.
+  const cumulativeByYear = {};
+  let runningTotal = 0;
+  allRows.forEach(r => {
+    runningTotal += r.household_tax * (r.real_deflator || 1);
+    cumulativeByYear[r.year] = runningTotal;
+  });
+  tbody.appendChild(taxRow('Cumulative tax to date (today\'s money)', rows.map(r => cumulativeByYear[r.year] || 0), {color:'var(--ink)'}));
+  // Style cumulative row distinctively — italic label, no border-top
+  const cumRow = tbody.lastElementChild;
+  const cumLabel = cumRow.querySelector('td:first-child');
+  if (cumLabel) { cumLabel.style.fontStyle = 'italic'; cumLabel.style.color = 'var(--ink-mid)'; }
+
+  tbl.appendChild(tbody);
+  body.appendChild(tbl);
+
+  // ── Tax efficiency note ────────────────────────────────────────────
+  const note = el('div','');
+  note.style.cssText = 'margin-top:12px;background:var(--blue-light,#eaeffd);border:1px solid rgba(45,85,232,.2);border-radius:6px;padding:10px 14px;';
+  note.innerHTML = `<div class="section-label" style="color:var(--blue);margin-bottom:4px;">Tax efficiency note</div><p style="font-size:9px;color:var(--ink-mid);line-height:1.65;">The Allowance Maximiser strategy draws income up to each person's tax-free thresholds before using taxable sources, keeping tax minimal in the early years of retirement. Tax rises from the mid-2030s as State Pension and larger pension draws push taxable income above the Personal Allowance. CGT and NI are shown separately where applicable.</p>`;
+  body.appendChild(note);
+
+  page.appendChild(body);
+  page.appendChild(footer(6, TOTAL));
+  return page;
+}
+
+
+// ══════════════════════════════════════════════════════
+// PAGE 7 — INCOME & FUNDING SOURCES
+// ══════════════════════════════════════════════════════
+function page7(s) {
+  const page = el('div','page');
+  const allRows = s.results.annual_rows;
+  const plan = s.plan;
+  const TOTAL = 8;
+
+  // Every other year
+  const rows = allRows.filter(r => (r.year - s.meta.plan_start_year) % 2 === 0);
+  const def  = r => r.real_deflator || 1;
+
+  const hdr = el('div','p2-header');
+  hdr.style.background = '#1a3ab5';
+  hdr.innerHTML = `<div class="p2-header-title">Income &amp; Funding Sources</div><div class="p2-header-sub">Real terms (today's money, ${s.meta.plan_start_year} prices) · how retirement income is funded year by year · every other year</div>`;
+  page.appendChild(hdr);
+
+  const body = el('div','page-body');
+  body.style.cssText = 'padding:20px 32px 16px;display:flex;flex-direction:column;overflow:hidden;';
+
+  // ── Summary stat cards ─────────────────────────────────────────────
+  const totalTarget   = allRows.reduce((s,r) => s + r.target * def(r), 0);
+  const totalTax      = allRows.reduce((s,r) => s + r.household_tax * def(r), 0);
+  const taxFreeYrs    = allRows.filter(r => r.household_tax < 1).length;
+  const spYears       = allRows.filter(r => (r.p1_sp + r.p2_sp) > 0).length;
+
+  const cards = el('div','');
+  cards.style.cssText = 'display:flex;gap:10px;margin-bottom:14px;';
+  [
+    { l:'Total target income (real)',  v: fmt(totalTarget),                       s:'across plan lifetime' },
+    { l:'Total tax paid (real)',       v: fmt(totalTax),                          s:'income tax, CGT & NI' },
+    { l:'Tax-efficient years',        v: `${taxFreeYrs} of ${allRows.length}`,   s:'years with minimal tax' },
+    { l:'Years with State Pension',   v: `${spYears} of ${allRows.length}`,      s:'once both pensions start' },
+  ].forEach(c => {
+    const card = el('div','');
+    card.style.cssText = 'flex:1;background:var(--bg);border:1px solid var(--rule);border-radius:6px;padding:9px 11px;';
+    card.innerHTML = `<div style="font-size:7.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-light);margin-bottom:3px;">${c.l}</div><div style="font-family:'Helvetica Neue',sans-serif;font-size:15px;font-weight:800;color:var(--ink);line-height:1;">${c.v}</div><div style="font-size:7.5px;color:var(--ink-light);margin-top:2px;">${c.s}</div>`;
+    cards.appendChild(card);
+  });
+  body.appendChild(cards);
+
+  // ── Table ──────────────────────────────────────────────────────────
+  const labelW  = 160;
+  const colCount = rows.length + 1;
+  const dataW   = Math.floor((1123 - 64 - labelW) / rows.length);
+
+  const tbl = document.createElement('table');
+  tbl.style.cssText = 'width:100%;border-collapse:collapse;font-size:8.5px;table-layout:fixed;';
+
+  let cg = `<col style="width:${labelW}px;">`;
+  rows.forEach(() => { cg += `<col style="width:${dataW}px;">`; });
+  tbl.innerHTML = `<colgroup>${cg}</colgroup>`;
+
+  const thead = document.createElement('thead');
+  const yearRow = document.createElement('tr');
+  yearRow.innerHTML = `<th style="text-align:left;padding:5px 6px;border-bottom:2px solid var(--ink);font-size:8px;color:var(--ink-light);font-weight:700;text-transform:uppercase;letter-spacing:.08em;">Source</th>`;
+  rows.forEach(r => {
+    yearRow.innerHTML += `<th style="text-align:right;padding:5px 4px;border-bottom:2px solid var(--ink);font-size:8.5px;font-weight:700;color:var(--ink);">${r.year}</th>`;
+  });
+  thead.appendChild(yearRow);
+
+  const ageRow = document.createElement('tr');
+  ageRow.innerHTML = `<td style="padding:3px 6px 6px;font-size:7.5px;color:var(--ink-light);">Age ${plan.p1.name} | ${plan.p2?.name||''}</td>`;
+  rows.forEach(r => {
+    ageRow.innerHTML += `<td style="text-align:right;padding:3px 4px 6px;font-size:7.5px;color:var(--ink-light);">${r.p1_age}|${r.p2_age}</td>`;
+  });
+  thead.appendChild(ageRow);
+  tbl.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+
+  function cfRow(label, values, opts={}) {
+    const tr = document.createElement('tr');
+    if (opts.groupHeader) {
+      tr.innerHTML = `<td colspan="${colCount}" style="padding:7px 6px 3px;font-size:7.5px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-light);background:var(--bg);border-top:1px solid var(--rule);">${label}</td>`;
+      return tr;
+    }
+    const isTotal = opts.total;
+    const isSub   = opts.subtotal;
+    const bg      = isTotal ? 'background:#e8eef8;' : isSub ? 'background:var(--bg-mid);' : '';
+    const fw      = isTotal || isSub ? 'font-weight:700;' : '';
+    const bt      = isTotal ? 'border-top:2px solid var(--ink);' : '';
+    const col     = opts.color || (isTotal ? 'var(--ink)' : 'var(--ink-mid)');
+    tr.innerHTML  = `<td style="padding:5px 6px;${fw}${bg}${bt}color:${isTotal?'var(--ink)':col};">${label}</td>`;
+    values.forEach((v, i) => {
+      const cellBg = isTotal ? '#e8eef8' : isSub ? 'var(--bg-mid)' : i%2===0 ? 'var(--white)' : '#fafbfd';
+      const disp   = v > 0.5 ? fmt(v) : (opts.showZero ? '£0' : '—');
+      tr.innerHTML += `<td style="text-align:right;padding:5px 4px;${fw}background:${cellBg};color:${col};${bt}">${disp}</td>`;
+    });
+    return tr;
+  }
+
+  // ── Guaranteed income ──────────────────────────────────────────────
+  tbody.appendChild(cfRow('Guaranteed income', [], {groupHeader:true}));
+  tbody.appendChild(cfRow('State Pension — ' + plan.p1.name,  rows.map(r => r.p1_sp * def(r))));
+  if (plan.p2) tbody.appendChild(cfRow('State Pension — ' + plan.p2.name, rows.map(r => r.p2_sp * def(r))));
+  tbody.appendChild(cfRow('Salary — ' + plan.p1.name, rows.map(r => r.p1_salary * def(r))));
+  if (plan.p2) tbody.appendChild(cfRow('Salary — ' + plan.p2.name, rows.map(r => r.p2_salary * def(r))));
+  tbody.appendChild(cfRow('Interest account draw', rows.map(r => (r.p1_int_draw + r.p2_int_draw) * def(r))));
+  const totGuaranteed = r => (r.p1_sp + r.p2_sp + r.p1_salary + r.p2_salary + r.p1_int_draw + r.p2_int_draw) * def(r);
+  tbody.appendChild(cfRow('Total guaranteed', rows.map(r => totGuaranteed(r)), {subtotal:true}));
+
+  // ── Portfolio withdrawals ──────────────────────────────────────────
+  tbody.appendChild(cfRow('Portfolio withdrawals', [], {groupHeader:true}));
+  tbody.appendChild(cfRow('SIPP / Pension draws', rows.map(r => ((r.p1_drawn.SIPP||0) + (r.p2_drawn.SIPP||0)) * def(r))));
+  tbody.appendChild(cfRow('ISA draws',            rows.map(r => ((r.p1_drawn.ISA||0)  + (r.p2_drawn.ISA||0))  * def(r))));
+  tbody.appendChild(cfRow('GIA draws',            rows.map(r => ((r.p1_drawn.GIA||0)  + (r.p2_drawn.GIA||0))  * def(r))));
+  tbody.appendChild(cfRow('Cash draws',           rows.map(r => ((r.p1_drawn.Cash||0) + (r.p2_drawn.Cash||0)) * def(r))));
+  tbody.appendChild(cfRow('Dividends',            rows.map(r => ((r.p1_divs||0) + (r.p2_divs||0)) * def(r))));
+  const totPortfolio = r => ((r.p1_drawn.SIPP||0)+(r.p2_drawn.SIPP||0)+(r.p1_drawn.ISA||0)+(r.p2_drawn.ISA||0)+(r.p1_drawn.GIA||0)+(r.p2_drawn.GIA||0)+(r.p1_drawn.Cash||0)+(r.p2_drawn.Cash||0)+(r.p1_divs||0)+(r.p2_divs||0)) * def(r);
+  tbody.appendChild(cfRow('Total portfolio draws', rows.map(r => totPortfolio(r)), {subtotal:true}));
+
+  // ── Summary ────────────────────────────────────────────────────────
+  tbody.appendChild(cfRow('Gross income (today\'s money)', rows.map(r => r.household_gross_income * def(r)), {total:true}));
+  tbody.appendChild(cfRow('Tax paid',                     rows.map(r => r.household_tax * def(r)), {color:'var(--amber)'}));
+  tbody.appendChild(cfRow('Net income (today\'s money)',  rows.map(r => r.household_net_cashflow * def(r)), {total:true, color:'var(--green)'}));
+  tbody.appendChild(cfRow('Target income',               rows.map(r => r.target * def(r)), {color:'var(--ink-mid)'}));
+
+  tbl.appendChild(tbody);
+  body.appendChild(tbl);
+
+  // ── Note ───────────────────────────────────────────────────────────
+  const note = el('div','');
+  note.style.cssText = 'margin-top:10px;background:#eaf3de;border:1px solid rgba(59,109,17,.25);border-radius:6px;padding:9px 14px;';
+  note.innerHTML = `<div class="section-label" style="color:#3B6D11;margin-bottom:3px;">How to read this table</div><p style="font-size:8.5px;color:var(--ink-mid);line-height:1.65;">The funding mix shifts significantly over time. Early retirement draws heavily on Cash, interest income, and Heidi's salary. From 2031 onwards, SIPP and ISA withdrawals take over. Both State Pensions start in 2034–35, reducing the portfolio draws required. Tax rises gradually as pension income pushes above the Personal Allowance. Net income matches the target in every year. Any shortfall shown elsewhere is the tax cost, not a funding gap.</p>`;
+  body.appendChild(note);
+
+  page.appendChild(body);
+  page.appendChild(footer(7, TOTAL));
+  return page;
+}
+
+
+// ══════════════════════════════════════════════════════
+// PAGE 8 — PLAN SUMMARY (final page)
+// ══════════════════════════════════════════════════════
+function page8(s) {
+  const page = el('div','page');
+  const r = s.results, n = s.narrative, st = s.stress_tests || {};
+  const plan = s.plan;
+  const rate = r.success_rate;
+  const TOTAL = 8;
+
+  function vcol(rate) {
+    if (rate == null) return { bg:'#2d55e8', ab:'#eaeffd', ac:'#2d55e8' };
+    if (rate >= 0.95) return { bg:'#3B6D11', ab:'#eaf3de', ac:'#3B6D11' };
+    if (rate >= 0.90) return { bg:'#2d55e8', ab:'#eaeffd', ac:'#2d55e8' };
+    if (rate >= 0.80) return { bg:'#BA7517', ab:'#faeeda', ac:'#BA7517' };
+    return                   { bg:'#A32D2D', ab:'#fcebeb', ac:'#A32D2D' };
+  }
+  function icol(lvl) { return lvl==='low'?'#3B6D11':lvl==='moderate'?'#BA7517':lvl==='high'?'#A32D2D':'#7a90a8'; }
+  const v = vcol(rate);
+  const fmtPctV = r => r == null ? '—' : (r >= 0.995 ? '99%+' : Math.round(r*100)+'%');
+
+  // ── VERDICT HERO BAND ─────────────────────────────────────────────
+  const hero = el('div','');
+  hero.style.cssText = `background:${v.bg};padding:22px 48px;flex-shrink:0;`;
+  hero.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr auto;align-items:center;gap:32px;">
+      <div>
+        <div style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.16em;color:rgba(255,255,255,.5);margin-bottom:6px;">Plan summary · ${s.meta.persons.map(p=>p.name).join(' & ')} · Prepared ${new Date(s.generated_at).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}</div>
+        <div style="font-family:'Helvetica Neue',sans-serif;font-size:38px;font-weight:900;color:#fff;line-height:1;letter-spacing:-.03em;margin-bottom:10px;">${n.verdict_state || r.verdict || 'Plan assessed'}</div>
+        <div style="font-size:12px;color:rgba(255,255,255,.9);line-height:1.6;max-width:580px;">${strip(n.verdict_sentence||r.verdict_summary||'')}</div>
+      </div>
+      <div style="text-align:right;flex-shrink:0;border-left:1px solid rgba(255,255,255,.2);padding-left:32px;">
+        <div style="font-size:7.5px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:rgba(255,255,255,.5);margin-bottom:4px;">Likelihood of holding up</div>
+        <div style="font-family:'Helvetica Neue',sans-serif;font-size:58px;font-weight:900;color:#fff;line-height:1;letter-spacing:-.04em;">${fmtPctV(rate)}</div>
+        <div style="font-size:8px;color:rgba(255,255,255,.4);margin-top:5px;">Based on ${(r.sim_count||10000).toLocaleString('en-GB')} simulated scenarios · ${plan.start_year}–${plan.end_year}</div>
+      </div>
+    </div>`;
+  page.appendChild(hero);
+
+  // ── THREE COLUMN BODY ─────────────────────────────────────────────
+  const body = el('div','page-body');
+  body.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;flex:1;min-height:0;';
+
+  // ══ LEFT: decade bars + pressure + action ════════════════════════
+  const leftCol = el('div','');
+  leftCol.style.cssText = 'padding:18px 28px;display:flex;flex-direction:column;border-right:1px solid var(--rule);overflow:hidden;';
+  leftCol.appendChild(el('div','section-label','Likelihood of plan holding up – by decade'));
+
+  (r.survival_by_decade||[]).forEach(d => {
+    const pct = (d.survival_rate*100);
+    const col = d.survival_rate>=.95?'#3B6D11':d.survival_rate>=.80?'#BA7517':'#A32D2D';
+    const row = el('div','');
+    row.style.cssText = 'display:flex;align-items:center;gap:9px;margin-bottom:8px;';
+    row.innerHTML = `
+      <div style="width:48px;text-align:right;font-size:9.5px;color:var(--ink-mid);flex-shrink:0;">${d.age_p1_end!=null?'Age '+d.age_p1_end:d.year}</div>
+      <div style="flex:1;height:12px;background:var(--rule);border-radius:3px;overflow:hidden;"><div style="width:${pct.toFixed(1)}%;height:100%;background:${col};border-radius:3px;"></div></div>
+      <div style="width:36px;font-family:'Helvetica Neue',sans-serif;font-size:9.5px;font-weight:700;color:${col};">${pct.toFixed(0)}%</div>`;
+    leftCol.appendChild(row);
+  });
+
+  if (n.survival_note) {
+    const sn = el('p',''); sn.style.cssText='font-size:9.5px;color:var(--ink-mid);line-height:1.6;margin:8px 0 12px;'; sn.textContent=n.survival_note; leftCol.appendChild(sn);
+  }
+
+  leftCol.appendChild(el('div','divider-blue'));
+
+  // Action hero — ties "no change needed" to the sequence risk reality
+  const sorrSc = st && st['sorr'];
+  const sorrIsHigh = sorrSc?.run && sorrSc?.impact_level === 'high';
+  const actionLine = strip(n.action_line || '');
+  const actionImpact = strip(n.action_impact || '');
+  const sorrCaveat = sorrIsHigh
+    ? `That said, your plan shows meaningful sensitivity to a sharp early market fall. The most important practical step is maintaining a cash buffer of 6–12 months' spending – not as a sign of weakness in the plan, but as the standard protection against this specific risk.`
+    : '';
+
+  const ah = el('div','');
+  ah.style.cssText = `background:${v.ab};border-left:4px solid ${v.ac};border-radius:0 8px 8px 0;padding:14px 16px;margin-bottom:12px;`;
+  ah.innerHTML = `
+    <div style="font-size:7.5px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:${v.ac};margin-bottom:6px;">Recommended action</div>
+    <div style="font-family:'Helvetica Neue',sans-serif;font-size:13px;font-weight:800;color:var(--ink);margin-bottom:7px;line-height:1.3;">${actionLine}</div>
+    <div style="font-size:9.5px;color:var(--ink-mid);line-height:1.6;">${actionImpact}${sorrCaveat ? ' ' + sorrCaveat : ''}</div>`;
+  leftCol.appendChild(ah);
+
+  // Key points
+  if ((n.bullet_items||[]).length) {
+    leftCol.appendChild(el('div','section-label','Key points'));
+    (n.bullet_items||[]).forEach(b => {
+      const row = el('div',''); row.style.cssText='display:flex;gap:9px;margin-bottom:7px;align-items:flex-start;';
+      const dot = el('div',''); dot.style.cssText=`width:5px;height:5px;border-radius:50%;background:${v.ac};flex-shrink:0;margin-top:4px;`;
+      const txt = el('div',''); txt.style.cssText='font-size:9.5px;color:var(--ink-mid);line-height:1.55;'; txt.textContent=strip(b);
+      row.appendChild(dot); row.appendChild(txt); leftCol.appendChild(row);
+    });
+  }
+
+  leftCol.appendChild(el('div','divider-blue'));
+
+  // Good practice — in left column so it always shows
+  leftCol.appendChild(el('div','section-label','Good practice'));
+  [
+    'Keep 6–12 months of spending in accessible cash. This is the single most practical defence against sequence risk – it means you can avoid selling investments when markets are down.',
+    'Review this plan annually, or after any significant market movement or change in personal circumstances.',
+    'A willingness to trim spending by 10–15% in weaker years materially improves long-term resilience.',
+    'Both State Pensions are inflation-linked – they provide a rising guaranteed income floor from age 67.',
+  ].forEach(b => {
+    const row = el('div',''); row.style.cssText='display:flex;gap:9px;margin-bottom:7px;align-items:flex-start;';
+    const dot = el('div',''); dot.style.cssText='width:5px;height:5px;border-radius:50%;background:var(--blue);flex-shrink:0;margin-top:4px;';
+    const txt = el('div',''); txt.style.cssText='font-size:9px;color:var(--ink-mid);line-height:1.6;'; txt.textContent=b;
+    row.appendChild(dot); row.appendChild(txt); leftCol.appendChild(row);
+  });
+
+  // ══ RIGHT: scenario testing + good practice ══════════════════════
+  const rightCol = el('div','');
+  rightCol.style.cssText = 'padding:18px 28px;display:flex;flex-direction:column;overflow:hidden;';
+  rightCol.appendChild(el('div','section-label','We tested three things that could go wrong'));
+
+  // Connecting sentence — bridges verdict to scenarios
+  const allScenLow = st && ['sorr','inflation','lostDecade'].every(id => !st[id]?.run || st[id]?.impact_level === 'low');
+  const hasHighImpact = st && ['sorr','inflation','lostDecade'].some(id => st[id]?.run && st[id]?.impact_level === 'high');
+  const connectText = hasHighImpact
+    ? `Your plan is on track under normal assumptions. The tests below show where it is resilient and where it is most sensitive. Understanding this helps you focus on the right levers if circumstances change.`
+    : `Your plan holds up well under every scenario we tested. These results are not presented to alarm – they are here to give you confidence that the plan has been properly challenged.`;
+  const connectEl = el('p','');
+  connectEl.style.cssText = 'font-size:9px;color:var(--ink-mid);line-height:1.65;margin-bottom:12px;padding-left:10px;border-left:3px solid var(--rule);';
+  connectEl.textContent = connectText;
+  rightCol.appendChild(connectEl);
+
+  // Adviser-quality scenario framing
+  const scenarioMeta = {
+    sorr: {
+      title:   'Early market downturn',
+      what:    'Markets fall sharply in the first few years of retirement, before your portfolio has had time to recover.',
+      why:     'This is the most powerful adverse scenario for retirement plans. A poor sequence of returns in the early years permanently reduces the base from which your money compounds – and you are still drawing income throughout.',
+      forYou: (sc, baseRate) => {
+        const baseP = Math.round(baseRate * 100);
+        const scP   = Math.round(sc.success_rate * 100);
+        const dep   = sc.earliest_depletion_year;
+        const p50   = sc.terminal_portfolio_p50;
+        if (sc.impact_level === 'high') {
+          return `Under your plan, this is the scenario to watch most closely. The likelihood drops from ${baseP}% to ${scP}%, a significant reduction. In a typical path under this stress, the portfolio ${p50 > 0 ? 'finishes with ' + fmt(p50) : 'depletes before the end of the plan'}${dep ? ', with the first depletion occurring around ' + dep : ''}. The most effective protection is maintaining a cash buffer to avoid selling investments at depressed prices in the early years.`;
+        } else {
+          return `Your plan shows good resilience to an early downturn. The likelihood moves from ${baseP}% to ${scP}%, a marginal change. This is partly because your diversified income sources (interest accounts, ISA draws) reduce early reliance on investment returns.`;
+        }
+      },
+    },
+    inflation: {
+      title:   'High inflation',
+      what:    'A prolonged period of elevated inflation in the early years squeezes the real value of your withdrawals.',
+      why:     'Inflation is a slow erosion rather than a shock – it reduces what your money buys over time. The key protection is income sources that rise with prices, principally the State Pension.',
+      forYou: (sc, baseRate) => {
+        const baseP = Math.round(baseRate * 100);
+        const scP   = Math.round(sc.success_rate * 100);
+        const p50   = sc.terminal_portfolio_p50;
+        return `Your plan is well-protected against inflation. The likelihood moves from ${baseP}% to ${scP}%${scP === baseP ? ' — unchanged' : ''}. Both State Pensions are inflation-linked and start from age 67, providing a rising guaranteed income floor just as portfolio draws typically increase. ${p50 > 0 ? 'In a typical path, the plan finishes with ' + fmt(p50) + ' in today\'s money.' : ''}`;
+      },
+    },
+    lostDecade: {
+      title:   'Sustained low growth',
+      what:    'Near-zero real returns for a decade at some point during retirement, limiting the portfolio\'s ability to compound.',
+      why:     'Prolonged low growth is most damaging when it occurs early and when the portfolio is being drawn heavily. Later in retirement, its impact is cushioned by State Pension income reducing portfolio dependency.',
+      forYou: (sc, baseRate) => {
+        const baseP = Math.round(baseRate * 100);
+        const scP   = Math.round(sc.success_rate * 100);
+        const p50   = sc.terminal_portfolio_p50;
+        return `Your plan manages a low-growth decade well. The likelihood moves from ${baseP}% to ${scP}%${scP === baseP ? ' — unchanged' : ''}. The combination of tax-efficient withdrawals and State Pension income from the mid-2030s means the portfolio is not solely reliant on growth to sustain income. ${p50 > 0 ? 'A typical path still finishes with ' + fmt(p50) + '.' : ''}`;
+      },
+    },
   };
 
-  // A4 at 96dpi
-  const PAGE_W = 794;
-  const PAGE_H = 1123;
-  const MARGIN = 48;
-  const INNER_W = PAGE_W - MARGIN * 2;
+  ['sorr','inflation','lostDecade'].forEach(id => {
+    const sc  = st[id];
+    const meta = scenarioMeta[id];
+    const card = el('div','');
+    card.style.cssText = 'border:1px solid var(--rule);border-radius:8px;padding:11px 14px;margin-bottom:9px;';
 
-  // ── Formatters ────────────────────────────────────────────────────────────
-  function fmt(n) {
-    if (n == null) return '—';
-    return '£' + Math.round(n).toLocaleString('en-GB');
-  }
-  function fmtPct(r) {
-    if (r == null) return '—';
-    if (r >= 0.995) return '99%+';
-    return Math.round(r * 100) + '%';
-  }
-  function fmtPctRaw(r) {
-    if (r == null) return '—';
-    return (r * 100).toFixed(1) + '%';
-  }
-  function fmtDate(iso) {
-    if (!iso) return '';
-    return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
-  }
+    if (!sc || !sc.run) {
+      card.innerHTML = `
+        <div style="font-size:10.5px;font-weight:700;color:var(--ink);margin-bottom:3px;">${meta.title}</div>
+        <p style="font-size:8.5px;color:var(--ink-light);font-style:italic;margin:0;">Not tested in this report</p>`;
+    } else {
+      const col    = icol(sc.impact_level);
+      const scP    = Math.round(sc.success_rate * 100);
+      const baseP  = Math.round(r.success_rate * 100);
+      const absDelta = Math.abs(Math.round((sc.success_rate_delta||0) * 100));
+      const deltaText = sc.success_rate_delta === 0
+        ? 'No change to plan outcome'
+        : `Drops from ${baseP}% to ${scP}% under this scenario`;
+      const impactLabel = sc.impact_level === 'high' ? 'Most sensitive scenario'
+        : sc.impact_level === 'moderate' ? 'Moderate sensitivity'
+        : 'Plan holds up well';
+      const borderCol = sc.impact_level === 'high' ? '#A32D2D' : sc.impact_level === 'moderate' ? '#BA7517' : '#3B6D11';
 
-  // ── Verdict colour helper ─────────────────────────────────────────────────
-  function verdictColours(rate) {
-    if (rate == null) return { bg: T.blue, light: T.blueLight, text: T.blueDark };
-    if (rate >= 0.95) return { bg: T.green,  light: T.greenLight, text: T.green };
-    if (rate >= 0.90) return { bg: T.blue,   light: T.blueLight,  text: T.blue  };
-    if (rate >= 0.80) return { bg: T.amber,  light: T.amberLight, text: T.amber };
-    return               { bg: T.red,    light: T.redLight,   text: T.red   };
-  }
+      card.style.borderColor = borderCol + '40';
+      card.style.borderLeftColor = borderCol;
+      card.style.borderLeftWidth = '3px';
 
-  function impactColour(level) {
-    if (level === 'low')      return T.green;
-    if (level === 'moderate') return T.amber;
-    if (level === 'high')     return T.red;
-    return T.textLight;
-  }
-
-  // ── Base page shell ───────────────────────────────────────────────────────
-  function pageShell(pageNum, totalPages, content, opts = {}) {
-    const headerBg = opts.headerBg || T.blue;
-    const headerContent = opts.headerContent || '';
-    return `
-      <div style="
-        width:${PAGE_W}px;height:${PAGE_H}px;
-        background:${T.white};
-        font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-        font-size:13px;color:${T.textDark};
-        display:flex;flex-direction:column;
-        box-sizing:border-box;
-        position:relative;
-        overflow:hidden;
-      ">
-        ${headerContent}
-        <div style="flex:1;padding:${MARGIN}px;overflow:hidden;box-sizing:border-box;">
-          ${content}
-        </div>
-        <div style="
-          padding:12px ${MARGIN}px;
-          border-top:1px solid ${T.border};
-          display:flex;justify-content:space-between;align-items:center;
-          font-size:10px;color:${T.textLight};
-          flex-shrink:0;
-        ">
-          <span>IncomeFlow Retirement Plan Report</span>
-          <span>Page ${pageNum} of ${totalPages}</span>
-        </div>
-      </div>`;
-  }
-
-  function sectionLabel(text) {
-    return `<div style="
-      font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;
-      color:${T.textLight};margin-bottom:10px;
-    ">${text}</div>`;
-  }
-
-  function divider() {
-    return `<div style="height:1px;background:${T.border};margin:18px 0;"></div>`;
-  }
-
-  function pill(text, bg, color) {
-    return `<span style="
-      display:inline-block;padding:2px 10px;border-radius:999px;
-      font-size:10px;font-weight:700;background:${bg};color:${color};
-    ">${text}</span>`;
-  }
-
-  function statCard(label, value, sub) {
-    return `
-      <div style="
-        background:${T.bg};border:1px solid ${T.border};border-radius:10px;
-        padding:14px 16px;flex:1;min-width:0;
-      ">
-        <div style="font-size:10px;color:${T.textLight};font-weight:600;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:6px;">${label}</div>
-        <div style="font-size:18px;font-weight:700;color:${T.textDark};line-height:1.1;">${value}</div>
-        ${sub ? `<div style="font-size:11px;color:${T.textMid};margin-top:4px;">${sub}</div>` : ''}
-      </div>`;
-  }
-
-  // ── PAGE 1: Cover / Verdict ───────────────────────────────────────────────
-  function buildPage1(s) {
-    const r      = s.results;
-    const rate   = r.success_rate;
-    const vc     = verdictColours(rate);
-    const n      = s.narrative;
-    const plan   = s.plan;
-    const names  = s.meta.persons.map(p => p.name).join(' & ');
-    const mcRun  = s.meta.mc_run;
-
-    const heroContent = `
-      <div style="background:${vc.bg};padding:32px ${MARGIN}px 28px;flex-shrink:0;">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-          <div>
-            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:rgba(255,255,255,0.7);margin-bottom:8px;">Retirement Plan Report</div>
-            <div style="font-size:36px;font-weight:800;color:#fff;line-height:1;letter-spacing:-0.02em;">
-              ${mcRun ? (n.verdict_state || 'Plan assessed') : 'Projection complete'}
-            </div>
-            <div style="font-size:13px;color:rgba(255,255,255,0.85);margin-top:10px;max-width:400px;line-height:1.5;">
-              ${n.verdict_sentence || r.verdict_summary || ''}
-            </div>
+      card.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
+          <div style="flex:1;min-width:0;">
+            <div style="font-family:'Helvetica Neue',sans-serif;font-size:11px;font-weight:800;color:var(--ink);margin-bottom:2px;">${meta.title}</div>
+            <div style="font-size:8px;color:var(--ink-light);line-height:1.5;">${meta.what}</div>
           </div>
-          <div style="text-align:right;flex-shrink:0;margin-left:24px;">
-            <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;color:rgba(255,255,255,0.65);margin-bottom:4px;">Likelihood of holding up</div>
-            <div style="font-size:56px;font-weight:800;color:#fff;line-height:1;letter-spacing:-0.03em;">${mcRun ? fmtPct(rate) : '—'}</div>
-            <div style="font-size:10px;color:rgba(255,255,255,0.6);margin-top:4px;">${mcRun ? `${(r.sim_count||10000).toLocaleString('en-GB')} simulations` : 'MC not run'}</div>
+          <div style="text-align:right;flex-shrink:0;margin-left:14px;">
+            <div style="font-family:'Helvetica Neue',sans-serif;font-size:22px;font-weight:900;color:${col};line-height:1;">${fmtPctV(sc.success_rate)}</div>
+            <div style="font-size:7.5px;color:${col};font-weight:600;margin-top:2px;">${impactLabel}</div>
           </div>
         </div>
-      </div>`;
-
-    const startingPortfolio = (
-      (plan.p1.starting_balances.Cash    || 0) +
-      (plan.p1.starting_balances.GIAeq   || 0) +
-      (plan.p1.starting_balances.GIAcash || 0) +
-      (plan.p1.starting_balances.SIPP    || 0) +
-      (plan.p1.starting_balances.ISA     || 0) +
-      (plan.p2 ? (plan.p2.starting_balances.Cash    || 0) : 0) +
-      (plan.p2 ? (plan.p2.starting_balances.GIAeq   || 0) : 0) +
-      (plan.p2 ? (plan.p2.starting_balances.GIAcash || 0) : 0) +
-      (plan.p2 ? (plan.p2.starting_balances.SIPP    || 0) : 0) +
-      (plan.p2 ? (plan.p2.starting_balances.ISA     || 0) : 0)
-    );
-
-    const cards = `
-      <div style="display:flex;gap:12px;margin-bottom:20px;">
-        ${statCard('Starting portfolio',   fmt(startingPortfolio), `${plan.start_year}`)}
-        ${statCard('Target net income',    fmt(plan.spending_target_net), 'per year')}
-        ${statCard('Median outcome',       mcRun ? fmt(r.terminal_portfolio.p50) : '—', 'terminal portfolio')}
-        ${statCard('Weaker outcome (p10)', mcRun ? fmt(r.terminal_portfolio.p10) : '—', 'terminal portfolio')}
-      </div>`;
-
-    const sustainLine = r.sustainable_spending
-      ? r.sustainable_spending.is_floor
-        ? `Sustainable spending is well above your target — the plan has substantial headroom.`
-        : r.sustainable_spending.amount >= plan.spending_target_net
-          ? `Estimated sustainable spending: ${fmt(r.sustainable_spending.amount)} / year — ${fmt(r.sustainable_spending.amount - plan.spending_target_net)} annual headroom above target.`
-          : `Estimated sustainable spending: ${fmt(r.sustainable_spending.amount)} / year — ${fmt(plan.spending_target_net - r.sustainable_spending.amount)} below target.`
-      : '';
-
-    const metaLine = `
-      <div style="display:flex;gap:24px;margin-top:16px;font-size:11px;color:${T.textMid};">
-        <span><b>Plan:</b> ${plan.start_year} – ${plan.end_year}</span>
-        <span><b>People:</b> ${names}</span>
-        <span><b>Strategy:</b> ${plan.strategy_label || plan.strategy}</span>
-        <span><b>Generated:</b> ${fmtDate(s.generated_at)}</span>
-      </div>`;
-
-    const body = cards
-      + (sustainLine ? `<p style="font-size:12px;color:${T.textMid};margin:0 0 16px;line-height:1.6;">${sustainLine}</p>` : '')
-      + divider()
-      + `<p style="font-size:11px;color:${T.textLight};line-height:1.6;margin:0;">
-          This report is generated from a deterministic projection and Monte Carlo simulation. It is not financial advice.
-          All figures are illustrative and depend on the assumptions stated in this report. Past market behaviour does not
-          guarantee future results. Review your plan regularly and consult a qualified financial adviser for personalised guidance.
-        </p>`
-      + metaLine;
-
-    return pageShell(1, 8, body, { headerContent: heroContent });
-  }
-
-  // ── PAGE 2: Your Plan (inputs + assumptions headline) ────────────────────
-  function buildPage2(s) {
-    const plan = s.plan;
-    const asmp = s.assumptions;
-
-    function personBlock(p, label) {
-      if (!p) return '';
-      const sp = p.sp_annual_gross > 0
-        ? `State Pension ${fmt(p.sp_annual_gross)}/yr from age ${p.sp_age}`
-        : 'No State Pension configured';
-      const sal = p.salary > 0
-        ? `${fmt(p.salary)}/yr salary until age ${p.salary_stop_age}`
-        : 'No employment income';
-      return `
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:11px;font-weight:700;color:${T.textMid};text-transform:uppercase;letter-spacing:0.07em;margin-bottom:8px;">${label}</div>
-          <div style="font-size:13px;font-weight:700;color:${T.textDark};margin-bottom:4px;">${p.name}</div>
-          <div style="font-size:12px;color:${T.textMid};line-height:1.8;">
-            Born ${p.dob_year}<br>
-            ${sp}<br>
-            ${sal}
-          </div>
-        </div>`;
+        <p style="font-size:8.5px;color:var(--ink-light);font-style:italic;line-height:1.5;margin:0 0 5px;border-top:1px solid var(--rule);padding-top:5px;">${meta.why}</p>
+        <p style="font-size:9px;color:var(--ink-mid);line-height:1.6;margin:0;"><b style="color:var(--ink);">For your plan:</b> ${meta.forYou(sc, r.success_rate)}</p>`;
     }
+    rightCol.appendChild(card);
+  });
 
-    function wrapperRow(label, p1val, p2val) {
-      return `
-        <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid ${T.border};font-size:12px;">
-          <span style="color:${T.textMid};">${label}</span>
-          <span style="font-weight:600;color:${T.textDark};">${fmt(p1val)}${p2val != null ? ` / ${fmt(p2val)}` : ''}</span>
-        </div>`;
-    }
+  // Good practice moved to left column for guaranteed visibility
 
-    const p1 = plan.p1;
-    const p2 = plan.p2;
+  body.appendChild(leftCol);
+  body.appendChild(rightCol);
+  page.appendChild(body);
 
-    const peopleBlock = `
-      <div style="display:flex;gap:24px;margin-bottom:20px;">
-        ${personBlock(p1, 'Person 1')}
-        ${p2 ? `<div style="width:1px;background:${T.border};flex-shrink:0;"></div>` : ''}
-        ${personBlock(p2, 'Person 2')}
-      </div>`;
+  // ── BOTTOM STRIP — assumptions + disclaimer ────────────────────────
+  const strip2 = el('div','');
+  strip2.style.cssText = 'background:var(--bg);border-top:1px solid var(--rule);padding:8px 48px;flex-shrink:0;display:flex;gap:32px;align-items:baseline;';
+  strip2.innerHTML = `
+    <div style="font-size:8px;color:var(--ink-light);flex:1;line-height:1.6;"><b style="color:var(--ink-mid);">Assumptions:</b> ${s.assumptions.headline}</div>
+    <div style="font-size:7.5px;color:var(--ink-light);flex:1.2;line-height:1.6;">This report is produced by IncomeFlow for illustrative purposes only. It does not constitute financial advice. Projections depend on assumptions that may not reflect future conditions. Consult a qualified financial adviser before making retirement decisions.</div>`;
+  page.appendChild(strip2);
 
-    const wrappers = `
-      <div style="margin-bottom:20px;">
-        ${sectionLabel('Starting portfolio balances')}
-        ${wrapperRow('Cash',    p1.starting_balances.Cash,    p2?.starting_balances.Cash)}
-        ${wrapperRow('GIA (equities)', p1.starting_balances.GIAeq, p2?.starting_balances.GIAeq)}
-        ${wrapperRow('GIA (cashlike)', p1.starting_balances.GIAcash, p2?.starting_balances.GIAcash)}
-        ${wrapperRow('SIPP',    p1.starting_balances.SIPP,    p2?.starting_balances.SIPP)}
-        ${wrapperRow('ISA',     p1.starting_balances.ISA,     p2?.starting_balances.ISA)}
-      </div>`;
+  page.appendChild(footer(8, TOTAL));
+  return page;
+}
 
-    const planParams = `
-      <div style="margin-bottom:20px;">
-        ${sectionLabel('Plan parameters')}
-        <div style="display:flex;gap:32px;flex-wrap:wrap;">
-          <div style="font-size:12px;line-height:2;color:${T.textMid};">
-            <div><b style="color:${T.textDark};">Target income:</b> ${fmt(plan.spending_target_net)} / yr net</div>
-            <div><b style="color:${T.textDark};">Spending step-down:</b> ${plan.step_down_pct}% at age 75</div>
-            <div><b style="color:${T.textDark};">Withdrawal strategy:</b> ${plan.strategy_label || plan.strategy}</div>
-            <div><b style="color:${T.textDark};">Bed-and-ISA:</b> ${plan.bed_and_isa.enabled ? `${fmt(plan.bed_and_isa.p1_gia_annual)}/yr for ${plan.bed_and_isa.p1_years} yrs` : 'Disabled'}</div>
-          </div>
-          <div style="font-size:12px;line-height:2;color:${T.textMid};">
-            <div><b style="color:${T.textDark};">Planning growth rate:</b> ${((plan.growth_rate_deterministic || 0) * 100).toFixed(2)}% nominal</div>
-            <div><b style="color:${T.textDark};">Inflation:</b> ${((plan.inflation_rate || 0) * 100).toFixed(1)}%</div>
-            <div><b style="color:${T.textDark};">Tax thresholds:</b> ${plan.threshold_mode === 'frozen' ? 'Frozen' : `Uprated from ${plan.threshold_from_year}`}</div>
-            <div><b style="color:${T.textDark};">Dividend yield:</b> ${((plan.dividend_yield || 0) * 100).toFixed(1)}%</div>
-          </div>
-        </div>
-      </div>`;
-
-    const assumpHeadline = `
-      <div style="background:${T.bg};border:1px solid ${T.border};border-radius:10px;padding:14px 16px;">
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:${T.textLight};margin-bottom:6px;">What this plan assumes</div>
-        <p style="font-size:12px;color:${T.textMid};margin:0;line-height:1.6;">${asmp.headline}</p>
-      </div>`;
-
-    const body = sectionLabel('Your plan')
-      + peopleBlock
-      + divider()
-      + wrappers
-      + planParams
-      + divider()
-      + assumpHeadline;
-
-    return pageShell(2, 8, body);
-  }
-
-  // ── PAGE 3: Outcomes (chart placeholder + terminal percentiles) ───────────
-  function buildPage3(s) {
-    const r = s.results;
-    const mcRun = s.meta.mc_run;
-
-    const termBlock = mcRun ? `
-      <div style="display:flex;gap:10px;margin-bottom:20px;">
-        ${statCard('Optimistic (p90)', fmt(r.terminal_portfolio.p90), 'terminal portfolio')}
-        ${statCard('Typical (p50)',    fmt(r.terminal_portfolio.p50), 'terminal portfolio')}
-        ${statCard('Weaker (p25)',     fmt(r.terminal_portfolio.p25), 'terminal portfolio')}
-        ${statCard('Poor (p10)',       fmt(r.terminal_portfolio.p10), 'terminal portfolio')}
-      </div>` : `<p style="color:${T.textLight};font-size:12px;">Monte Carlo not run — percentile data unavailable.</p>`;
-
-    const sustainBlock = r.sustainable_spending ? `
-      <div style="background:${T.bg};border:1px solid ${T.border};border-radius:10px;padding:14px 16px;margin-bottom:20px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-          <div>
-            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:${T.textLight};margin-bottom:4px;">Estimated sustainable spending</div>
-            <div style="font-size:22px;font-weight:800;color:${T.textDark};">${fmt(r.sustainable_spending.amount)} <span style="font-size:13px;font-weight:400;color:${T.textMid};">per year</span></div>
-          </div>
-          <div style="text-align:right;">
-            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:${T.textLight};margin-bottom:4px;">Sensitivity</div>
-            <div style="font-size:16px;font-weight:700;color:${impactColour(r.sensitivity === 'low' ? 'low' : r.sensitivity === 'high' ? 'high' : 'moderate')};">${r.sensitivity ? r.sensitivity.charAt(0).toUpperCase() + r.sensitivity.slice(1) : '—'}</div>
-          </div>
-        </div>
-      </div>` : '';
-
-    // Chart placeholder — replaced by actual canvas image in generatePDF()
-    const chartPlaceholder = `
-      <div id="pdf-chart-placeholder-wealth" style="
-        width:${INNER_W}px;height:260px;
-        background:${T.bg};border:1px solid ${T.border};border-radius:10px;
-        display:flex;align-items:center;justify-content:center;
-        margin-bottom:20px;
-        overflow:hidden;
-      ">
-        <span style="font-size:11px;color:${T.textLight};">Portfolio projection chart</span>
-      </div>`;
-
-    const body = sectionLabel('Projected outcomes')
-      + chartPlaceholder
-      + termBlock
-      + sustainBlock
-      + `<p style="font-size:11px;color:${T.textLight};line-height:1.6;margin:0;">
-          Under tested scenarios · ${s.plan.start_year}–${s.plan.end_year} ·
-          ${(r.sim_count || 10000).toLocaleString('en-GB')} Monte Carlo simulations.
-          Results are illustrative and not guaranteed.
-        </p>`;
-
-    return pageShell(3, 8, body);
-  }
-
-  // ── PAGE 4: Decade survival + pressure ───────────────────────────────────
-  function buildPage4(s) {
-    const r  = s.results;
-    const n  = s.narrative;
-    const mcRun = s.meta.mc_run;
-
-    const decadeBars = (r.survival_by_decade || []).map(d => {
-      const pct = (d.survival_rate * 100).toFixed(1);
-      const barColour = d.survival_rate >= 0.95 ? T.green : d.survival_rate >= 0.80 ? T.amber : T.red;
-      const label = d.age_p1_end != null ? `Age ${d.age_p1_end}` : String(d.year);
-      return `
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
-          <div style="width:60px;font-size:11px;color:${T.textMid};text-align:right;flex-shrink:0;">${label}</div>
-          <div style="flex:1;height:16px;background:${T.border};border-radius:4px;overflow:hidden;">
-            <div style="width:${pct}%;height:100%;background:${barColour};border-radius:4px;"></div>
-          </div>
-          <div style="width:40px;font-size:11px;font-weight:700;color:${barColour};">${pct}%</div>
-        </div>`;
-    }).join('');
-
-    const survivalBlock = mcRun ? `
-      <div style="margin-bottom:24px;">
-        ${sectionLabel('Likelihood of portfolio surviving to each decade')}
-        ${decadeBars || '<p style="font-size:12px;color:' + T.textLight + ';">No decade data available.</p>'}
-        ${n.survival_note ? `<p style="font-size:12px;color:${T.textMid};margin:12px 0 0;line-height:1.6;">${n.survival_note}</p>` : ''}
-      </div>` : '';
-
-    const pressureBlock = n.pressure_sentence ? `
-      <div style="margin-bottom:24px;">
-        ${sectionLabel('Where pressure shows up')}
-        <p style="font-size:13px;color:${T.textDark};line-height:1.7;margin:0;">${n.pressure_sentence}</p>
-      </div>` : '';
-
-    const incomeChartPlaceholder = `
-      <div id="pdf-chart-placeholder-income" style="
-        width:${INNER_W}px;height:240px;
-        background:${T.bg};border:1px solid ${T.border};border-radius:10px;
-        display:flex;align-items:center;justify-content:center;
-        margin-bottom:8px;overflow:hidden;
-      ">
-        <span style="font-size:11px;color:${T.textLight};">Income sources chart</span>
-      </div>
-      <p style="font-size:10px;color:${T.textLight};margin:0 0 16px;">How your retirement income is funded year by year</p>`;
-
-    const body = survivalBlock
-      + pressureBlock
-      + divider()
-      + incomeChartPlaceholder;
-
-    return pageShell(4, 8, body);
-  }
-
-  // ── PAGE 5: Stress testing ────────────────────────────────────────────────
-  function buildPage5(s) {
-    const st = s.stress_tests;
-    const baseRate = s.results.success_rate;
-
-    function stressBlock(id, label) {
-      if (!st || !st[id]) return '';
-      const sc = st[id];
-      if (!sc.run) {
-        return `
-          <div style="border:1px solid ${T.border};border-radius:10px;padding:16px;margin-bottom:12px;">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-              <div style="font-size:13px;font-weight:700;color:${T.textDark};">${label}</div>
-              <span style="font-size:10px;color:${T.textLight};font-style:italic;">Not tested</span>
-            </div>
-            <p style="font-size:12px;color:${T.textLight};margin:0;">${sc.description}</p>
-          </div>`;
-      }
-      const col = impactColour(sc.impact_level);
-      const deltaStr = sc.success_rate_delta != null
-        ? (sc.success_rate_delta >= 0 ? '+' : '') + Math.round(sc.success_rate_delta * 100) + 'pp'
-        : '';
-      return `
-        <div style="border:1px solid ${T.border};border-radius:10px;padding:16px;margin-bottom:12px;">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
-            <div>
-              <div style="font-size:13px;font-weight:700;color:${T.textDark};margin-bottom:2px;">${label}</div>
-              <div style="font-size:11px;color:${T.textMid};">${sc.description}</div>
-            </div>
-            <div style="text-align:right;flex-shrink:0;margin-left:16px;">
-              <div style="font-size:20px;font-weight:800;color:${col};">${fmtPct(sc.success_rate)}</div>
-              <div style="font-size:10px;color:${T.textLight};">${deltaStr} vs baseline</div>
-            </div>
-          </div>
-          <div style="display:flex;gap:10px;align-items:center;margin-bottom:8px;">
-            ${pill(sc.impact_level ? sc.impact_level.charAt(0).toUpperCase() + sc.impact_level.slice(1) + ' impact' : '—', col + '1a', col)}
-            <span style="font-size:11px;color:${T.textMid};">Typical outcome: ${fmt(sc.terminal_portfolio_p50)}</span>
-          </div>
-          <p style="font-size:12px;color:${T.textMid};margin:0;line-height:1.6;">${sc.interpretation || ''}</p>
-        </div>`;
-    }
-
-    const body = sectionLabel('Stress testing')
-      + `<p style="font-size:12px;color:${T.textMid};margin:0 0 16px;line-height:1.6;">
-          Each scenario tests how your plan holds up under a specific adverse condition.
-          Baseline likelihood of holding up: <b style="color:${T.textDark};">${fmtPct(baseRate)}</b>.
-        </p>`
-      + stressBlock('sorr',       'Sequence risk — early market downturn')
-      + stressBlock('inflation',  'High inflation')
-      + stressBlock('lostDecade', 'Lost decade — sustained low growth');
-
-    return pageShell(5, 8, body);
-  }
-
-  // ── PAGE 6: Levers ────────────────────────────────────────────────────────
-  function buildPage6(s) {
-    const n = s.narrative;
-
-    function leverBlock(title, pill_text, pill_col, outcome) {
-      return `
-        <div style="border:1px solid ${T.border};border-radius:10px;padding:16px;margin-bottom:12px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-            <div style="font-size:13px;font-weight:700;color:${T.textDark};">${title}</div>
-            ${pill_text ? pill(pill_text, pill_col + '18', pill_col) : ''}
-          </div>
-          <p style="font-size:12px;color:${T.textMid};margin:0;line-height:1.6;">${outcome || '—'}</p>
-        </div>`;
-    }
-
-    const delayBlock = s.results.delay_perturbations && s.results.delay_perturbations.length ? `
-      <div style="margin-top:16px;">
-        ${sectionLabel('Impact of delaying withdrawals')}
-        <div style="display:flex;gap:10px;">
-          ${s.results.delay_perturbations.map(d => statCard(
-            `Delay ${d.yearsDelay} yr${d.yearsDelay > 1 ? 's' : ''}`,
-            fmtPct(d.successRate),
-            'likelihood of holding up'
-          )).join('')}
-        </div>
-      </div>` : '';
-
-    const body = sectionLabel('What drives the outcome')
-      + leverBlock('Spending level',     n.lever_spending_pill, T.green, n.lever_spending_outcome)
-      + leverBlock('Delay withdrawals',  n.lever_delay_pill,    T.blue,  n.lever_delay_outcome)
-      + leverBlock('Spending flexibility', n.lever_flex_pill,   T.amber, n.lever_flex_outcome)
-      + delayBlock;
-
-    return pageShell(6, 8, body);
-  }
-
-  // ── PAGE 7: Actions ───────────────────────────────────────────────────────
-  function buildPage7(s) {
-    const n  = s.narrative;
-    const r  = s.results;
-    const vc = verdictColours(r.success_rate);
-
-    const actionHero = `
-      <div style="background:${vc.light};border:1px solid ${vc.bg}33;border-radius:12px;padding:20px 24px;margin-bottom:20px;">
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:${vc.bg};margin-bottom:8px;">Best next move</div>
-        <div style="font-size:16px;font-weight:700;color:${T.textDark};margin-bottom:8px;">${n.action_line || '—'}</div>
-        <p style="font-size:13px;color:${T.textMid};margin:0;line-height:1.6;">${n.action_impact || ''}</p>
-      </div>`;
-
-    const bullets = (n.bullet_items || []).map(b => `
-      <div style="display:flex;gap:12px;margin-bottom:10px;align-items:flex-start;">
-        <div style="width:6px;height:6px;border-radius:50%;background:${vc.bg};flex-shrink:0;margin-top:5px;"></div>
-        <p style="font-size:12px;color:${T.textMid};margin:0;line-height:1.6;">${b}</p>
-      </div>`).join('');
-
-    const practicalActions = `
-      <div style="margin-top:20px;">
-        ${sectionLabel('Good practice')}
-        ${[
-          'Review this plan annually, or after any significant market movement.',
-          'Maintain 6–12 months of target spending in accessible cash to reduce sequence risk.',
-          'A willingness to trim spending by 10–15% in poor return years materially improves resilience.',
-          'Both State Pensions provide an inflation-linked income from age 67 — factor this into your planning horizon.',
-        ].map(a => `
-          <div style="display:flex;gap:12px;margin-bottom:10px;align-items:flex-start;">
-            <div style="width:6px;height:6px;border-radius:50%;background:${T.blue};flex-shrink:0;margin-top:5px;"></div>
-            <p style="font-size:12px;color:${T.textMid};margin:0;line-height:1.6;">${a}</p>
-          </div>`).join('')}
-      </div>`;
-
-    const body = sectionLabel('Actions')
-      + actionHero
-      + (bullets ? `<div style="margin-bottom:16px;">${sectionLabel('Key points')}</div>${bullets}` : '')
-      + divider()
-      + practicalActions;
-
-    return pageShell(7, 8, body);
-  }
-
-  // ── PAGE 8: Assumptions detail + disclaimer ───────────────────────────────
-  function buildPage8(s) {
-    const asmp = s.assumptions;
-
-    const keyRows = (asmp.key || []).map(k => `
-      <div style="padding:10px 0;border-bottom:1px solid ${T.border};">
-        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;">
-          <div style="font-size:12px;font-weight:700;color:${T.textDark};">${k.label}</div>
-          <div style="font-size:11px;font-weight:600;color:${T.blue};text-align:right;max-width:260px;">${k.value_display}</div>
-        </div>
-        <div style="font-size:11px;color:${T.textMid};line-height:1.5;">${k.why_it_matters}</div>
-      </div>`).join('');
-
-    const detail = asmp.detail;
-    const detailBlock = detail ? `
-      <div style="margin-top:16px;display:flex;gap:24px;flex-wrap:wrap;font-size:11px;color:${T.textMid};line-height:1.8;">
-        <div>
-          <b style="color:${T.textDark};">Blended net return:</b> ${detail.blended_net_return != null ? (detail.blended_net_return * 100).toFixed(2) + '%' : '—'}<br>
-          <b style="color:${T.textDark};">Blended volatility:</b> ${detail.blended_vol != null ? (detail.blended_vol * 100).toFixed(2) + '%' : '—'}<br>
-          <b style="color:${T.textDark};">Simulations:</b> ${(detail.sim_count || 10000).toLocaleString('en-GB')}
-        </div>
-        <div>
-          <b style="color:${T.textDark};">Equity:</b> ${detail.portfolio_allocation?.equity_pct ?? '—'}% &nbsp;
-          <b style="color:${T.textDark};">Bonds:</b> ${detail.portfolio_allocation?.bond_pct ?? '—'}% &nbsp;
-          <b style="color:${T.textDark};">Cashlike:</b> ${detail.portfolio_allocation?.cashlike_pct ?? '—'}%<br>
-          <b style="color:${T.textDark};">Annual fee:</b> ${detail.annual_fee != null ? (detail.annual_fee * 100).toFixed(2) + '%' : '—'}
-        </div>
-      </div>` : '';
-
-    const disclaimer = `
-      <div style="margin-top:20px;background:${T.bg};border:1px solid ${T.border};border-radius:10px;padding:14px 16px;">
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:${T.textLight};margin-bottom:8px;">Important notice</div>
-        <p style="font-size:11px;color:${T.textMid};margin:0;line-height:1.7;">
-          This report is produced by IncomeFlow, a personal retirement planning tool. It is for illustrative purposes only
-          and does not constitute financial advice. Projections are based on assumptions that may not reflect future market
-          conditions, tax rules, or personal circumstances. The Monte Carlo simulation tests a range of scenarios but cannot
-          predict the future. UK tax rules are based on 2025/26 legislation and may change. You should review your plan
-          regularly and consult a qualified independent financial adviser before making retirement decisions.
-          IncomeFlow is not regulated by the FCA.
-        </p>
-      </div>`;
-
-    const body = sectionLabel('Assumptions')
-      + keyRows
-      + detailBlock
-      + disclaimer;
-
-    return pageShell(8, 8, body);
-  }
-
-  // ── Inject chart canvas into placeholder ──────────────────────────────────
-  function injectChart(container, placeholderId, sourceCanvas) {
-    if (!sourceCanvas) return;
-    const placeholder = container.querySelector('#' + placeholderId);
-    if (!placeholder) return;
-    const img = document.createElement('img');
-    img.src    = sourceCanvas.toDataURL('image/png');
-    img.style.cssText = `width:100%;height:100%;object-fit:contain;display:block;`;
-    placeholder.innerHTML = '';
-    placeholder.appendChild(img);
-  }
+// ══════════════════════════════════════════════════════
+// RENDER
+// ══════════════════════════════════════════════════════
 
   // ── Main generate function ────────────────────────────────────────────────
-  async function generate(snapshot, chartCanvases) {
+  async function generate(snapshot) {
     const { jsPDF } = window.jspdf;
-    if (!jsPDF)        throw new Error('jsPDF not loaded');
+    if (!jsPDF)              throw new Error('jsPDF not loaded');
     if (!window.html2canvas) throw new Error('html2canvas not loaded');
 
-    chartCanvases = chartCanvases || {};
 
-    // ── Build page HTML ────────────────────────────────────────────────────
+    // ── Build all pages ────────────────────────────────────────────────────
     const pages = [
-      buildPage1(snapshot),
-      buildPage2(snapshot),
-      buildPage3(snapshot),
-      buildPage4(snapshot),
-      buildPage5(snapshot),
-      buildPage6(snapshot),
-      buildPage7(snapshot),
-      buildPage8(snapshot),
+      page1(snapshot),
+      page2(snapshot),
+      page3(snapshot),
+      page4(snapshot),
+      page5(snapshot),
+      page6(snapshot),
+      page7(snapshot),
+      page8(snapshot),
     ];
 
     // ── Off-screen container ───────────────────────────────────────────────
-    // Must NOT use visibility:hidden or display:none — html2canvas will render
-    // a blank canvas. opacity:0 + position:absolute off-screen is the reliable
-    // pattern: the element is in the layout tree and renderable, just not visible.
+    // opacity:0 keeps the element in the layout tree so html2canvas can render it.
+    // visibility:hidden or display:none would produce blank canvases.
     const container = document.createElement('div');
     container.style.cssText = `
       position:absolute;
@@ -660,23 +1468,23 @@
       pointer-events:none;
       z-index:-1;
     `;
-    container.innerHTML = pages.join('');
+    injectStyles(container);
+    pages.forEach(p => container.appendChild(p));
     document.body.appendChild(container);
 
-    // Inject chart canvases into page placeholders
-    injectChart(container, 'pdf-chart-placeholder-wealth', chartCanvases.wealth);
-    injectChart(container, 'pdf-chart-placeholder-income', chartCanvases.income);
-
-    // ── Render each page ───────────────────────────────────────────────────
-    const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+    // ── Render each page to canvas and add to PDF ──────────────────────────
+    const pdf = new jsPDF({
+      orientation: 'landscape',
+      unit:        'pt',
+      format:      'a4',
+    });
     const pdfW = pdf.internal.pageSize.getWidth();
     const pdfH = pdf.internal.pageSize.getHeight();
 
     const pageEls = Array.from(container.children);
 
     for (let i = 0; i < pageEls.length; i++) {
-      const el = pageEls[i];
-      const canvas = await window.html2canvas(el, {
+      const canvas = await window.html2canvas(pageEls[i], {
         scale:           2,
         useCORS:         true,
         allowTaint:      true,
@@ -688,7 +1496,6 @@
       });
 
       const imgData = canvas.toDataURL('image/jpeg', 0.92);
-
       if (i > 0) pdf.addPage();
       pdf.addImage(imgData, 'JPEG', 0, 0, pdfW, pdfH);
     }
@@ -696,8 +1503,8 @@
     document.body.removeChild(container);
 
     // ── Download ───────────────────────────────────────────────────────────
-    const date   = new Date().toISOString().slice(0, 10);
-    const names  = snapshot.meta.persons.map(p => p.name.replace(/\s+/g, '-')).join('-');
+    const date  = new Date().toISOString().slice(0, 10);
+    const names = snapshot.meta.persons.map(p => p.name.replace(/\s+/g, '-')).join('-');
     pdf.save(`incomeflow-plan-${names}-${date}.pdf`);
   }
 
