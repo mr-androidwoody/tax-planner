@@ -1506,6 +1506,8 @@
     const exportBtn = document.querySelector('.top-header__actions [data-action="export-plan"]');
     if (!runBtn || !exportBtn) return;
     const onResults = state.activeTab === 'results';
+    // Use inline style to override the btn-run--hidden CSS class on the run button.
+    // The export button has no hidden class so style.display alone controls it.
     runBtn.style.display    = onResults ? 'none' : '';
     exportBtn.style.display = onResults ? ''     : 'none';
   }
