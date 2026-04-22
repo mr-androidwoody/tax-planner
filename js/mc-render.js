@@ -30,6 +30,15 @@
   function fmtB(n)      { return '<strong>' + fmt(n) + '</strong>'; }
   function fmtPctB(r)   { return '<strong>' + fmtPct(r) + '</strong>'; }
 
+  // Plan-strength display percentage — applies the 99%+ cap rule.
+  // Never show 100% for a user-facing likelihood of holding up figure.
+  // Use this for the hero bignum and any copy that quotes plan strength directly.
+  // Do NOT use for model-internal figures (decade bars, delay perturbation rates, etc.).
+  function fmtRatePct(r) {
+    if (r >= 0.995) return '99%+';
+    return Math.round(r * 100) + '%';
+  }
+
   function roundToNearest(n, nearest) {
     return Math.round(n / nearest) * nearest;
   }
@@ -583,7 +592,7 @@
           <div class="mc-verdict-eyebrow">Your retirement outlook</div>
           <div class="mc-verdict-eyebrow mc-verdict-eyebrow--right">Likelihood of holding up</div>
           <div class="mc-verdict-word${verdictWordClass}">${verdictWord}</div>
-          <div class="mc-verdict-bignum">${Math.round(rate * 100)}%</div>
+          <div class="mc-verdict-bignum">${fmtRatePct(rate)}</div>
         </div>
         <div class="mc-verdict-lower">
           <div class="mc-verdict-lower__left">
