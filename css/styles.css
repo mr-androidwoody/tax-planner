@@ -4504,9 +4504,8 @@ input[type="radio"] { accent-color: var(--accent); }
   border-color: #3460e8;
 }
 
-/* Idle — not yet run, dashed border */
+/* Idle — not yet run */
 .mc-sc-card--idle {
-  border-style: dashed;
   border-color: #d1d5db;
   background: #fafafa;
 }
