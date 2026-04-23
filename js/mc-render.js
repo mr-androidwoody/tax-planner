@@ -1107,8 +1107,12 @@
       }
       // If p50 is non-zero but p10 was near-zero, the contrast is already clear — both show.
 
-      // Bullet 3 — Baseline redirect as explicit action
-      stressBullets.push(`Even with a strong baseline, this scenario shows why a cash buffer of 6–12 months' spending matters. It lets you avoid selling investments at the worst possible moment.`);
+      // Bullet 3 — cash buffer warning only when impact is significant enough to warrant it
+      if (_stressSignificant) {
+        stressBullets.push(`Even with a strong baseline, this scenario shows why a cash buffer of 6–12 months' spending matters. It lets you avoid selling investments at the worst possible moment.`);
+      } else {
+        stressBullets.push(`Use the Baseline view for your main spending guidance and recommended actions.`);
+      }
 
       const stressBulletsHTML = stressBullets.map(b => `<li class="mc-action-bullet">${b}</li>`).join('');
 
