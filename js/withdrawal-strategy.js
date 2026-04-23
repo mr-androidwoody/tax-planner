@@ -412,6 +412,9 @@
     }
 
     // ── Step 6: GIA at basic-rate CGT (18%) ───────────────────────────────
+    // Guard: skip entirely if both persons have exhausted their basic-rate band.
+    // Drawing GIA when basicBandRemaining === 0 would incur 24% CGT (higher
+    // rate), contradicting this step's intent. Step 7 handles any residual.
     if (rem > 0) {
       const p1Band = p1Ledger.basicBandRemaining;
       const p2Band = p2Ledger.basicBandRemaining;
@@ -422,9 +425,9 @@
       const totalGIA = p1GIA + p2GIA;
       const draw     = Math.min(totalGIA, rem);
 
-      if (draw > 0 && totalGIA > 0) {
-        const p1Weight = totalBand > 0 ? (p1Band / totalBand) : (p1GIA / totalGIA);
-        const p2Weight = totalBand > 0 ? (p2Band / totalBand) : (p2GIA / totalGIA);
+      if (draw > 0 && totalGIA > 0 && totalBand > 0) {
+        const p1Weight = p1Band / totalBand;
+        const p2Weight = p2Band / totalBand;
         const p1Share  = Math.min(draw * p1Weight, p1GIA);
         const p2Share  = Math.min(draw * p2Weight, p2GIA);
 

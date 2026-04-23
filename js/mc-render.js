@@ -67,14 +67,8 @@
   let _activeState   = 'baseline';
   let _narrativeSnapshot = null; // stashed by _renderNarrative for export.js
 
-  // Legacy aliases — used by existing code that references _result / _stale directly.
-  // These are kept as getters so existing call sites work unchanged.
   function _getResult() { return _results[_activeState]; }
   function _getStale()  { return _staleStates[_activeState]; }
-
-  // Keep _result and _stale as writable vars that are synced on state switch.
-  let _result          = null;
-  let _stale           = false;
 
   let _meanInflation   = 0.025;
   let _useReal         = true;
@@ -233,8 +227,6 @@
 
     // Switch active view to baseline on a new baseline run.
     _activeState = 'baseline';
-    _result      = _results.baseline;
-    _stale       = _staleStates.baseline;
 
     _syncStressControls();
 
@@ -289,8 +281,6 @@
 
     // Switch to the newly arrived stress view.
     _activeState = stressId;
-    _result      = result;
-    _stale       = false;
 
     _syncStressControls();
 
@@ -316,15 +306,13 @@
     if (!STATE_IDS.includes(stateId)) return;
     if (!_results[stateId]) return; // not yet computed — caller should fire a run instead
     _activeState = stateId;
-    _result      = _results[stateId];
-    _stale       = _staleStates[stateId];
     _syncStressControls();
     _renderNarrative();
     _bindStressBtns();
   }
 
   function render() {
-    if (!_result || !_narrativeRevealed) return;
+    if (!_getResult() || !_narrativeRevealed) return;
     _syncToggleButtons();
     _syncStressControls();
     _renderNarrative();
@@ -443,7 +431,7 @@
     const el = document.getElementById('mc-narrative');
     if (!el) return;
 
-    const r         = _result;
+    const r         = _getResult();
     const lastIdx   = r.years.length - 1;
     const firstYear = r.years[0];
     const lastYear  = r.years[lastIdx];
@@ -1046,6 +1034,12 @@
     const inflationPct = (_meanInflation * 100).toFixed(1);
     const basisNote = `<p class="mc-basis-note">All £ figures on this tab are in today's money, adjusted for ${inflationPct}% annual inflation.</p>`;
 
+    // Hoisted so they are in scope for the unified _narrativeSnapshot below,
+    // regardless of which branch (baseline vs stress) populates s4.
+    let actionLine   = null;
+    let actionImpact = null;
+    let bulletItems  = [];
+
     let s4;
     if (isStressView) {
       const baselineRate  = _results.baseline ? _results.baseline.successRate : null;
@@ -1138,7 +1132,6 @@
 
     } else {
       // ── Baseline: full action block ───────────────────────────────
-      let actionLine, actionImpact;
 
       const delayMin       = delayPerturbations.find(p => p.successRate >= targetConfidence);
       const delayEffective = !!delayMin;
@@ -1188,7 +1181,7 @@
       const roundKend = v => roundToNearest(v, 10000);
       const fmtKendB  = v => fmtB(roundKend(Math.max(0, v)));
 
-      let bulletItems = [];
+      bulletItems = [];
 
       if (rate >= 0.95) {
         if (p10DepletesAge !== null) {
@@ -1246,25 +1239,6 @@
       bulletItems = bulletItems.slice(0, 3);
       const bulletsHTML = bulletItems.map(b => `<li class="mc-action-bullet">${b}</li>`).join('');
 
-      // Stash key computed strings for export.js snapshot.
-      // Sits here inside the baseline branch where actionLine, actionImpact,
-      // and bulletItems are all in scope.
-      _narrativeSnapshot = {
-        verdictWord,
-        verdictSentence,
-        pressureSentence,
-        survivalNote,
-        l1Pill,
-        l1Outcome,
-        l2Pill,
-        l2Outcome,
-        l3Pill,
-        l3Outcome,
-        actionLine,
-        actionImpact,
-        bulletItems: bulletItems.slice(),
-      };
-
       s4 = `
         <div class="mc-primary-action" style="border-top-color:${verdictColour.actionBorder};background:${verdictColour.actionBg}">
           <div class="mc-primary-action__body">
@@ -1285,11 +1259,31 @@
         ${basisNote}`;
     }
 
+    // Stash snapshot on every render regardless of active state, so PDF export
+    // always reflects the currently-visible view (baseline or stress scenario).
+    // Baseline-only fields (actionLine, actionImpact, bulletItems) are null/[]
+    // when rendering a stress view.
+    _narrativeSnapshot = {
+      verdictWord,
+      verdictSentence,
+      pressureSentence,
+      survivalNote,
+      l1Pill,
+      l1Outcome,
+      l2Pill,
+      l2Outcome,
+      l3Pill,
+      l3Outcome,
+      actionLine,
+      actionImpact,
+      bulletItems: bulletItems.slice(),
+    };
+
     // Always expose the nominal median end value for the deterministic metrics badge.
     window.RetireMCResults = { medianEndPortfolioNominal: r.p50Portfolio[lastIdx] };
 
     const staleScenario = _activeState !== 'baseline' ? ` (${STATE_LABELS[_activeState]})` : '';
-    const staleBanner = _stale
+    const staleBanner = _getStale()
       ? `<div class="mc-stale-banner">⚠ Based on previous inputs${staleScenario}. Re-run to update.</div>`
       : '';
     const stressRow = `
@@ -1321,9 +1315,6 @@
       });
     }
 
-    // Sync the active _stale var used by _renderNarrative.
-    _stale = _staleStates[_activeState];
-
     // Toggle stale dot on the Plan outlook tab button (reflects baseline staleness).
     const outlookTab = document.getElementById('tab-btn-outlook');
     if (outlookTab) outlookTab.classList.toggle('results-tab--stale', !!stale);
@@ -1335,7 +1326,7 @@
     // Only re-render if the narrative is already visible — avoids double-render
     // during the initial reveal sequence when setStale is called before the
     // 4s loader has finished.
-    if (_result && _narrativeRevealed) render();
+    if (_getResult() && _narrativeRevealed) render();
   }
 
   window.RetireMCRender = {

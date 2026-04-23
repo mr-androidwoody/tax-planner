@@ -283,20 +283,29 @@ function approxIncomeTax(nonSavingsIncome) {
     pa = Math.max(0, pa - Math.floor((nonSavingsIncome - 100000) / 2));
   }
 
-  let tax = 0;
-  let remaining = Math.max(0, nonSavingsIncome);
+  // Tax is levied on post-PA income only. `remaining` must start here, not at
+  // gross — the old code started at gross and then subtracted `adjLow` from each
+  // band width, which double-counted the PA-free slice and over-stated tax.
+  // e.g. £20,000 gross: taxable = £7,430, correct tax = £1,486 not ~£4,000.
+  const taxableIncome = Math.max(0, nonSavingsIncome - pa);
+
+  let tax      = 0;
+  let remaining = taxableIncome;
   let prevLimit = 0;
 
   for (const band of TAX_BANDS) {
-    // Shift band limits down by PA so the free allowance is honoured.
-    const bandLow  = prevLimit === 0 ? 0 : prevLimit;
+    // Band width in taxable-income space (post-PA): subtract PA from each nominal
+    // limit so that the zero-rate band has zero width and bands above start at 0.
+    const bandLow  = prevLimit;
     const bandHigh = band.limit;
     const adjLow   = Math.max(0, bandLow  - pa);
     const adjHigh  = Math.max(0, bandHigh - pa);
-    const taxable  = Math.min(remaining, adjHigh - adjLow);
+    const width    = adjHigh - adjLow;
+    const taxable  = Math.min(remaining, width);
     if (taxable > 0) tax += taxable * band.rate;
-    prevLimit = band.limit;
-    if (remaining <= adjHigh) break;
+    remaining -= taxable;
+    prevLimit  = band.limit;
+    if (remaining <= 0) break;
   }
 
   return Math.max(0, tax);
@@ -494,10 +503,12 @@ function runPath(inputs, equityVol, inflationVol, stressMode, stressParams) {
       w => w !== 'Cash' && !(w === 'SIPP' && p2SIPPLocked)
     );
 
-    // PA headroom for tax-aware mode (non-savings guaranteed income only;
-    // interest accounts omitted per simplification note above).
-    const p1PAHeadroom = Math.max(0, PA - p1SP - p1SalInc - p1Divs);
-    const p2PAHeadroom = p2enabled ? Math.max(0, PA - p2SP - p2SalInc - p2Divs) : 0;
+    // PA headroom for tax-aware mode (non-savings guaranteed income only).
+    // Dividends are savings income and do not consume the non-savings PA headroom
+    // that governs how much SIPP can be drawn tax-free. Deducting p1Divs/p2Divs
+    // here was Bug 7 — it under-stated headroom and suppressed SIPP draws.
+    const p1PAHeadroom = Math.max(0, PA - p1SP - p1SalInc);
+    const p2PAHeadroom = p2enabled ? Math.max(0, PA - p2SP - p2SalInc) : 0;
 
     const { p1Drawn, p2Drawn } = withdrawalStrategy({
       mode: withdrawalMode,
@@ -708,3 +719,11 @@ self.onmessage = function (e) {
 
   self.postMessage({ type: 'done', result });
 };
+
+// Test shim — allows tests-approx-income-tax.html to access the live function
+// without copy-pasting it. Only active when the worker is imported as a module
+// in a non-Worker context (e.g. via importScripts in a test harness).
+// Never used in production paths.
+if (typeof self !== 'undefined') {
+  self._approxIncomeTaxForTest = approxIncomeTax;
+}

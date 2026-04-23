@@ -80,6 +80,16 @@
     return '£' + Math.round(Number(val)).toLocaleString('en-GB');
   }
 
+  // Staleness guard: '2027-28+' is a permanent catch-all. If the current year
+  // has moved past 2027, the tax figures may be out of date. This warning fires
+  // once at module load so it is visible in the developer console.
+  if (new Date().getFullYear() > 2027) {
+    console.warn(
+      '[RetireData] TAX DATA MAY BE STALE: the "2027-28+" catch-all in TAX_RULES ' +
+      'has not been updated for the current tax year. Review TAX_RULES in data.js.'
+    );
+  }
+
   window.RetireData = {
     TAX_RULES,
     MONEY_FIELDS,

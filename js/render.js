@@ -132,7 +132,7 @@
 
     tr.innerHTML = `
       <td class="col-name">
-        <input type="text" value="${acc.name}" placeholder="Account name"
+        <input type="text" value="" placeholder="Account name"
           data-account-id="${acc.id}" data-field="name">
       </td>
 
@@ -182,7 +182,16 @@
     `;
 
     tbody.appendChild(tr);
-    initialiseCurrencyInputs();
+
+    // Set user-supplied name via .value (not innerHTML) to avoid attribute-injection.
+    const nameInput = tr.querySelector('[data-field="name"]');
+    if (nameInput) nameInput.value = acc.name;
+
+    // Initialise currency inputs scoped to this row only — avoids a full document
+    // re-scan on every account addition.
+    tr.querySelectorAll('[data-currency-input="true"]').forEach((el) => {
+      el.classList.add('currency-input');
+    });
   }
 
     function updateRowBadge(acc) {

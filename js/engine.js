@@ -236,9 +236,9 @@
           annotations.push({ year, person: 'p2', event: 'cash_surplus',
             message: `${p2name}'s salary surplus (£${Math.round(p2SalSurplus).toLocaleString('en-GB')}) above target share swept to GIA` });
         } else if (p2SalSurplus > 0) {
-          p1Bal.Cash = (p1Bal.Cash || 0) + p2SalSurplus;
+          p2Bal.Cash = (p2Bal.Cash || 0) + p2SalSurplus;
           annotations.push({ year, person: 'p2', event: 'cash_surplus',
-            message: `Household surplus income (£${Math.round(p2SalSurplus).toLocaleString('en-GB')}) above target parked in ${p1name}'s Cash` });
+            message: `Household surplus income (£${Math.round(p2SalSurplus).toLocaleString('en-GB')}) above target parked in ${p2name}'s Cash` });
         }
       } else if (preIntGuaranteed > target) {
         // No salary income (surplus from SP/dividends) — park in p1 cash as before
@@ -478,7 +478,7 @@
         .filter(a => a.owner === 'p1')
         .reduce((s, a) => s + (a.balance || 0), 0);
       const intBalP2 = intAccts
-        .filter(a => a.owner !== 'p1')
+        .filter(a => a.owner === 'p2')
         .reduce((s, a) => s + (a.balance || 0), 0);
 
       const p1GrossIncome =
