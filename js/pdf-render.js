@@ -1260,7 +1260,7 @@ function page8(s) {
 
   (r.survival_by_decade||[]).forEach(d => {
     const pct = (d.survival_rate*100);
-    const col = d.survival_rate>=.99?'#3B6D11':d.survival_rate>=.95?'#5A9E1A':d.survival_rate>=.80?'#BA7517':'#A32D2D';
+    const col = d.survival_rate>=.99?'#3B6D11':d.survival_rate>=.95?'#5A9E1A':d.survival_rate>=.90?'#8FA832':d.survival_rate>=.80?'#BA7517':d.survival_rate>=.70?'#C4513A':'#A32D2D';
     const row = el('div','');
     row.style.cssText = 'display:flex;align-items:center;gap:9px;margin-bottom:8px;';
     row.innerHTML = `
