@@ -1258,9 +1258,8 @@ function page8(s) {
 
   // ══ LEFT: decade bars + pressure + action ════════════════════════
   const leftCol = el('div','');
-  leftCol.style.cssText = 'padding:0px 28px 18px;display:flex;flex-direction:column;border-right:1px solid var(--rule);overflow:hidden;';
+  leftCol.style.cssText = 'padding:18px 28px;display:flex;flex-direction:column;border-right:1px solid var(--rule);overflow:hidden;';
   leftCol.appendChild(el('div','section-label','Likelihood of projection holding up, by decade'));
-  leftCol.querySelector('.section-label').style.marginTop = '16px';
 
   (r.survival_by_decade||[]).forEach(d => {
     const pct = (d.survival_rate*100);
@@ -1326,9 +1325,8 @@ function page8(s) {
 
   // ══ RIGHT: scenario testing + good practice ══════════════════════
   const rightCol = el('div','');
-  rightCol.style.cssText = 'padding:0px 28px 18px;display:flex;flex-direction:column;overflow:hidden;';
+  rightCol.style.cssText = 'padding:18px 28px;display:flex;flex-direction:column;overflow:hidden;';
   rightCol.appendChild(el('div','section-label','We tested three things that could go wrong'));
-  rightCol.querySelector('.section-label').style.marginTop = '16px';
 
   // Connecting sentence — bridges verdict to scenarios
   const allScenLow = st && ['sorr','inflation','lostDecade'].every(id => !st[id]?.run || st[id]?.impact_level === 'low');
@@ -1456,13 +1454,7 @@ function page8(s) {
   body.appendChild(rightCol);
   page.appendChild(body);
 
-  // ── BOTTOM STRIP — assumptions + disclaimer ────────────────────────
-  const strip2 = el('div','');
-  strip2.style.cssText = 'background:var(--bg);border-top:1px solid var(--rule);padding:8px 48px;flex-shrink:0;display:flex;gap:32px;align-items:baseline;';
-  strip2.innerHTML = `
-    <div style="font-size:8px;color:var(--ink-light);flex:1;line-height:1.6;"><b style="color:var(--ink-mid);">Assumptions:</b> ${s.assumptions.headline}</div>
-    <div style="font-size:7.5px;color:var(--ink-light);flex:1.2;line-height:1.6;">Illustrative projection only. Not financial advice, tax advice, investment advice, pension advice or a personal recommendation. This report is not a sufficient basis for any pension, investment, withdrawal, transfer, tax or retirement decision.</div>`;
-  page.appendChild(strip2);
+  // Bottom strip removed — disclaimer on page 1 and every footer; assumptions on page 3
 
   page.appendChild(footer(8, TOTAL));
   return page;
