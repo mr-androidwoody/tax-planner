@@ -66,6 +66,7 @@
   let _staleStates   = { baseline: false, sorr: false, inflation: false, lostDecade: false };
   let _activeState   = 'baseline';
   let _narrativeSnapshot = null; // stashed by _renderNarrative for export.js
+  let _baselineActionSnapshot = { actionLine: null, actionImpact: null, bulletItems: [] }; // baseline-only, never overwritten by stress renders
 
   function _getResult() { return _results[_activeState]; }
   function _getStale()  { return _staleStates[_activeState]; }
@@ -1265,10 +1266,19 @@
         ${basisNote}`;
     }
 
+    // Preserve baseline action fields so they survive stress tab switches.
+    if (!isStressView) {
+      _baselineActionSnapshot = {
+        actionLine:  actionLine,
+        actionImpact: actionImpact,
+        bulletItems:  bulletItems.slice(),
+      };
+    }
+
     // Stash snapshot on every render regardless of active state, so PDF export
     // always reflects the currently-visible view (baseline or stress scenario).
     // Baseline-only fields (actionLine, actionImpact, bulletItems) are null/[]
-    // when rendering a stress view.
+    // when rendering a stress view — but we always write the baseline values.
     _narrativeSnapshot = {
       verdictWord,
       verdictSentence,
@@ -1280,9 +1290,9 @@
       l2Outcome,
       l3Pill,
       l3Outcome,
-      actionLine,
-      actionImpact,
-      bulletItems: bulletItems.slice(),
+      actionLine:   _baselineActionSnapshot.actionLine,
+      actionImpact:  _baselineActionSnapshot.actionImpact,
+      bulletItems:   _baselineActionSnapshot.bulletItems.slice(),
     };
 
     // Always expose the nominal median end value for the deterministic metrics badge.
