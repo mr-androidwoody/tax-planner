@@ -1258,8 +1258,9 @@ function page8(s) {
 
   // ══ LEFT: decade bars + pressure + action ════════════════════════
   const leftCol = el('div','');
-  leftCol.style.cssText = 'padding:18px 28px;display:flex;flex-direction:column;border-right:1px solid var(--rule);overflow:hidden;';
+  leftCol.style.cssText = 'padding:0px 28px 18px;display:flex;flex-direction:column;border-right:1px solid var(--rule);overflow:hidden;';
   leftCol.appendChild(el('div','section-label','Likelihood of projection holding up, by decade'));
+  leftCol.querySelector('.section-label').style.marginTop = '16px';
 
   (r.survival_by_decade||[]).forEach(d => {
     const pct = (d.survival_rate*100);
@@ -1325,8 +1326,9 @@ function page8(s) {
 
   // ══ RIGHT: scenario testing + good practice ══════════════════════
   const rightCol = el('div','');
-  rightCol.style.cssText = 'padding:18px 28px;display:flex;flex-direction:column;overflow:hidden;';
+  rightCol.style.cssText = 'padding:0px 28px 18px;display:flex;flex-direction:column;overflow:hidden;';
   rightCol.appendChild(el('div','section-label','We tested three things that could go wrong'));
+  rightCol.querySelector('.section-label').style.marginTop = '16px';
 
   // Connecting sentence — bridges verdict to scenarios
   const allScenLow = st && ['sorr','inflation','lostDecade'].every(id => !st[id]?.run || st[id]?.impact_level === 'low');
